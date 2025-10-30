@@ -18,6 +18,12 @@ public:
         manager_task = nullptr;
     }   
 
+    static ResourceManager& getInstance()
+    {
+        static ResourceManager instance;
+        return instance;
+    }
+
     ~ResourceManager()
     {
         if (request_queue)
@@ -83,6 +89,16 @@ public:
             // Notify the display manager that the task is done
             xTaskNotifyGive(manager_task);
         }
+    }
+
+    R* getResource()
+    {
+        return resource;
+    }
+
+    R& getResourceRef()
+    {
+        return *resource;
     }
 
 private:

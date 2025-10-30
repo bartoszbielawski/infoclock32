@@ -1,7 +1,10 @@
 
 #include <freertos/FreeRTOS.h>
 #include "graphic_utils.hpp"
+#include <resource_manager.hpp>
+#include <memory>
 
+ResourceManager<LMDS> displayManager;
 
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset)
 {
@@ -19,16 +22,24 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
   }
 }
 
-void scollMessage(std::string message, LMDS& display, int speed)
-{
-  //assume you already have access to the display
-  GFXcanvas1 canvas(512, 8);
-  
-  canvas.print(message.c_str());
-  int msgLength = canvas.getCursorX();
+//put it here to avoid reallocation on each call
+//and it can be bigger as well because it doesn't belng to any task stack
+static GFXcanvas1 canvas(512, 8);
 
-  if (msgLength <= display.width())
+
+
+
+void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+{ 
+  auto msgLength = message.size();
+  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+
+  Serial.printf("Scrolling message: '%s', length: %d\n", message.c_str(), msgLength);
+
+  //center shorter messages
+  if (msgLength * FONT_WIDTH <= display.width())
   {
+    Serial.println("Message fits on the display, centering");
     //message fits on the display, no need to scroll, but center the message
     display.clear();
     int offset = (display.width() - msgLength) / 2;
@@ -38,12 +49,19 @@ void scollMessage(std::string message, LMDS& display, int speed)
     return;
   }
 
-  for (int offset = 0; offset < msgLength - display.width(); offset++)
-  {   
-    copyCanvasToDisplay(canvas, offset, display);
+  GFXcanvas1 canvas(msgLength * FONT_WIDTH, 8);
+  canvas.print(message.c_str());
+
+  vTaskDelay(10 * speed / portTICK_PERIOD_MS);
+
+  for (int i = 0; i <= canvas.width() - display.width() + steps; i += steps)
+  {
+    copyCanvasToDisplay(canvas, i, display, 0);
     display.displayToSerial(Serial);
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }
+  
+  vTaskDelay(10 * speed / portTICK_PERIOD_MS);
 }
 
 void wipeDisplayLeftToRight(LMDS& display, int speed)
@@ -57,7 +75,7 @@ void wipeDisplayLeftToRight(LMDS& display, int speed)
   }
 }
 
-void scollOutDisplayRight(LMDS& display, int speed)
+void scrollOutDisplayRight(LMDS& display, int speed)
 {
   //assume you already have access to the display
   for (int col = 0; col < display.getSegments() * 8; col++)

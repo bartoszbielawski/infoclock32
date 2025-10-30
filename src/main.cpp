@@ -9,48 +9,54 @@
 #include <graphic_utils.hpp>
 #include <algorithm>
 
-LMDS matrix(8, 5); // 8 modules, CS pin 5
+#include <data_store.hpp>
 
-ResourceManager<decltype(matrix)> displayManager;
+void open_weather_map_task(void *parameter);
+void lhc_status_task(void *parameter);
 
-void animateDisplay(void *parameter)
-{
-  matrix.clear();
-  int count = 0;
-  int totalPixels = matrix.getSegments() * 8 * 8;
-  while (true)
-  {
-    if (displayManager.make_access_request())
-    {
-      bool target_state = count < totalPixels / 2;
-      if (target_state)
-        count++;
-      else
-        count--;
+DataStore& dataStore = DataStore::getInstance();
+
+// void animateDisplay(void *parameter)
+// {
+//   matrix.clear();
+//   int count = 0;
+//   int totalPixels = matrix.getSegments() * 8 * 8;
+//   while (true)
+//   {
+//     if (displayManager.make_access_request())
+//     {
+//       bool target_state = count < totalPixels / 2;
+//       if (target_state)
+//         count++;
+//       else
+//         count--;
       
-      int x = random(0, matrix.getSegments() * 8);
-      int y = random(0, 8);
+//       int x = random(0, matrix.getSegments() * 8);
+//       int y = random(0, 8);
 
-      while (matrix.getPixel(x, y) == target_state) {
-        x = random(0, matrix.getSegments() * 8);
-        y = random(0, 8);
-      }
+//       while (matrix.getPixel(x, y) == target_state) {
+//         x = random(0, matrix.getSegments() * 8);
+//         y = random(0, 8);
+//       }
 
-      matrix.setPixel(x, y, target_state);
+//       matrix.setPixel(x, y, target_state);
       
-      matrix.displayToSerial(Serial);
-      displayManager.release_access();
-    }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-  }
-}
+//       matrix.displayToSerial(Serial);
+//       displayManager.release_access();
+//     }
+//     vTaskDelay(100 / portTICK_PERIOD_MS);
+//   }
+// }
 
 
 void displayClock(void *parameter)
 {
+  auto& rmd = ResourceManager<LMDS>::getInstance();
+  auto& matrix = rmd.getResourceRef();
+
   while (true)
   {
-    if (not displayManager.make_access_request())
+    if (not rmd.make_access_request())
     {
       Serial.println("ClockDisplay: Failed to get access to display");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -92,11 +98,8 @@ void displayClock(void *parameter)
     matrix.printf("%04d-%02d-%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
     matrix.displayToSerial(Serial);
     
-    //wipeDisplayLeftToRight(matrix, 5);
-    scollOutDisplayRight(matrix, 5);
-
     vTaskDelay(2000 / portTICK_PERIOD_MS);
-    displayManager.release_access();
+    rmd.release_access();
     
     // wait a bit before updating again and requesting access again
     vTaskDelay(2000 / portTICK_PERIOD_MS);
@@ -105,21 +108,51 @@ void displayClock(void *parameter)
 
 void marqueeDisplay(void *parameter)
 {  
+  auto& rmd = ResourceManager<LMDS>::getInstance();
+  auto& matrix = rmd.getResourceRef();
   while (true)
   {   
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    if (not displayManager.make_access_request())
+    if (not rmd.make_access_request())
     {
       Serial.println("MarqueeDisplay: Failed to get access to display");
       continue;
     }
 
 
-    scollMessage("ESP32-C3!", matrix, 50);
+    scrollMessage("ESP32-C3!", matrix, 50);
 
-    displayManager.release_access();
+    rmd.release_access();
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
+}
+
+void listFiles(const char* dirname) {
+  if (!LittleFS.begin()) {
+    Serial.println("An Error has occurred while mounting LittleFS");
+    return;
+  }
+  File root = LittleFS.open(dirname);
+  if (!root) {
+    Serial.println("Failed to open directory");
+    return;
+  }
+  if (!root.isDirectory()) {
+    Serial.println("Not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file) {
+    Serial.print("FILE: ");
+    Serial.print(file.name());
+    Serial.print("\tSIZE: ");
+    Serial.println(file.size());
+    file = root.openNextFile();
+  }
+  root.close();
+  LittleFS.end();
+  Serial.println("End of file list");
 }
 
 void setup() {
@@ -129,16 +162,19 @@ void setup() {
   //NTP client
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  //initialize the resource manager with the matrix object
-  displayManager.initialize(&matrix);
+  ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, 5)); // 8 modules, CS pin 5
+
+  dataStore.load_from_file("/config.txt");
 
   //xTaskCreate(animateDisplay, "DisplayTask", 2048, nullptr, 1, nullptr);
   xTaskCreate(displayClock, "ClockTask", 2048, nullptr, 1, nullptr);
-  xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
+  //xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
+  //xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
+  xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
+
+  
 }
 
 void loop() 
 {
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-  Serial.println("Main loop running...");
 }
