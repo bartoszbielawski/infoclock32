@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
+#include <logger.hpp>
 
 namespace HttpUtils {
 
@@ -27,7 +28,7 @@ int httpGet(const String &url, String &outBody, bool insecure) {
     WiFiClient client;
 
     if (!http.begin(client, url)) {
-        Serial.printf("HttpUtils: http.begin() failed for %s\n", url.c_str());
+        logPrintf("HTTP", "http.begin() failed for %s", url.c_str());
         return -1;
     }
 
@@ -35,7 +36,7 @@ int httpGet(const String &url, String &outBody, bool insecure) {
     if (httpCode > 0) {
         outBody = http.getString();
     } else {
-        Serial.printf("HttpUtils: GET failed, code=%d\n", httpCode);
+        logPrintf("HTTP", "GET failed, code=%d", httpCode);
     }
 
     http.end();

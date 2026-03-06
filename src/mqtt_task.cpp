@@ -5,6 +5,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <logger.hpp>
 
 #include <string>
 
@@ -13,6 +14,31 @@ static PubSubClient mqttClient(wifiClient);
 
 static std::string loopedMessage;
 static QueueHandle_t pushQueue;
+
+// Pending hardware commands set in the callback, applied in the main loop
+// where display access is safe to acquire.
+static int8_t  pendingBrightness = -1;  // -1 = none, 0-15 = set level
+static int8_t  pendingPower      = -1;  // -1 = none, 0 = off, 1 = on
+static bool    pendingReboot     = false;
+
+static void publishStatus(const std::string& clientId)
+{
+    unsigned long ms  = millis();
+    unsigned long h   = ms / 3600000UL;
+    unsigned long m   = (ms % 3600000UL) / 60000UL;
+    unsigned long s   = (ms % 60000UL) / 1000UL;
+
+    char payload[160];
+    snprintf(payload, sizeof(payload),
+             "{\"ip\":\"%s\",\"heap\":%u,\"uptime\":\"%luh%lum%lus\",\"ssid\":\"%s\"}",
+             WiFi.localIP().toString().c_str(),
+             (unsigned)esp_get_free_heap_size(),
+             h, m, s,
+             WiFi.SSID().c_str());
+
+    std::string topic = clientId + "/status";
+    mqttClient.publish(topic.c_str(), payload);
+}
 
 static void onMessage(char *topic, byte *payload, unsigned int length)
 {
@@ -30,7 +56,7 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         {
             memcpy(copy, buf, length + 1);
             if (xQueueSend(pushQueue, &copy, 0) != pdTRUE)
-                free(copy); // queue full, drop message
+                free(copy);
         }
     }
     else if (topicStr.endsWith("/looped"))
@@ -41,13 +67,52 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
     {
         loopedMessage.clear();
     }
+    else if (topicStr.endsWith("/brightness"))
+    {
+        int level = atoi(buf);
+        if (level >= 0 && level <= 15)
+            pendingBrightness = (int8_t)level;
+    }
+    else if (topicStr.endsWith("/power"))
+    {
+        String s(buf);
+        s.toLowerCase();
+        if (s == "on"  || s == "1") pendingPower = 1;
+        if (s == "off" || s == "0") pendingPower = 0;
+    }
+    else if (topicStr.endsWith("/config"))
+    {
+        String line(buf);
+        int sep = line.indexOf('=');
+        if (sep <= 0)
+            return;
+
+        String key   = line.substring(0, sep);
+        String value = line.substring(sep + 1);
+
+        // Block sensitive keys
+        String keyLower = key;
+        keyLower.toLowerCase();
+        if (keyLower.indexOf("password") >= 0 || keyLower.indexOf("secret") >= 0)
+        {
+            logPrintf("MQT", "/config blocked sensitive key '%s'", key.c_str());
+            return;
+        }
+
+        DataStore::getInstance().set_value(key.c_str(), value.c_str());
+        logPrintf("MQT", "/config set '%s' = '%s'", key.c_str(), value.c_str());
+    }
+    else if (topicStr.endsWith("/reboot"))
+    {
+        logPrintf("MQT", "reboot requested");
+        pendingReboot = true;
+    }
     else if (topicStr.endsWith("/request"))
     {
         DataStore &ds = DataStore::getInstance();
         std::string clientId = ds.get_value("mqtt_client_id", "infoclock32");
         String varName(buf);
 
-        // Block password requests
         if (varName.endsWith("assword"))
             return;
 
@@ -58,17 +123,21 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         }
         else if (varName == "HEAP")
         {
-            response = String(esp_get_free_heap_size());
+            response = String((unsigned)esp_get_free_heap_size());
         }
         else if (varName == "UPTIME")
         {
             unsigned long ms = millis();
-            unsigned long h = ms / 3600000UL;
-            unsigned long m = (ms % 3600000UL) / 60000UL;
-            unsigned long s = (ms % 60000UL) / 1000UL;
+            unsigned long h  = ms / 3600000UL;
+            unsigned long m  = (ms % 3600000UL) / 60000UL;
+            unsigned long s  = (ms % 60000UL) / 1000UL;
             char upbuf[32];
             snprintf(upbuf, sizeof(upbuf), "%luh%lum%lus", h, m, s);
             response = upbuf;
+        }
+        else if (varName == "SSID")
+        {
+            response = WiFi.SSID();
         }
         else
         {
@@ -89,13 +158,13 @@ static bool reconnect()
     std::string server = ds.get_value("mqtt_server", "");
     if (server.empty())
     {
-        Serial.println("MQTT: no mqtt_server configured");
+        logPrintf("MQT", "no mqtt_server configured");
         return false;
     }
 
     std::string clientId = ds.get_value("mqtt_client_id", "infoclock32");
-    std::string user = ds.get_value("mqtt_user", "");
-    std::string pass = ds.get_value("mqtt_password", "");
+    std::string user     = ds.get_value("mqtt_user", "");
+    std::string pass     = ds.get_value("mqtt_password", "");
 
     mqttClient.setServer(server.c_str(), 1883);
     mqttClient.setCallback(onMessage);
@@ -109,17 +178,17 @@ static bool reconnect()
 
     if (!connected)
     {
-        Serial.printf("MQTT: connect failed, rc=%d\n", mqttClient.state());
+        logPrintf("MQT", "connect failed, rc=%d", mqttClient.state());
         return false;
     }
 
     std::string topic = clientId + "/+";
     mqttClient.subscribe(topic.c_str());
-    Serial.printf("MQTT: connected to %s, subscribed to %s\n", server.c_str(), topic.c_str());
+    logPrintf("MQT", "connected to %s, subscribed to %s", server.c_str(), topic.c_str());
     return true;
 }
 
-// Call mqttClient.loop() for a given number of milliseconds total.
+// Pump the MQTT loop for the given number of milliseconds.
 static void pumpLoop(int ms)
 {
     int iterations = ms / 10;
@@ -130,12 +199,43 @@ static void pumpLoop(int ms)
     }
 }
 
+// Apply any pending hardware commands that require display access.
+static void applyPendingHardware(ResourceManager<LMDS> &rmd)
+{
+    if (pendingBrightness < 0 && pendingPower < 0)
+        return;
+
+    if (!rmd.make_access_request())
+        return;
+
+    auto &matrix = rmd.getResourceRef();
+
+    if (pendingBrightness >= 0)
+    {
+        matrix.setIntensity((uint8_t)pendingBrightness);
+        logPrintf("MQT", "brightness set to %d", pendingBrightness);
+        pendingBrightness = -1;
+    }
+
+    if (pendingPower >= 0)
+    {
+        matrix.setEnabled(pendingPower == 1);
+        matrix.display();
+        logPrintf("MQT", "display powered %s", pendingPower ? "on" : "off");
+        pendingPower = -1;
+    }
+
+    rmd.release_access();
+}
+
 void mqtt_task(void *parameter)
 {
     pushQueue = xQueueCreate(4, sizeof(char *));
 
-    auto &rmd = ResourceManager<LMDS>::getInstance();
+    auto &rmd    = ResourceManager<LMDS>::getInstance();
     auto &matrix = rmd.getResourceRef();
+
+    time_t lastHeartbeat = 0;
 
     // Give WiFi and DataStore time to initialise
     vTaskDelay(6000 / portTICK_PERIOD_MS);
@@ -157,10 +257,20 @@ void mqtt_task(void *parameter)
             }
         }
 
-        // Keep connection alive while checking for messages
+        // Pump MQTT to receive incoming messages
         pumpLoop(100);
 
-        // Push messages take priority — drain the whole queue
+        // Reboot takes priority over everything else
+        if (pendingReboot)
+        {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            ESP.restart();
+        }
+
+        // Apply brightness / power changes
+        applyPendingHardware(rmd);
+
+        // Push messages next — drain the whole queue
         char *pushMsg = nullptr;
         while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
         {
@@ -170,7 +280,7 @@ void mqtt_task(void *parameter)
                 rmd.release_access();
             }
             free(pushMsg);
-            pumpLoop(50); // keep MQTT alive between scrolls
+            pumpLoop(50);
         }
 
         // Display looped message
@@ -181,12 +291,17 @@ void mqtt_task(void *parameter)
                 scrollMessage(loopedMessage, matrix, 50);
                 rmd.release_access();
             }
-            pumpLoop(500);
         }
-        else
+
+        // Periodic heartbeat every 60 seconds
+        time_t now = time(nullptr);
+        if (difftime(now, lastHeartbeat) >= 60)
         {
-            // Nothing to display — just keep the connection alive
-            pumpLoop(5000);
+            std::string clientId = DataStore::getInstance().get_value("mqtt_client_id", "infoclock32");
+            publishStatus(clientId);
+            lastHeartbeat = now;
         }
+
+        pumpLoop(loopedMessage.empty() ? 5000 : 500);
     }
 }

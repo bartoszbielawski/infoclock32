@@ -6,6 +6,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <logger.hpp>
 #include <string_utils.h>
 #include <string>
 
@@ -43,7 +44,7 @@ void lhc_status_task(void *parameter)
             auto response = HttpUtils::httpGet(pageUrl, output, true);
             if (response != 200)
             {
-                Serial.printf("LHCStatus: HTTP GET failed, response: %d\n", response);
+                logPrintf("LHC", "HTTP GET failed, response: %d", response);
                 vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before
                 continue;
             }      
@@ -74,7 +75,7 @@ void lhc_status_task(void *parameter)
                     value.replace("</title>", "");
                     value.trim();
                     interesting_fields[title.c_str()] = value.c_str();
-                    Serial.printf("LHCStatus: %s = %s\n", title.c_str(), value.c_str());
+                    logPrintf("LHC", "%s = %s", title.c_str(), value.c_str());
                     fields_updated = true;
                 }
             }
@@ -97,7 +98,7 @@ void lhc_status_task(void *parameter)
 
         if (not rmd.make_access_request())
         {
-            Serial.println("LHCStatus: Failed to get access to display");   
+            logPrintf("LHC", "Failed to get access to display");
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
         }
@@ -111,13 +112,13 @@ void lhc_status_task(void *parameter)
         vTaskDelay(5000 / portTICK_PERIOD_MS);
         if (not rmd.make_access_request())
         {
-            Serial.println("LHCStatus: Failed to get access to display");   
+            logPrintf("LHC", "Failed to get access to display");
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
         }
         if (not page1Message.empty())
         {
-            Serial.printf("LHCStatus: Displaying page 1 message: %s\n", page1Message.c_str());
+            logPrintf("LHC", "Page1: %s", page1Message.c_str());
             scrollMessage(page1Message, matrix, 50);
         }
         rmd.release_access();

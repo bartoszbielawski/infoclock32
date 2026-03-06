@@ -4,6 +4,7 @@
 #include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
 #include <data_store.hpp>
+#include <logger.hpp>
 
 // Web server instance
 WebServer server(80);
@@ -19,11 +20,15 @@ void handleRoot() {
 }
 
 void handle_file_edit();
+void handle_reboot();
+void handle_log();
 
 // Web server task
 void web_server_task(void* pvParameters) {
     server.on("/", handleRoot);
     server.on("/edit", handle_file_edit);
+    server.on("/reboot", HTTP_POST, handle_reboot);
+    server.on("/log", HTTP_GET, handle_log);
     server.begin();
 
     while (true)
@@ -121,4 +126,32 @@ void handle_file_edit() {
     }
 
     server.send(405, "text/plain", "Method Not Allowed");
+}
+
+void handle_reboot() {
+    if (!is_authenticated()) return;
+    server.send(200, "text/plain", "Rebooting...");
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    ESP.restart();
+}
+
+void handle_log() {
+    if (!is_authenticated()) return;
+
+    String html = F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                    "<meta http-equiv='refresh' content='5'>"
+                    "<title>Log</title></head><body>"
+                    "<h2>Log <a href='/log'>[refresh]</a></h2>"
+                    "<table border='1' cellpadding='4' style='font-family:monospace'>");
+
+    const auto &history = getLogHistory();
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
+    {
+        html += F("<tr><td>");
+        html += *it;
+        html += F("</td></tr>\n");
+    }
+
+    html += F("</table></body></html>");
+    server.send(200, "text/html", html);
 }

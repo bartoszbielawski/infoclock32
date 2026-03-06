@@ -11,6 +11,7 @@
 #include <data_store.hpp>
 #include <http_utils.hpp>
 #include <graphic_utils.hpp>
+#include <logger.hpp>
 #include <pgmspace.h>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
@@ -58,19 +59,19 @@ std::string readWeatherFromOWM()
     auto response = HttpUtils::httpGet(url, output, false);
     if (response != 200)
     {
-        Serial.printf("HTTP GET failed, response: %d\n", response);
+        logPrintf("WTH", "current weather HTTP GET failed: %d", response);
         vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
         return std::string();
     }
 
     auto currentWeather = parseJsonWithPredicate(output, weatherKeys);
-    
+
     //read forcast
     snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str());
     response = HttpUtils::httpGet(url, output, false);
     if (response != 200)
     {
-        Serial.printf("HTTP GET failed, response: %d\n", response);
+        logPrintf("WTH", "forecast HTTP GET failed: %d", response);
         vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
         return std::string();
     }
@@ -120,11 +121,11 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        Serial.printf("Weather: %s\n", messageToBeDisplayed.c_str());
+        logPrintf("WTH", "%s", messageToBeDisplayed.c_str());
 
         if (not rmd.make_access_request())
         {
-            Serial.println("WeatherDisplay: Failed to get access to display");
+            logPrintf("WTH", "Failed to get access to display");
             vTaskDelay(60000 / portTICK_PERIOD_MS);
             continue;
         }

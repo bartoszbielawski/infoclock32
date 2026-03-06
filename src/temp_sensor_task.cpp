@@ -4,6 +4,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <logger.hpp>
 #include <temp_sensor.hpp>
 #include <string>
 
@@ -40,11 +41,11 @@ void temp_sensor_task(void* parameter)
 {
     TempSensor* sensor = static_cast<TempSensor*>(parameter);
 
-    Serial.printf("TempSensor: starting with sensor '%s'\n", sensor->name());
+    logPrintf("TMP", "starting with sensor '%s'", sensor->name());
 
     if (!sensor->begin())
     {
-        Serial.printf("TempSensor: sensor '%s' failed to initialize, task exiting\n", sensor->name());
+        logPrintf("TMP", "sensor '%s' failed to initialize, task exiting", sensor->name());
         vTaskDelete(nullptr);
         return;
     }
@@ -65,11 +66,11 @@ void temp_sensor_task(void* parameter)
             {
                 message = buildMessage(sensor);
                 last_update = time(nullptr);
-                Serial.printf("TempSensor: %s\n", message.c_str());
+                logPrintf("TMP", "%s", message.c_str());
             }
             else
             {
-                Serial.printf("TempSensor: read() returned false, no data\n");
+                logPrintf("TMP", "read() returned false, no data");
                 message.clear();
                 last_update = time(nullptr); // back off, don't hammer a failing sensor
             }
@@ -83,7 +84,7 @@ void temp_sensor_task(void* parameter)
 
         if (!rmd.make_access_request())
         {
-            Serial.println("TempSensor: failed to get display access");
+            logPrintf("TMP", "failed to get display access");
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
         }

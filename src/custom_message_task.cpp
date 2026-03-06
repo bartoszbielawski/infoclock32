@@ -4,6 +4,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <logger.hpp>
 #include <string>
 #include <vector>
 #include <ctime>
@@ -132,7 +133,7 @@ void custom_message_task(void* /*parameter*/)
             if (m.end   >= 0 && now >= m.end + 86400) continue;
 
             std::string display = build_display(m);
-            Serial.printf("CustomMsg: %s\n", display.c_str());
+            logPrintf("MSG", "%s", display.c_str());
 
             if (!rmd.make_access_request())
             {
