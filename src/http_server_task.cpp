@@ -5,6 +5,9 @@
 #include <freertos/FreeRTOS.h>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <resource_manager.hpp>
+#include <LMDS.hpp>
+#include <graphic_utils.hpp>
 
 // Web server instance
 WebServer server(80);
@@ -84,10 +87,11 @@ static String pageNav(const char* active)
         return String(F("<a href='")) + href + F("'") + cls + F(">") + label + F("</a>");
     };
     return String(F("<nav>"))
-        + link("/",       "Home")
-        + link("/status", "Status")
-        + link("/log",    "Log")
-        + link("/edit",   "Config")
+        + link("/",        "Home")
+        + link("/status",  "Status")
+        + link("/log",     "Log")
+        + link("/edit",    "Config")
+        + link("/actions", "Actions")
         + F("</nav><main>");
 }
 
@@ -131,30 +135,21 @@ bool is_authenticated()
 
 // ── handlers ──────────────────────────────────────────────────────────────────
 
+void handle_home();
 void handle_file_edit();
 void handle_reboot();
 void handle_log();
 void handle_status();
+void handle_actions();
 
 void web_server_task(void* pvParameters)
 {
-    server.on("/",       HTTP_GET,  []() {
-        String html = pageHead("Home");
-        html += pageNav("/");
-        html += F("<h2>Welcome</h2><div class='card'>"
-                  "<p style='margin-bottom:14px;color:#475569'>"
-                  "infoclock32 — ESP32-C3 LED matrix clock</p>"
-                  "<a class='btn btn-primary' href='/status'>Device status</a>&nbsp;"
-                  "<a class='btn btn-primary' href='/log'>Log viewer</a>&nbsp;"
-                  "<a class='btn btn-primary' href='/edit'>Config editor</a>"
-                  "</div>");
-        html += PAGE_FOOT;
-        server.send(200, "text/html", html);
-    });
-    server.on("/status", HTTP_GET,  handle_status);
-    server.on("/edit",              handle_file_edit);
-    server.on("/reboot", HTTP_POST, handle_reboot);
-    server.on("/log",    HTTP_GET,  handle_log);
+    server.on("/", handle_home);
+    server.on("/status",  HTTP_GET,  handle_status);
+    server.on("/edit",               handle_file_edit);
+    server.on("/reboot",  HTTP_POST, handle_reboot);
+    server.on("/log",     HTTP_GET,  handle_log);
+    server.on("/actions",            handle_actions);
     server.begin();
 
     while (true)
@@ -162,6 +157,94 @@ void web_server_task(void* pvParameters)
         server.handleClient();
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
+}
+
+// ── / (home dashboard) ────────────────────────────────────────────────────────
+
+void handle_home()
+{
+    // ── status data ───────────────────────────────────────────────────────────
+    unsigned long ms = millis();
+    char uptime[32];
+    snprintf(uptime, sizeof(uptime), "%luh %lum %lus",
+             ms / 3600000UL, (ms % 3600000UL) / 60000UL, (ms % 60000UL) / 1000UL);
+
+    char heap[24];
+    snprintf(heap, sizeof(heap), "%u KB (%u B)",
+             (unsigned)esp_get_free_heap_size() / 1024,
+             (unsigned)esp_get_free_heap_size());
+
+    char rssiStr[20];
+    int rssi = WiFi.RSSI();
+    const char* quality = rssi >= -60 ? "excellent" : rssi >= -70 ? "good" : rssi >= -80 ? "fair" : "weak";
+    snprintf(rssiStr, sizeof(rssiStr), "%d dBm (%s)", rssi, quality);
+
+    auto row = [](const char* label, const String& value) -> String {
+        return String(F("<tr><td class='label'>")) + label +
+               F("</td><td>") + value + F("</td></tr>\n");
+    };
+
+    // ── page ──────────────────────────────────────────────────────────────────
+    String html = pageHead("Home", "<meta http-equiv='refresh' content='30'>");
+    html += pageNav("/");
+
+    // Status table
+    html += F("<h2>&#9881; Device status</h2>"
+              "<table style='margin-bottom:24px'>"
+              "<tr><th colspan='2'>&#127760; Network</th></tr>");
+    html += row("IP address",  WiFi.localIP().toString());
+    html += row("Hostname",    WiFi.getHostname());
+    html += row("SSID",        WiFi.SSID());
+    html += row("Signal",      rssiStr);
+    html += F("<tr><th colspan='2'>&#128421; System</th></tr>");
+    html += row("Uptime",    uptime);
+    html += row("Free heap", heap);
+    html += row("Chip",      ESP.getChipModel());
+    html += F("</table>");
+
+    // Action cards — forms POST to /actions
+    html += F("<h2>&#9889; Actions</h2>");
+
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#128172; Push message</h3>"
+              "<form method='POST' action='/actions'>"
+              "<input type='hidden' name='action' value='push'>"
+              "<input name='message' type='text' placeholder='Message to scroll&hellip;' "
+              "style='width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;"
+              "font-size:.9rem;margin-bottom:10px;background:#fff;color:#1e293b'>"
+              "<button class='btn btn-primary' type='submit'>&#9654; Send</button>"
+              "</form></div>");
+
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#9728; Brightness (0&ndash;15)</h3>"
+              "<form method='POST' action='/actions'>"
+              "<input type='hidden' name='action' value='brightness'>"
+              "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
+              "<input name='level' type='range' min='0' max='15' value='7' style='flex:1'"
+              " oninput='this.nextElementSibling.textContent=this.value'>"
+              "<span style='font-family:monospace;min-width:2ch'>7</span>"
+              "</div>"
+              "<button class='btn btn-primary' type='submit'>Set</button>"
+              "</form></div>");
+
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#9211; Display power &amp; reboot</h3>"
+              "<div class='actions'>"
+              "<form method='POST' action='/actions' style='display:contents'>"
+              "<input type='hidden' name='action' value='power'>"
+              "<button class='btn btn-primary' name='state' value='on'  type='submit'>&#9654; On</button>"
+              "<button class='btn btn-danger'  name='state' value='off' type='submit'>&#9632; Off</button>"
+              "</form>"
+              "<form method='POST' action='/reboot' style='display:contents'>"
+              "<button class='btn btn-danger' type='submit'>&#128260; Reboot</button>"
+              "</form>"
+              "</div></div>");
+
+    html += PAGE_FOOT;
+    server.send(200, "text/html", html);
 }
 
 // ── /status ───────────────────────────────────────────────────────────────────
@@ -325,4 +408,124 @@ void handle_reboot()
 
     vTaskDelay(200 / portTICK_PERIOD_MS);
     ESP.restart();
+}
+
+// ── /actions ──────────────────────────────────────────────────────────────────
+
+void handle_actions()
+{
+    if (!is_authenticated()) return;
+
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+    String result;
+
+    if (server.method() == HTTP_POST)
+    {
+        String action = server.arg("action");
+
+        if (action == "push")
+        {
+            String msg = server.arg("message");
+            if (!msg.isEmpty())
+            {
+                if (rmd.make_access_request())
+                {
+                    scrollMessage(std::string(msg.c_str()), rmd.getResourceRef(), 50);
+                    rmd.release_access();
+                    result = "&#10003; Message displayed.";
+                    logPrintf("WEB", "push message via /actions");
+                }
+                else { result = "&#9888; Display busy &mdash; try again."; }
+            }
+        }
+        else if (action == "brightness")
+        {
+            int level = server.arg("level").toInt();
+            if (level >= 0 && level <= 15)
+            {
+                if (rmd.make_access_request())
+                {
+                    rmd.getResourceRef().setIntensity((uint8_t)level);
+                    rmd.release_access();
+                    result = "&#10003; Brightness set to " + String(level) + ".";
+                    logPrintf("WEB", "brightness set to %d via /actions", level);
+                }
+                else { result = "&#9888; Display busy &mdash; try again."; }
+            }
+        }
+        else if (action == "power")
+        {
+            bool on = (server.arg("state") == "on");
+            if (rmd.make_access_request())
+            {
+                auto& matrix = rmd.getResourceRef();
+                matrix.setEnabled(on);
+                matrix.display();
+                rmd.release_access();
+                result = String("&#10003; Display powered ") + (on ? "on" : "off") + ".";
+                logPrintf("WEB", "display powered %s via /actions", on ? "on" : "off");
+            }
+            else { result = "&#9888; Display busy &mdash; try again."; }
+        }
+    }
+
+    String html = pageHead("Actions");
+    html += pageNav("/actions");
+    html += F("<h2>Actions</h2>");
+
+    if (!result.isEmpty())
+    {
+        html += F("<div class='card' style='border-left:3px solid #15803d;margin-bottom:20px'>"
+                  "<p style='color:#15803d;font-weight:500'>");
+        html += result;
+        html += F("</p></div>");
+    }
+
+    // Push message
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#128172; Push message</h3>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='push'>"
+              "<input name='message' type='text' placeholder='Message to scroll&hellip;' "
+              "style='width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;"
+              "font-size:.9rem;margin-bottom:10px;background:#fff;color:#1e293b'>"
+              "<button class='btn btn-primary' type='submit'>&#9654; Send</button>"
+              "</form></div>");
+
+    // Brightness
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#9728; Brightness (0&ndash;15)</h3>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='brightness'>"
+              "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
+              "<input name='level' type='range' min='0' max='15' value='7' style='flex:1'"
+              " oninput='this.nextElementSibling.textContent=this.value'>"
+              "<span style='font-family:monospace;min-width:2ch'>7</span>"
+              "</div>"
+              "<button class='btn btn-primary' type='submit'>Set</button>"
+              "</form></div>");
+
+    // Power
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#9211; Display power</h3>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='power'>"
+              "<div class='actions'>"
+              "<button class='btn btn-primary' name='state' value='on'  type='submit'>&#9654; On</button>"
+              "<button class='btn btn-danger'  name='state' value='off' type='submit'>&#9632; Off</button>"
+              "</div></form></div>");
+
+    // Reboot shortcut
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#128260; Reboot</h3>"
+              "<form method='POST' action='/reboot'>"
+              "<button class='btn btn-danger' type='submit'>Reboot device</button>"
+              "</form></div>");
+
+    html += PAGE_FOOT;
+    server.send(200, "text/html", html);
 }
