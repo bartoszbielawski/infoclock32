@@ -16,6 +16,7 @@
 
 void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
+void mqtt_task(void *parameter);
 
 DataStore& dataStore = DataStore::getInstance();
 
@@ -174,6 +175,7 @@ void setup() {
   //xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
   //xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
   xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
+  xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
 
   TempSensor* tempSensor = new StubTempSensor(); // replace with real sensor when ready
   xTaskCreate(temp_sensor_task,    "TempSensorTask",    4096, tempSensor, 1, nullptr);
