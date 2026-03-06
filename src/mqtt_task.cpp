@@ -12,6 +12,8 @@
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 
+bool mqtt_is_connected() { return mqttClient.connected(); }
+
 static std::string loopedMessage;
 static QueueHandle_t pushQueue;
 
@@ -213,6 +215,8 @@ static void applyPendingHardware(ResourceManager<LMDS> &rmd)
     if (pendingBrightness >= 0)
     {
         matrix.setIntensity((uint8_t)pendingBrightness);
+        DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
+        DataStore::getInstance().save_to_file("/config.txt");
         logPrintf("MQT", "brightness set to %d", pendingBrightness);
         pendingBrightness = -1;
     }

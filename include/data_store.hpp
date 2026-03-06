@@ -4,6 +4,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <LittleFS.h>
 #include <Arduino.h>
 
@@ -61,6 +62,32 @@ public:
     void set_value(const std::string& key, const std::string& value)
     {
         data[key] = value;
+    }
+
+    void remove_value(const std::string& key)
+    {
+        data.erase(key);
+    }
+
+    std::vector<std::string> get_keys_with_prefix(const std::string& prefix) const
+    {
+        std::vector<std::string> keys;
+        for (const auto& kv : data)
+            if (kv.first.size() >= prefix.size() &&
+                kv.first.compare(0, prefix.size(), prefix) == 0)
+                keys.push_back(kv.first);
+        return keys;
+    }
+
+    void save_to_file(const std::string& filename)
+    {
+        LittleFS.begin(true);
+        File file = LittleFS.open(filename.c_str(), "w");
+        if (!file) return;
+        for (const auto& kv : data)
+            file.printf("%s=%s\n", kv.first.c_str(), kv.second.c_str());
+        file.close();
+        LittleFS.end();
     }
 
     std::string get_value(const std::string& key, const std::string& default_value = "")

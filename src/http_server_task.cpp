@@ -3,11 +3,14 @@
 #include <LittleFS.h>
 #include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
+#include <Update.h>
+#include <vector>
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
+#include <mqtt_task.h>
 
 // Web server instance
 WebServer server(80);
@@ -91,7 +94,9 @@ static String pageNav(const char* active)
         + link("/status",  "Status")
         + link("/log",     "Log")
         + link("/edit",    "Config")
-        + link("/actions", "Actions")
+        + link("/actions",  "Actions")
+        + link("/messages", "Messages")
+        + link("/update",   "Update")
         + F("</nav><main>");
 }
 
@@ -99,37 +104,33 @@ static const char PAGE_FOOT[] PROGMEM = "</main></body></html>";
 
 // ── auth ──────────────────────────────────────────────────────────────────────
 
-bool is_authenticated()
+static bool check_auth_header()
 {
-    auto reject = [&]() {
-        server.sendHeader("WWW-Authenticate", "Basic realm=\"infoclock32\"");
-        server.send(401, "text/plain", "Unauthorized");
-    };
-
-    if (!server.hasHeader("Authorization")) { reject(); return false; }
-
+    if (!server.hasHeader("Authorization")) return false;
     String authHeader = server.header("Authorization");
-    if (!authHeader.startsWith("Basic ")) { reject(); return false; }
+    if (!authHeader.startsWith("Basic ")) return false;
 
     String encoded = authHeader.substring(6);
     unsigned char decoded[64] = {};
     size_t decoded_len = 0;
     if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decoded_len,
                               (const unsigned char*)encoded.c_str(), encoded.length()) != 0)
-    {
-        reject(); return false;
-    }
+        return false;
     decoded[decoded_len] = '\0';
 
     String credentials = String((char*)decoded);
     int colon = credentials.indexOf(':');
-    if (colon == -1) { reject(); return false; }
+    if (colon == -1) return false;
 
-    if (credentials.substring(0, colon)  == "admin" &&
-        credentials.substring(colon + 1) == "password")
-        return true;
+    return (credentials.substring(0, colon)  == "admin" &&
+            credentials.substring(colon + 1) == "password");
+}
 
-    reject();
+bool is_authenticated()
+{
+    if (check_auth_header()) return true;
+    server.sendHeader("WWW-Authenticate", "Basic realm=\"infoclock32\"");
+    server.send(401, "text/plain", "Unauthorized");
     return false;
 }
 
@@ -141,6 +142,10 @@ void handle_reboot();
 void handle_log();
 void handle_status();
 void handle_actions();
+void handle_update_get();
+void handle_update_post();
+void handle_update_upload();
+void handle_messages();
 
 void web_server_task(void* pvParameters)
 {
@@ -150,6 +155,9 @@ void web_server_task(void* pvParameters)
     server.on("/reboot",  HTTP_POST, handle_reboot);
     server.on("/log",     HTTP_GET,  handle_log);
     server.on("/actions",            handle_actions);
+    server.on("/messages",            handle_messages);
+    server.on("/update",  HTTP_GET,  handle_update_get);
+    server.on("/update",  HTTP_POST, handle_update_post, handle_update_upload);
     server.begin();
 
     while (true)
@@ -179,6 +187,19 @@ void handle_home()
     const char* quality = rssi >= -60 ? "excellent" : rssi >= -70 ? "good" : rssi >= -80 ? "fair" : "weak";
     snprintf(rssiStr, sizeof(rssiStr), "%d dBm (%s)", rssi, quality);
 
+    // MQTT status
+    auto& ds = DataStore::getInstance();
+    std::string mqttServer = ds.get_value("mqtt_server", "");
+    String mqttStatus;
+    if (mqttServer.empty())
+        mqttStatus = F("<span style='color:#94a3b8'>not configured</span>");
+    else if (mqtt_is_connected())
+        mqttStatus = String(F("&#10003; connected to ")) + mqttServer.c_str();
+    else
+        mqttStatus = String(F("&#9888; disconnected (")) + mqttServer.c_str() + F(")");
+
+    int curBrightness = atoi(ds.get_value("brightness", "7").c_str());
+
     auto row = [](const char* label, const String& value) -> String {
         return String(F("<tr><td class='label'>")) + label +
                F("</td><td>") + value + F("</td></tr>\n");
@@ -200,6 +221,8 @@ void handle_home()
     html += row("Uptime",    uptime);
     html += row("Free heap", heap);
     html += row("Chip",      ESP.getChipModel());
+    html += F("<tr><th colspan='2'>&#128225; MQTT</th></tr>");
+    html += row("Status", mqttStatus);
     html += F("</table>");
 
     // Action cards — forms POST to /actions
@@ -222,10 +245,12 @@ void handle_home()
               "<form method='POST' action='/actions'>"
               "<input type='hidden' name='action' value='brightness'>"
               "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
-              "<input name='level' type='range' min='0' max='15' value='7' style='flex:1'"
-              " oninput='this.nextElementSibling.textContent=this.value'>"
-              "<span style='font-family:monospace;min-width:2ch'>7</span>"
-              "</div>"
+              "<input name='level' type='range' min='0' max='15' value='");
+    html += curBrightness;
+    html += F("' style='flex:1' oninput='this.nextElementSibling.textContent=this.value'>"
+              "<span style='font-family:monospace;min-width:2ch'>");
+    html += curBrightness;
+    html += F("</span></div>"
               "<button class='btn btn-primary' type='submit'>Set</button>"
               "</form></div>");
 
@@ -314,13 +339,13 @@ void handle_log()
             String ts  = line.substring(0, tagOpen - 1);
             String tag = line.substring(tagOpen + 1, tagClose);
             String msg = line.substring(tagClose + 2);
-            html += F("<tr><td class='mono' style='white-space:nowrap'>") + ts + F("</td>"
+            html += String(F("<tr><td class='mono' style='white-space:nowrap'>")) + ts + F("</td>"
                       "<td><span class='tag tag-info'>") + tag + F("</span></td>"
                       "<td class='mono'>") + msg + F("</td></tr>\n");
         }
         else
         {
-            html += F("<tr><td colspan='3' class='mono'>") + line + F("</td></tr>\n");
+            html += String(F("<tr><td colspan='3' class='mono'>")) + line + F("</td></tr>\n");
         }
     }
 
@@ -447,6 +472,8 @@ void handle_actions()
                 {
                     rmd.getResourceRef().setIntensity((uint8_t)level);
                     rmd.release_access();
+                    DataStore::getInstance().set_value("brightness", std::to_string(level));
+                    DataStore::getInstance().save_to_file("/config.txt");
                     result = "&#10003; Brightness set to " + String(level) + ".";
                     logPrintf("WEB", "brightness set to %d via /actions", level);
                 }
@@ -468,6 +495,8 @@ void handle_actions()
             else { result = "&#9888; Display busy &mdash; try again."; }
         }
     }
+
+    int curBrightness = atoi(DataStore::getInstance().get_value("brightness", "7").c_str());
 
     String html = pageHead("Actions");
     html += pageNav("/actions");
@@ -500,10 +529,12 @@ void handle_actions()
               "<form method='POST'>"
               "<input type='hidden' name='action' value='brightness'>"
               "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
-              "<input name='level' type='range' min='0' max='15' value='7' style='flex:1'"
-              " oninput='this.nextElementSibling.textContent=this.value'>"
-              "<span style='font-family:monospace;min-width:2ch'>7</span>"
-              "</div>"
+              "<input name='level' type='range' min='0' max='15' value='");
+    html += curBrightness;
+    html += F("' style='flex:1' oninput='this.nextElementSibling.textContent=this.value'>"
+              "<span style='font-family:monospace;min-width:2ch'>");
+    html += curBrightness;
+    html += F("</span></div>"
               "<button class='btn btn-primary' type='submit'>Set</button>"
               "</form></div>");
 
@@ -526,6 +557,340 @@ void handle_actions()
               "<button class='btn btn-danger' type='submit'>Reboot device</button>"
               "</form></div>");
 
+    html += PAGE_FOOT;
+    server.send(200, "text/html", html);
+}
+
+// ── /update (OTA firmware) ────────────────────────────────────────────────────
+
+void handle_update_get()
+{
+    if (!is_authenticated()) return;
+
+    String html = pageHead("Firmware update");
+    html += pageNav("/update");
+    html += F("<h2>&#128190; Firmware update</h2>"
+              "<div class='card'>"
+              "<p style='color:#475569;margin-bottom:16px'>"
+              "Upload a compiled <code>.bin</code> file to flash new firmware. "
+              "The device will reboot automatically on success.</p>"
+              "<form method='POST' action='/update' enctype='multipart/form-data'>"
+              "<input type='file' name='firmware' accept='.bin' "
+              "style='display:block;margin-bottom:14px'>"
+              "<button class='btn btn-primary' type='submit'>&#9654; Flash firmware</button>"
+              "</form></div>");
+    html += PAGE_FOOT;
+    server.send(200, "text/html", html);
+}
+
+static bool otaRunning = false;
+
+void handle_update_upload()
+{
+    HTTPUpload& upload = server.upload();
+
+    if (upload.status == UPLOAD_FILE_START)
+    {
+        otaRunning = check_auth_header() && Update.begin(UPDATE_SIZE_UNKNOWN);
+        if (otaRunning)
+            logPrintf("WEB", "OTA start: %s", upload.filename.c_str());
+        else
+            logPrintf("WEB", "OTA rejected (auth or begin failed)");
+    }
+    else if (upload.status == UPLOAD_FILE_WRITE)
+    {
+        if (otaRunning)
+            Update.write(upload.buf, upload.currentSize);
+    }
+    else if (upload.status == UPLOAD_FILE_END)
+    {
+        if (otaRunning)
+        {
+            otaRunning = false;
+            if (Update.end(true))
+                logPrintf("WEB", "OTA complete: %u bytes", upload.totalSize);
+            else
+                logPrintf("WEB", "OTA end error: %s", Update.errorString());
+        }
+    }
+}
+
+void handle_update_post()
+{
+    if (!is_authenticated()) return;
+
+    bool ok = !Update.hasError();
+    String html = pageHead(ok ? "Update complete" : "Update failed");
+    html += pageNav("/update");
+    if (ok)
+    {
+        html += F("<h2>&#10003; Update complete</h2>"
+                  "<div class='card'>"
+                  "<p style='color:#15803d'>Firmware flashed successfully. Rebooting&hellip;</p>"
+                  "</div>");
+    }
+    else
+    {
+        html += F("<h2>&#9888; Update failed</h2>"
+                  "<div class='card'>"
+                  "<p style='color:#dc2626'>Error: ");
+        html += Update.errorString();
+        html += F("</p><div class='actions'>"
+                  "<a class='btn btn-primary' href='/update'>&#8592; Try again</a>"
+                  "</div></div>");
+    }
+    html += PAGE_FOOT;
+    server.send(200, "text/html", html);
+
+    if (ok)
+    {
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        ESP.restart();
+    }
+}
+
+// ── /messages (custom message editor) ────────────────────────────────────────
+
+static String htmlEsc(const String& s)
+{
+    String out;
+    out.reserve(s.length() + 8);
+    for (unsigned i = 0; i < s.length(); i++) {
+        switch (s[i]) {
+            case '&': out += F("&amp;");  break;
+            case '<': out += F("&lt;");   break;
+            case '>': out += F("&gt;");   break;
+            case '"': out += F("&quot;"); break;
+            default:  out += s[i];        break;
+        }
+    }
+    return out;
+}
+
+// Returns true if name is valid for a slot: alphanumeric, _ or -, non-empty, max 32 chars.
+static bool validSlotName(const String& name)
+{
+    if (name.isEmpty() || name.length() > 32) return false;
+    for (unsigned i = 0; i < name.length(); i++) {
+        char c = name[i];
+        if (!isalnum((unsigned char)c) && c != '_' && c != '-') return false;
+    }
+    return true;
+}
+
+// Collect all slot names from DataStore (keys of the form "message_<name>_text").
+static std::vector<std::string> get_slot_names(DataStore& ds)
+{
+    std::vector<std::string> names;
+    auto keys = ds.get_keys_with_prefix("message_");
+    for (const auto& key : keys) {
+        const std::string suffix = "_text";
+        if (key.size() < 8 + 1 + suffix.size()) continue;
+        if (key.substr(key.size() - suffix.size()) != suffix) continue;
+        std::string name = key.substr(8, key.size() - 13);
+        if (!ds.get_value(key, "").empty())
+            names.push_back(name);
+    }
+    return names;
+}
+
+void handle_messages()
+{
+    if (!is_authenticated()) return;
+
+    auto& ds = DataStore::getInstance();
+    String result;
+    bool  resultOk = true;
+
+    if (server.method() == HTTP_POST)
+    {
+        // Interval
+        int ivVal = server.arg("interval").toInt();
+        if (ivVal >= 10)
+            ds.set_value("msg_interval", std::to_string(ivVal));
+
+        // Existing slots: form sends hidden n0=name, n1=name… and count=N,
+        // plus t0/s0/e0/c0 per slot.
+        int count = server.arg("count").toInt();
+        for (int i = 0; i < count; i++)
+        {
+            String name = server.arg(String("n") + i);
+            if (!validSlotName(name)) continue;
+
+            std::string pfx = "message_" + std::string(name.c_str());
+            String text = server.arg(String("t") + i);
+
+            if (text.isEmpty())
+            {
+                // Empty text → delete this slot
+                ds.remove_value(pfx + "_text");
+                ds.remove_value(pfx + "_start");
+                ds.remove_value(pfx + "_end");
+                ds.remove_value(pfx + "_countdown");
+            }
+            else
+            {
+                ds.set_value(pfx + "_text",      text.c_str());
+                ds.set_value(pfx + "_start",     server.arg(String("s") + i).c_str());
+                ds.set_value(pfx + "_end",       server.arg(String("e") + i).c_str());
+                ds.set_value(pfx + "_countdown", server.arg(String("c") + i).c_str());
+            }
+        }
+
+        // New slot
+        String newName = server.arg("newname");
+        newName.trim();
+        for (unsigned i = 0; i < newName.length(); i++)
+            if (newName[i] == ' ') newName[i] = '_';
+
+        String newText = server.arg("newtext");
+        if (!newName.isEmpty() || !newText.isEmpty())
+        {
+            if (!validSlotName(newName))
+            {
+                result   = "&#9888; Invalid name &ldquo;" + htmlEsc(newName) +
+                           "&rdquo; &mdash; use letters, digits, _ or -.";
+                resultOk = false;
+            }
+            else if (newText.isEmpty())
+            {
+                result   = "&#9888; Text is required for new slot.";
+                resultOk = false;
+            }
+            else
+            {
+                std::string pfx = "message_" + std::string(newName.c_str());
+                ds.set_value(pfx + "_text",      newText.c_str());
+                ds.set_value(pfx + "_start",     server.arg("newstart").c_str());
+                ds.set_value(pfx + "_end",       server.arg("newend").c_str());
+                ds.set_value(pfx + "_countdown", server.arg("newcountdown").c_str());
+            }
+        }
+
+        if (resultOk)
+        {
+            ds.save_to_file("/config.txt");
+            logPrintf("WEB", "custom messages saved via /messages");
+            result = "&#10003; Saved.";
+        }
+    }
+
+    // ── build page ────────────────────────────────────────────────────────────
+    String interval   = ds.get_value("msg_interval", "60").c_str();
+    auto   slotNames  = get_slot_names(ds);
+
+    String html = pageHead("Messages",
+        "<style>"
+        "input[type=text].mt{width:100%;padding:5px 7px;border:1px solid #cbd5e1;"
+        "border-radius:4px;font-size:.85rem;box-sizing:border-box}"
+        "input[type=date].md{width:100%;padding:5px 4px;border:1px solid #cbd5e1;"
+        "border-radius:4px;font-size:.8rem;box-sizing:border-box}"
+        "td.sn{color:#64748b;font-weight:600;white-space:nowrap}"
+        "th,td{padding:7px 10px}"
+        "</style>");
+    html += pageNav("/messages");
+    html += F("<h2>&#128172; Custom messages</h2>");
+
+    if (!result.isEmpty())
+    {
+        html += F("<div class='card' style='border-left:3px solid ");
+        html += resultOk ? F("#15803d") : F("#dc2626");
+        html += F(";margin-bottom:16px'><p style='font-weight:500;color:");
+        html += resultOk ? F("#15803d") : F("#dc2626");
+        html += F("'>");
+        html += result;
+        html += F("</p></div>");
+    }
+
+    html += F("<form method='POST'>");
+
+    // Hidden slot names & count for the POST round-trip
+    html += F("<input type='hidden' name='count' value='");
+    html += (int)slotNames.size();
+    html += F("'>");
+    for (int i = 0; i < (int)slotNames.size(); i++)
+    {
+        html += F("<input type='hidden' name='n"); html += i;
+        html += F("' value='"); html += htmlEsc(slotNames[i].c_str()); html += F("'>");
+    }
+
+    // Interval card
+    html += F("<div class='card' style='margin-bottom:16px'>"
+              "<h3 style='font-size:.95rem;font-weight:600;margin-bottom:10px'>Cycle interval</h3>"
+              "<div style='display:flex;align-items:center;gap:8px'>"
+              "<input name='interval' type='number' min='10' value='");
+    html += interval;
+    html += F("' style='width:80px;padding:6px 8px;border:1px solid #cbd5e1;"
+              "border-radius:6px;font-size:.9rem'>"
+              " <span style='color:#475569'>seconds between cycles</span></div></div>");
+
+    // Existing slots table
+    if (!slotNames.empty())
+    {
+        html += F("<div class='card' style='margin-bottom:16px'>"
+                  "<p style='color:#64748b;font-size:.82rem;margin-bottom:10px'>"
+                  "Clear <b>Text</b> and save to delete a slot. "
+                  "Use <code>{}</code> in text to insert countdown days.</p>"
+                  "<div style='overflow-x:auto'>"
+                  "<table style='table-layout:fixed;min-width:560px'>"
+                  "<colgroup><col style='width:130px'><col>"
+                  "<col style='width:110px'><col style='width:110px'><col style='width:110px'>"
+                  "</colgroup>"
+                  "<tr><th>Name</th><th>Text</th>"
+                  "<th title='Show from'>Start</th>"
+                  "<th title='Hide after'>End</th>"
+                  "<th title='Countdown target'>Countdown</th></tr>\n");
+
+        for (int i = 0; i < (int)slotNames.size(); i++)
+        {
+            const std::string& name = slotNames[i];
+            std::string pfx = "message_" + name;
+            String text  = htmlEsc(ds.get_value(pfx + "_text",      "").c_str());
+            String start =         ds.get_value(pfx + "_start",     "").c_str();
+            String end   =         ds.get_value(pfx + "_end",       "").c_str();
+            String cntdn =         ds.get_value(pfx + "_countdown", "").c_str();
+
+            html += F("<tr><td class='sn'>"); html += htmlEsc(name.c_str());
+            html += F("</td><td><input class='mt' type='text' name='t");
+            html += i; html += F("' value='"); html += text; html += F("' maxlength='128'></td>");
+
+            html += F("<td><input class='md' type='date' name='s");
+            html += i; html += F("' value='"); html += start; html += F("'></td>");
+
+            html += F("<td><input class='md' type='date' name='e");
+            html += i; html += F("' value='"); html += end; html += F("'></td>");
+
+            html += F("<td><input class='md' type='date' name='c");
+            html += i; html += F("' value='"); html += cntdn; html += F("'></td></tr>\n");
+        }
+        html += F("</table></div></div>");
+    }
+
+    // Add new slot card
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#10133; Add slot</h3>"
+              "<div style='display:grid;gap:8px'>"
+              "<div style='display:flex;gap:8px;align-items:center'>"
+              "<label style='font-size:.85rem;color:#475569;width:70px'>Name</label>"
+              "<input class='mt' type='text' name='newname' maxlength='32' "
+              "placeholder='e.g. lhc or party_2026' style='max-width:220px'></div>"
+              "<div style='display:flex;gap:8px;align-items:center'>"
+              "<label style='font-size:.85rem;color:#475569;width:70px'>Text</label>"
+              "<input class='mt' type='text' name='newtext' maxlength='128' "
+              "placeholder='Message text (use {} for countdown days)'></div>"
+              "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>"
+              "<label style='font-size:.85rem;color:#475569;width:70px'>Start</label>"
+              "<input class='md' type='date' name='newstart' style='width:130px'>"
+              "<label style='font-size:.85rem;color:#475569;margin-left:8px'>End</label>"
+              "<input class='md' type='date' name='newend' style='width:130px'>"
+              "<label style='font-size:.85rem;color:#475569;margin-left:8px'>Countdown</label>"
+              "<input class='md' type='date' name='newcountdown' style='width:130px'>"
+              "</div></div></div>");
+
+    html += F("<div class='actions'>"
+              "<button class='btn btn-primary' type='submit'>&#128190; Save</button>"
+              "</div></form>");
     html += PAGE_FOOT;
     server.send(200, "text/html", html);
 }

@@ -9,7 +9,6 @@
 #include <vector>
 #include <ctime>
 
-static constexpr int MAX_SLOTS       = 8;
 static constexpr int DEFAULT_CYCLE_S = 60;
 
 // Parse "YYYY-MM-DD" → midnight local time_t. Returns -1 on any failure.
@@ -40,26 +39,26 @@ static std::vector<CustomMessage> load_messages()
 {
     std::vector<CustomMessage> out;
     auto& ds = DataStore::getInstance();
-    char key[24];
 
-    for (int i = 1; i <= MAX_SLOTS; i++)
+    // Collect all keys of the form "message_<name>_text"
+    auto keys = ds.get_keys_with_prefix("message_");
+    for (const auto& key : keys)
     {
-        snprintf(key, sizeof(key), "msg%d_text", i);
+        // Must end with "_text"
+        const std::string suffix = "_text";
+        if (key.size() < 8 + 1 + suffix.size()) continue;
+        if (key.substr(key.size() - suffix.size()) != suffix) continue;
+
+        // Extract slot name: between "message_" (8) and "_text" (5)
+        std::string name = key.substr(8, key.size() - 13);
         std::string text = ds.get_value(key, "");
         if (text.empty()) continue;
 
         CustomMessage m;
-        m.text = text;
-
-        snprintf(key, sizeof(key), "msg%d_start", i);
-        m.start = parse_date(ds.get_value(key, ""));
-
-        snprintf(key, sizeof(key), "msg%d_end", i);
-        m.end = parse_date(ds.get_value(key, ""));
-
-        snprintf(key, sizeof(key), "msg%d_countdown", i);
-        m.countdown = parse_date(ds.get_value(key, ""));
-
+        m.text      = text;
+        m.start     = parse_date(ds.get_value("message_" + name + "_start",     ""));
+        m.end       = parse_date(ds.get_value("message_" + name + "_end",       ""));
+        m.countdown = parse_date(ds.get_value("message_" + name + "_countdown", ""));
         out.push_back(m);
     }
     return out;
