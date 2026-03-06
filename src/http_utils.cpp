@@ -1,22 +1,22 @@
 // http_utils.cpp
 //
 // Simple HTTP(S) helper for ESP32 / PlatformIO projects.
-// Provides a small wrapper to perform GET requests and return response body and status.
+// Uses the HTTPClient 1.1-compatible API (begin(WiFiClient&, url)).
+// Note: HTTPS support depends on the ESP-IDF TLS layer being invoked
+// by HTTPClient internally when it detects an https:// URL.
 
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
-#include <WiFiClientSecure.h>
-#include <memory>
 
 namespace HttpUtils {
 
 /// Perform an HTTP(S) GET.
 /// @param url        Full URL (http:// or https://)
 /// @param outBody    Will be filled with response body on success (empty on failure)
-/// @param insecure   If true and using HTTPS, the TLS certificate will not be verified (useful for testing)
+/// @param insecure   Reserved for future cert-pinning support; currently ignored
 /// @return HTTP status code (>0) on success, or a negative value on error
-int httpGet(const String &url, String &outBody, bool insecure = true) {
+int httpGet(const String &url, String &outBody, bool insecure) {
     outBody = String();
 
     if (url.length() == 0) {
@@ -24,43 +24,22 @@ int httpGet(const String &url, String &outBody, bool insecure = true) {
     }
 
     HTTPClient http;
-    std::unique_ptr<WiFiClient> plainClient;
-    std::unique_ptr<WiFiClientSecure> secureClient;
-    int result = -1;
+    WiFiClient client;
 
-    // Choose client based on scheme
-    if (url.startsWith("https://")) {
-        secureClient = std::unique_ptr<WiFiClientSecure>(new WiFiClientSecure());
-        if (insecure) {
-            // Skip certificate validation (NOT recommended for production)
-            secureClient->setInsecure();
-        }
-        http.begin(*secureClient, url);
-    } else {
-        plainClient = std::unique_ptr<WiFiClient>(new WiFiClient());
-        http.begin(*plainClient, url);
+    if (!http.begin(client, url)) {
+        Serial.printf("HttpUtils: http.begin() failed for %s\n", url.c_str());
+        return -1;
     }
 
-    // Perform GET
     int httpCode = http.GET();
     if (httpCode > 0) {
-        // success, read response
         outBody = http.getString();
-        result = httpCode;
     } else {
-        // error during connection/request
-        result = -httpCode; // return negative of error (<=0)
+        Serial.printf("HttpUtils: GET failed, code=%d\n", httpCode);
     }
 
     http.end();
-
-    // unique_ptr cleans up automatically
-    return result;
+    return httpCode;
 }
 
 } // namespace HttpUtils
-
-// Example usage (commented):
-// String body;
-// int status = HttpUtils::httpGet("https://example.com/data.json", body, true);
-// if (status > 0) { Serial.printf("HTTP %d, len=%d\n", status, body.length()); }
