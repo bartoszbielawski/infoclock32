@@ -1,7 +1,9 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <LittleFS.h>
+#include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
+#include <data_store.hpp>
 
 // Web server instance
 WebServer server(80);
@@ -19,47 +21,53 @@ void handleRoot() {
 void handle_file_edit();
 
 // Web server task
-void web_server_task(void* pvParameters) {    
-    // Start the server
+void web_server_task(void* pvParameters) {
     server.on("/", handleRoot);
     server.on("/edit", handle_file_edit);
     server.begin();
 
-    // Main server loop
     while (true)
     {
         server.handleClient();
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Yield to other tasks
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
-// Simple authentication function
+// Decode and verify HTTP Basic auth credentials.
+// Returns true if username=="admin" and password=="password".
 bool is_authenticated() {
-    if (!server.hasHeader("Authorization")) {
+    auto reject = [&]() {
         server.sendHeader("WWW-Authenticate", "Basic realm=\"Secure Area\"");
         server.send(401, "text/plain", "Unauthorized");
-        return false;
-    }
+    };
+
+    if (!server.hasHeader("Authorization")) { reject(); return false; }
 
     String authHeader = server.header("Authorization");
-    if (authHeader.startsWith("Basic ")) {
-        String credentials = authHeader.substring(6); // Extract the part after "Basic "
-        
-        // Split the credentials into username and password
-        int colonIndex = credentials.indexOf(':');
-        if (colonIndex != -1) {
-            String username = credentials.substring(0, colonIndex);
-            String password = credentials.substring(colonIndex + 1);
+    if (!authHeader.startsWith("Basic ")) { reject(); return false; }
 
-            // Replace "admin" and "password" with your desired credentials
-            if (username == "admin" && password == "password") {
-                return true;
-            }
-        }
+    // Decode the base64 payload ("Basic <b64(user:pass)>")
+    String encoded = authHeader.substring(6);
+    unsigned char decoded[64] = {};
+    size_t decoded_len = 0;
+    if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decoded_len,
+                              (const unsigned char*)encoded.c_str(), encoded.length()) != 0)
+    {
+        reject(); return false;
+    }
+    decoded[decoded_len] = '\0';
+
+    String credentials = String((char*)decoded);
+    int colon = credentials.indexOf(':');
+    if (colon == -1) { reject(); return false; }
+
+    if (credentials.substring(0, colon)  == "admin" &&
+        credentials.substring(colon + 1) == "password")
+    {
+        return true;
     }
 
-    server.sendHeader("WWW-Authenticate", "Basic realm=\"Secure Area\"");
-    server.send(401, "text/plain", "Unauthorized");
+    reject();
     return false;
 }
 
@@ -68,12 +76,11 @@ const char* FILENAME = "/config.txt";
 
 // Function to handle file display and editing
 void handle_file_edit() {
-    if (!is_authenticated()) {
-        return;
-    }
+    if (!is_authenticated()) return;
+
+    LittleFS.begin(true);
 
     if (server.method() == HTTP_GET) {
-        // Read the file from LittleFS
         File file = LittleFS.open(FILENAME, "r");
         if (!file) {
             server.send(500, "text/plain", "Failed to open file");
@@ -81,40 +88,37 @@ void handle_file_edit() {
         }
 
         String fileContent;
-        while (file.available()) {
-            fileContent += (char)file.read();
-        }
+        while (file.available()) fileContent += (char)file.read();
         file.close();
 
-        // Send the file content in an HTML form
-        String html = "<form method='POST' action='/edit'><textarea name='content' rows='20' cols='80'>";
+        String html = "<form method='POST' action='/edit'>"
+                      "<textarea name='content' rows='20' cols='80'>";
         html += fileContent;
         html += "</textarea><br><input type='submit' value='Save'></form>";
         server.send(200, "text/html", html);
         return;
     }
-    if (server.method() == HTTP_POST) 
-    {
-        // Save the modified content back to the file
+
+    if (server.method() == HTTP_POST) {
         if (!server.hasArg("content")) {
             server.send(400, "text/plain", "Bad Request");
             return;
         }
 
-        String newContent = server.arg("content");
         File file = LittleFS.open(FILENAME, "w");
         if (!file) {
             server.send(500, "text/plain", "Failed to open file for writing");
             return;
         }
-
-        file.print(newContent);
+        file.print(server.arg("content"));
         file.close();
 
-        server.send(200, "text/plain", "File updated successfully");
+        // Reload config so changes take effect immediately without a reboot
+        DataStore::getInstance().load_from_file(FILENAME);
+
+        server.send(200, "text/plain", "Saved. Config reloaded.");
         return;
     }
 
-    // Other cases
     server.send(405, "text/plain", "Method Not Allowed");
 }
