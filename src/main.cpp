@@ -13,6 +13,7 @@
 
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <timezone_utils.hpp>
 #include <temp_sensor.hpp>
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
@@ -175,6 +176,7 @@ void setup() {
 
   dataStore.load_from_file("/config.txt");
   logger_init();
+  apply_timezone();   // must be after load_from_file so "timezone" key is available
 
   // Restore saved brightness (default 7)
   int brightness = atoi(dataStore.get_value("brightness", "7").c_str());

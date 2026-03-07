@@ -7,6 +7,7 @@
 #include <vector>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <timezone_utils.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
@@ -488,9 +489,27 @@ void handle_actions()
             logPrintf("WEB", "night mode %s-%s brightness %d via /actions",
                       start.c_str(), end.c_str(), nbr);
         }
+        else if (action == "timezone")
+        {
+            String tz = server.arg("tz");
+            tz.trim();
+            if (!tz.isEmpty())
+            {
+                DataStore::getInstance().set_value("timezone", tz.c_str());
+                DataStore::getInstance().save_to_file("/config.txt");
+                apply_timezone();
+                result = "&#10003; Timezone applied: " + tz;
+                logPrintf("WEB", "timezone set to %s via /actions", tz.c_str());
+            }
+            else
+            {
+                result = "&#9888;&#65039; Timezone string must not be empty.";
+            }
+        }
     }
 
-    int curBrightness = atoi(DataStore::getInstance().get_value("brightness", "7").c_str());
+    int    curBrightness = atoi(DataStore::getInstance().get_value("brightness", "7").c_str());
+    String curTz         = DataStore::getInstance().get_value("timezone", "UTC0").c_str();
 
     String html = pageHead("Actions");
     html += pageNav("/actions");
@@ -563,6 +582,60 @@ void handle_actions()
                   "<button class='btn btn-primary' type='submit'>Save</button>"
                   "</form></div>");
     }
+
+    // Timezone
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#127760; Timezone</h3>"
+              "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+              "Pick a preset, or enter a POSIX TZ string directly. "
+              "Applies immediately&nbsp;&mdash; no reboot needed.</p>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='timezone'>"
+              "<select style='display:block;width:100%;padding:6px 8px;border:1px solid #cbd5e1;"
+              "border-radius:6px;font-size:.9rem;margin-bottom:8px;background:#fff;color:#1e293b'"
+              " onchange='document.getElementById(\"tzin\").value=this.value'>"
+              "<option value=''>&#8613; choose a preset to fill the field below</option>"
+              "<optgroup label='Universal'>"
+              "<option value='UTC0'>UTC</option>"
+              "</optgroup>"
+              "<optgroup label='Europe'>"
+              "<option value='GMT0BST,M3.5.0/1,M10.5.0'>London (GMT/BST)</option>"
+              "<option value='WET0WEST,M3.5.0/1,M10.5.0'>Lisbon (WET/WEST)</option>"
+              "<option value='CET-1CEST,M3.5.0,M10.5.0/3'>Central Europe (CET/CEST)</option>"
+              "<option value='EET-2EEST,M3.5.0/3,M10.5.0/4'>Eastern Europe (EET/EEST)</option>"
+              "<option value='MSK-3'>Moscow (MSK)</option>"
+              "</optgroup>"
+              "<optgroup label='Middle East / Asia'>"
+              "<option value='AST-3'>Riyadh (AST +3)</option>"
+              "<option value='GST-4'>Dubai (GST +4)</option>"
+              "<option value='IST-5:30'>India (IST +5:30)</option>"
+              "<option value='ICT-7'>Bangkok (ICT +7)</option>"
+              "<option value='CST-8'>Beijing / Singapore (+8)</option>"
+              "<option value='JST-9'>Tokyo (JST +9)</option>"
+              "</optgroup>"
+              "<optgroup label='Oceania'>"
+              "<option value='AEST-10AEDT,M10.1.0,M4.1.0/3'>Sydney (AEST/AEDT)</option>"
+              "<option value='NZST-12NZDT,M9.5.0,M4.1.0/3'>Auckland (NZST/NZDT)</option>"
+              "</optgroup>"
+              "<optgroup label='Americas'>"
+              "<option value='EST5EDT,M3.2.0,M11.1.0'>US Eastern (EST/EDT)</option>"
+              "<option value='CST6CDT,M3.2.0,M11.1.0'>US Central (CST/CDT)</option>"
+              "<option value='MST7MDT,M3.2.0,M11.1.0'>US Mountain (MST/MDT)</option>"
+              "<option value='PST8PDT,M3.2.0,M11.1.0'>US Pacific (PST/PDT)</option>"
+              "<option value='AKST9AKDT,M3.2.0,M11.1.0'>Alaska (AKST/AKDT)</option>"
+              "<option value='HST10'>Hawaii (HST &minus;10)</option>"
+              "<option value='BRT3'>Brazil / Brasilia (BRT &minus;3)</option>"
+              "<option value='ART3'>Argentina (ART &minus;3)</option>"
+              "</optgroup>"
+              "</select>"
+              "<input id='tzin' name='tz' type='text' value='");
+    html += curTz;
+    html += F("' placeholder='e.g. CET-1CEST,M3.5.0,M10.5.0/3'"
+              " style='display:block;width:100%;padding:6px 8px;border:1px solid #cbd5e1;"
+              "border-radius:6px;font-family:monospace;font-size:.85rem;margin-bottom:10px'>"
+              "<button class='btn btn-primary' type='submit'>Apply</button>"
+              "</form></div>");
 
     // Reboot shortcut
     html += F("<div class='card'>"
