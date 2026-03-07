@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <type_traits>
 #include <parse_utils.hpp>
 #include <LittleFS.h>
 #include <Arduino.h>
@@ -93,7 +94,10 @@ public:
 
     // Typed overload: delegates to parse_value(). Supported: int, long, float.
     // Returns default_value on missing key or parse failure.
-    template<typename T>
+    // enable_if prevents ambiguity with the string overload when called with string literals.
+    template<typename T, typename std::enable_if<
+        std::is_same<T, int>::value || std::is_same<T, long>::value || std::is_same<T, float>::value,
+        int>::type = 0>
     T get_value(const std::string& key, T default_value) const
     {
         auto it = data.find(key);

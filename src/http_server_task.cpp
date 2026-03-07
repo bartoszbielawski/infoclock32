@@ -210,14 +210,14 @@ void handle_home()
     html += pageNav("/");
 
     // Status table
-    html += F("<h2>&#9881; Device status</h2>"
+    html += F("<h2>&#9881;&#65039; Device status</h2>"
               "<table style='margin-bottom:24px'>"
               "<tr><th colspan='2'>&#127760; Network</th></tr>");
     html += row("IP address",  WiFi.localIP().toString());
     html += row("Hostname",    WiFi.getHostname());
     html += row("SSID",        WiFi.SSID());
     html += row("Signal",      rssiStr);
-    html += F("<tr><th colspan='2'>&#128421; System</th></tr>");
+    html += F("<tr><th colspan='2'>&#128421;&#65039; System</th></tr>");
     html += row("Uptime",    uptime);
     html += row("Free heap", heap);
     html += row("Chip",      ESP.getChipModel());
@@ -226,7 +226,7 @@ void handle_home()
     html += F("</table>");
 
     // Action cards — forms POST to /actions
-    html += F("<h2>&#9889; Actions</h2>");
+    html += F("<h2>&#9889;&#65039; Actions</h2>");
 
     html += F("<div class='card'>"
               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
@@ -241,7 +241,7 @@ void handle_home()
 
     html += F("<div class='card'>"
               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-              "&#9728; Brightness (0&ndash;15)</h3>"
+              "&#9728;&#65039; Brightness (0&ndash;15)</h3>"
               "<form method='POST' action='/actions'>"
               "<input type='hidden' name='action' value='brightness'>"
               "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
@@ -256,17 +256,10 @@ void handle_home()
 
     html += F("<div class='card'>"
               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-              "&#9211; Display power &amp; reboot</h3>"
-              "<div class='actions'>"
-              "<form method='POST' action='/actions' style='display:contents'>"
-              "<input type='hidden' name='action' value='power'>"
-              "<button class='btn btn-primary' name='state' value='on'  type='submit'>&#9654; On</button>"
-              "<button class='btn btn-danger'  name='state' value='off' type='submit'>&#9632; Off</button>"
-              "</form>"
-              "<form method='POST' action='/reboot' style='display:contents'>"
-              "<button class='btn btn-danger' type='submit'>&#128260; Reboot</button>"
-              "</form>"
-              "</div></div>");
+              "&#128260; Reboot</h3>"
+              "<form method='POST' action='/reboot'>"
+              "<button class='btn btn-danger' type='submit'>Reboot device</button>"
+              "</form></div>");
 
     html += PAGE_FOOT;
     server.send(200, "text/html", html);
@@ -305,7 +298,7 @@ void handle_status()
     html += row("SSID",        WiFi.SSID());
     html += row("Signal",      rssiStr);
     html += row("MAC address", WiFi.macAddress());
-    html += F("<tr><th colspan='2'>&#9881; System</th></tr>");
+    html += F("<tr><th colspan='2'>&#9881;&#65039; System</th></tr>");
     html += row("Uptime",      uptime);
     html += row("Free heap",   heap);
     html += row("Chip",        ESP.getChipModel());
@@ -480,19 +473,20 @@ void handle_actions()
                 else { result = "&#9888; Display busy &mdash; try again."; }
             }
         }
-        else if (action == "power")
+        else if (action == "nightmode")
         {
-            bool on = (server.arg("state") == "on");
-            if (rmd.make_access_request())
-            {
-                auto& matrix = rmd.getResourceRef();
-                matrix.setEnabled(on);
-                matrix.display();
-                rmd.release_access();
-                result = String("&#10003; Display powered ") + (on ? "on" : "off") + ".";
-                logPrintf("WEB", "display powered %s via /actions", on ? "on" : "off");
-            }
-            else { result = "&#9888; Display busy &mdash; try again."; }
+            String start = server.arg("night_start");
+            String end   = server.arg("night_end");
+            int    nbr   = server.arg("night_brightness").toInt();
+            nbr = max(0, min(15, nbr));
+            auto& ds = DataStore::getInstance();
+            ds.set_value("night_start",      start.c_str());
+            ds.set_value("night_end",        end.c_str());
+            ds.set_value("night_brightness", std::to_string(nbr));
+            ds.save_to_file("/config.txt");
+            result = "&#10003; Night mode saved.";
+            logPrintf("WEB", "night mode %s-%s brightness %d via /actions",
+                      start.c_str(), end.c_str(), nbr);
         }
     }
 
@@ -525,7 +519,7 @@ void handle_actions()
     // Brightness
     html += F("<div class='card'>"
               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-              "&#9728; Brightness (0&ndash;15)</h3>"
+              "&#9728;&#65039; Brightness (0&ndash;15)</h3>"
               "<form method='POST'>"
               "<input type='hidden' name='action' value='brightness'>"
               "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
@@ -538,16 +532,37 @@ void handle_actions()
               "<button class='btn btn-primary' type='submit'>Set</button>"
               "</form></div>");
 
-    // Power
-    html += F("<div class='card'>"
-              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-              "&#9211; Display power</h3>"
-              "<form method='POST'>"
-              "<input type='hidden' name='action' value='power'>"
-              "<div class='actions'>"
-              "<button class='btn btn-primary' name='state' value='on'  type='submit'>&#9654; On</button>"
-              "<button class='btn btn-danger'  name='state' value='off' type='submit'>&#9632; Off</button>"
-              "</div></form></div>");
+    // Night mode
+    {
+        auto& ds = DataStore::getInstance();
+        String nStart = ds.get_value("night_start", "").c_str();
+        String nEnd   = ds.get_value("night_end",   "").c_str();
+        int    nBr    = ds.get_value("night_brightness", 1);
+
+        html += F("<div class='card'>"
+                  "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+                  "&#127769; Night mode</h3>"
+                  "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+                  "Dims the display between two times. Leave blank to disable.</p>"
+                  "<form method='POST'>"
+                  "<input type='hidden' name='action' value='nightmode'>"
+                  "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
+                  "<label style='font-size:.9rem'>From</label>"
+                  "<input type='time' name='night_start' value='");
+        html += nStart;
+        html += F("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                  "<label style='font-size:.9rem'>To</label>"
+                  "<input type='time' name='night_end' value='");
+        html += nEnd;
+        html += F("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                  "<label style='font-size:.9rem'>Brightness</label>"
+                  "<input type='number' name='night_brightness' min='0' max='15' value='");
+        html += nBr;
+        html += F("' style='width:60px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                  "</div>"
+                  "<button class='btn btn-primary' type='submit'>Save</button>"
+                  "</form></div>");
+    }
 
     // Reboot shortcut
     html += F("<div class='card'>"

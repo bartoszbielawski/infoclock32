@@ -20,7 +20,6 @@ static QueueHandle_t pushQueue;
 // Pending hardware commands set in the callback, applied in the main loop
 // where display access is safe to acquire.
 static int8_t  pendingBrightness = -1;  // -1 = none, 0-15 = set level
-static int8_t  pendingPower      = -1;  // -1 = none, 0 = off, 1 = on
 static bool    pendingReboot     = false;
 
 static void publishStatus(const std::string& clientId)
@@ -74,13 +73,6 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         int level = atoi(buf);
         if (level >= 0 && level <= 15)
             pendingBrightness = (int8_t)level;
-    }
-    else if (topicStr.endsWith("/power"))
-    {
-        String s(buf);
-        s.toLowerCase();
-        if (s == "on"  || s == "1") pendingPower = 1;
-        if (s == "off" || s == "0") pendingPower = 0;
     }
     else if (topicStr.endsWith("/config"))
     {
@@ -204,30 +196,17 @@ static void pumpLoop(int ms)
 // Apply any pending hardware commands that require display access.
 static void applyPendingHardware(ResourceManager<LMDS> &rmd)
 {
-    if (pendingBrightness < 0 && pendingPower < 0)
+    if (pendingBrightness < 0)
         return;
 
     if (!rmd.make_access_request())
         return;
 
-    auto &matrix = rmd.getResourceRef();
-
-    if (pendingBrightness >= 0)
-    {
-        matrix.setIntensity((uint8_t)pendingBrightness);
-        DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
-        DataStore::getInstance().save_to_file("/config.txt");
-        logPrintf("MQT", "brightness set to %d", pendingBrightness);
-        pendingBrightness = -1;
-    }
-
-    if (pendingPower >= 0)
-    {
-        matrix.setEnabled(pendingPower == 1);
-        matrix.display();
-        logPrintf("MQT", "display powered %s", pendingPower ? "on" : "off");
-        pendingPower = -1;
-    }
+    rmd.getResourceRef().setIntensity((uint8_t)pendingBrightness);
+    DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
+    DataStore::getInstance().save_to_file("/config.txt");
+    logPrintf("MQT", "brightness set to %d", pendingBrightness);
+    pendingBrightness = -1;
 
     rmd.release_access();
 }

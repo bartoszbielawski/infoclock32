@@ -16,6 +16,7 @@
 #include <temp_sensor.hpp>
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
+#include <night_mode_task.h>
 
 void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
@@ -191,6 +192,7 @@ void setup() {
   TempSensor* tempSensor = new StubTempSensor(); // replace with real sensor when ready
   xTaskCreate(temp_sensor_task,    "TempSensorTask",    4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr,    1, nullptr);
+  xTaskCreate(night_mode_task,     "NightModeTask",     2048, nullptr,    1, nullptr);
 }
 
 void loop() 
