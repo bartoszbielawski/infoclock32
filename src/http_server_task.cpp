@@ -6,6 +6,7 @@
 #include <Update.h>
 #include <vector>
 #include <data_store.hpp>
+#include <runtime_store.hpp>
 #include <logger.hpp>
 #include <timezone_utils.hpp>
 #include <resource_manager.hpp>
@@ -303,6 +304,16 @@ void handle_status()
     html += row("Uptime",      uptime);
     html += row("Free heap",   heap);
     html += row("Chip",        ESP.getChipModel());
+
+    // Runtime values — shown only when at least one task has published something
+    auto rtSnap = RuntimeStore::getInstance().snapshot();
+    if (!rtSnap.empty())
+    {
+        html += F("<tr><th colspan='2'>&#9889;&#65039; Runtime values</th></tr>");
+        for (const auto& kv : rtSnap)
+            html += row(kv.first.c_str(), String(kv.second.c_str()));
+    }
+
     html += F("</table>");
     html += PAGE_FOOT;
     server.send(200, "text/html", html);
@@ -960,7 +971,9 @@ void handle_messages()
         html += F("<div class='card' style='margin-bottom:16px'>"
                   "<p style='color:#64748b;font-size:.82rem;margin-bottom:10px'>"
                   "Clear <b>Text</b> and save to delete a slot. "
-                  "Use <code>{}</code> in text to insert countdown days.</p>"
+                  "Use <code>{}</code> for countdown days; "
+                  "<code>{key}</code> inserts any config value "
+                  "(e.g. <code>{hostname}</code>, <code>{location}</code>).</p>"
                   "<div style='overflow-x:auto'>"
                   "<table style='table-layout:fixed;min-width:560px'>"
                   "<colgroup><col style='width:130px'><col>"

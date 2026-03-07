@@ -4,6 +4,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <runtime_store.hpp>
 #include <logger.hpp>
 #include <temp_sensor.hpp>
 #include <string>
@@ -67,6 +68,13 @@ void temp_sensor_task(void* parameter)
                 message = buildMessage(sensor);
                 last_update = time(nullptr);
                 logPrintf("TMP", "%s", message.c_str());
+
+                // Publish to RuntimeStore so {temp_c} / {temp_hpa} / {temp_rh}
+                // can be used in custom message placeholders.
+                auto& rs = RuntimeStore::getInstance();
+                rs.set("temp_c", sensor->temperature());
+                if (sensor->hasPressure())  rs.set("temp_hpa", sensor->pressure(), "%.0f");
+                if (sensor->hasHumidity())  rs.set("temp_rh",  sensor->humidity(), "%.0f");
             }
             else
             {

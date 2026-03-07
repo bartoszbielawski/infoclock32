@@ -4,6 +4,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <runtime_store.hpp>
 #include <logger.hpp>
 #include <string>
 #include <vector>
@@ -64,48 +65,97 @@ static std::vector<CustomMessage> load_messages()
     return out;
 }
 
+// Expand all {…} placeholders in one pass over the text.
+//
+//   {}        → abs countdown day count (only when has_countdown is true;
+//                left as "{}" if no countdown is configured)
+//   {key}     → DataStore value for "key" (left as "{key}" if key absent)
+//   unmatched → passed through literally
+//
+static std::string expand_placeholders(const std::string& text, int days, bool has_countdown)
+{
+    std::string result;
+    result.reserve(text.size() + 32);
+
+    size_t i = 0;
+    while (i < text.size())
+    {
+        if (text[i] != '{') { result += text[i++]; continue; }
+
+        size_t end = text.find('}', i + 1);
+        if (end == std::string::npos) { result += text[i++]; continue; }  // unmatched '{'
+
+        std::string key = text.substr(i + 1, end - i - 1);
+
+        if (key.empty())
+        {
+            // {} → countdown days
+            if (has_countdown)
+            {
+                char num[12];
+                snprintf(num, sizeof(num), "%d", abs(days));
+                result += num;
+            }
+            else
+            {
+                result += "{}";  // no countdown — pass through
+            }
+        }
+        else
+        {
+            // {key} → RuntimeStore first (live readings), then DataStore (config)
+            std::string value = RuntimeStore::getInstance().get(key);
+            if (value.empty()) value = DataStore::getInstance().get_value(key, "");
+            result += value.empty() ? text.substr(i, end - i + 1) : value;
+        }
+
+        i = end + 1;
+    }
+    return result;
+}
+
 // Build the display string from a message and its countdown date.
 //
 // Placeholder mode — text contains "{}":
 //   {} is replaced with the absolute number of days to/from the target.
 //   "LS3 will start in {} days!"  →  "LS3 will start in 45 days!"
-//   "LS3 started {} days ago!"   →  "LS3 started 3 days ago!"
-//   (Use msg<N>_end / msg<N>_start to gate which variant is visible.)
+//   (Use start/end dates to gate which variant is visible.)
 //
-// Append mode — no "{}" in text:
+// Named placeholder mode — text contains "{key}":
+//   {key} is replaced with the DataStore value for "key".
+//   "Beam in {} days - {location}"  →  "Beam in 12 days - Geneva"
+//
+// Append mode — no "{}" in text but countdown is set:
 //   A suffix is appended automatically.
-//   Future → "Event: 45d"
-//   Today  → "Event: today!"
-//   Past   → "Event: +5d"
+//   Future → "Event: 45d"  |  Today → "Event: today!"  |  Past → "Event: +5d"
+//
+// All three modes compose: named placeholders are expanded first, then countdown.
 static std::string build_display(const CustomMessage& m)
 {
-    if (m.countdown < 0) return m.text;
+    bool has_countdown = (m.countdown >= 0);
+    int  days          = 0;
 
-    time_t now  = time(nullptr);
-    long diff_s = (long)difftime(m.countdown, now);
-    int  days   = (int)(diff_s / 86400);   // negative when past
-
-    // Placeholder mode: replace "{}" with the absolute day count
-    auto pos = m.text.find("{}");
-    if (pos != std::string::npos)
+    if (has_countdown)
     {
-        char num[12];
-        snprintf(num, sizeof(num), "%d", abs(days));
-        std::string result = m.text;
-        result.replace(pos, 2, num);
-        return result;
+        time_t now  = time(nullptr);
+        long diff_s = (long)difftime(m.countdown, now);
+        days = (int)(diff_s / 86400);   // negative = past
     }
 
-    // Append mode: auto-scaled suffix
-    char suffix[24];
-    if (days > 0)
-        snprintf(suffix, sizeof(suffix), "%dd", days);
-    else if (days == 0)
-        snprintf(suffix, sizeof(suffix), "today!");
-    else
-        snprintf(suffix, sizeof(suffix), "+%dd", -days);
+    std::string result = expand_placeholders(m.text, days, has_countdown);
 
-    return m.text + ": " + suffix;
+    // Append mode: countdown set but no "{}" was present in the original text
+    if (has_countdown && m.text.find("{}") == std::string::npos)
+    {
+        char suffix[24];
+        if (days > 0)       snprintf(suffix, sizeof(suffix), "%dd",  days);
+        else if (days == 0) snprintf(suffix, sizeof(suffix), "today!");
+        else                snprintf(suffix, sizeof(suffix), "+%dd", -days);
+        result += ": ";
+        result += suffix;
+    }
+
+    return result;
 }
 
 void custom_message_task(void* /*parameter*/)
