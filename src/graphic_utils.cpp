@@ -2,6 +2,7 @@
 #include <freertos/FreeRTOS.h>
 #include "graphic_utils.hpp"
 #include <resource_manager.hpp>
+#include <logger.hpp>
 #include <memory>
 
 ResourceManager<LMDS> displayManager;
@@ -34,12 +35,11 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
   auto msgLength = message.size();
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
 
-  Serial.printf("Scrolling message: '%s', length: %d\n", message.c_str(), msgLength);
+  logPrintf("DISP", "scrolling '%s'", message.c_str());
 
   //center shorter messages
   if (msgLength * FONT_WIDTH <= display.width())
   {
-    Serial.println("Message fits on the display, centering");
     //message fits on the display, no need to scroll, but center the message
     display.clear();
     int offset = (display.width() - msgLength) / 2;

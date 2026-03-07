@@ -14,6 +14,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <timezone_utils.hpp>
+#include <version.hpp>
 #include <temp_sensor.hpp>
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
@@ -78,17 +79,17 @@ void displayClock(void *parameter)
     {
       matrix.clear();
 
-
       time_t now = time(nullptr);
       struct tm *timeinfo = localtime(&now);
 
-      Serial.printf("Current time: %02d:%02d:%02d\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-      
+      if (i == 0)
+        logPrintf("DISP", "clock %02d:%02d:%02d",
+                  timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
       //print to the matrix centered
       int16_t x1, y1;
       uint16_t width, height;
 
-      
       matrix.getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
       matrix.printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
@@ -102,7 +103,8 @@ void displayClock(void *parameter)
     time_t now = time(nullptr);
     struct tm *timeinfo = localtime(&now);
 
-    Serial.printf("Current date: %04d-%02d-%02d\n", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+    logPrintf("DISP", "date %04d-%02d-%02d",
+              timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
     
     matrix.setCursor(2, 0);
     matrix.printf("%04d-%02d-%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
@@ -181,6 +183,7 @@ void setup() {
   ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, MATRIX_CS_PIN));
 
   logger_init();
+  logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
   apply_timezone();   // must be after load_from_file so "timezone" key is available
 
   // Restore saved brightness (default 7)

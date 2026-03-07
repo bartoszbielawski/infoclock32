@@ -9,6 +9,7 @@
 #include <runtime_store.hpp>
 #include <logger.hpp>
 #include <timezone_utils.hpp>
+#include <version.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
@@ -73,13 +74,16 @@ static String pageHead(const char* title, const char* extraHead = "")
                  "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                  "<title>");
     h += title;
-    h += F(" — infoclock32</title><style>");
+    h += F(" \xe2\x80\x94 ");
+    h += WiFi.getHostname();
+    h += F("</title><style>");
     h += CSS;
     h += F("</style>");
     h += extraHead;
     h += F("</head><body>"
-           "<header><h1>&#128336; infoclock32</h1>"
-           "<span>");
+           "<header><h1>&#128336; ");
+    h += WiFi.getHostname();
+    h += F("</h1><span>");
     h += WiFi.localIP().toString();
     h += F("</span></header>");
     return h;
@@ -102,7 +106,13 @@ static String pageNav(const char* active)
         + F("</nav><main>");
 }
 
-static const char PAGE_FOOT[] PROGMEM = "</main></body></html>";
+static const char PAGE_FOOT[] PROGMEM =
+    "</main>"
+    "<footer style='text-align:center;padding:10px 0 14px;"
+    "font-size:.75rem;color:#94a3b8'>"
+    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME
+    "</footer>"
+    "</body></html>";
 
 // ── auth ──────────────────────────────────────────────────────────────────────
 
@@ -220,6 +230,7 @@ void handle_home()
     html += row("SSID",        WiFi.SSID());
     html += row("Signal",      rssiStr);
     html += F("<tr><th colspan='2'>&#128421;&#65039; System</th></tr>");
+    html += row("Firmware",  F(APP_VERSION " &bull; built " BUILD_DATE));
     html += row("Uptime",    uptime);
     html += row("Free heap", heap);
     html += row("Chip",      ESP.getChipModel());
@@ -301,6 +312,7 @@ void handle_status()
     html += row("Signal",      rssiStr);
     html += row("MAC address", WiFi.macAddress());
     html += F("<tr><th colspan='2'>&#9881;&#65039; System</th></tr>");
+    html += row("Firmware",    F(APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME));
     html += row("Uptime",      uptime);
     html += row("Free heap",   heap);
     html += row("Chip",        ESP.getChipModel());
