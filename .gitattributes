@@ -1,0 +1,9 @@
+# Normalize line endings: store as LF in the repo, leave checkout as-is
+* text=auto eol=lf
+
+# Binary files — never touch line endings
+*.bin binary
+*.elf binary
+*.a   binary
+*.png binary
+*.jpg binary

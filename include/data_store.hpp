@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <parse_utils.hpp>
 #include <LittleFS.h>
 #include <Arduino.h>
 
@@ -88,6 +89,16 @@ public:
             file.printf("%s=%s\n", kv.first.c_str(), kv.second.c_str());
         file.close();
         LittleFS.end();
+    }
+
+    // Typed overload: delegates to parse_value(). Supported: int, long, float.
+    // Returns default_value on missing key or parse failure.
+    template<typename T>
+    T get_value(const std::string& key, T default_value) const
+    {
+        auto it = data.find(key);
+        if (it == data.end()) return default_value;
+        return parse_value(it->second, default_value);
     }
 
     std::string get_value(const std::string& key, const std::string& default_value = "")

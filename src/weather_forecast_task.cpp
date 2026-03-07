@@ -9,6 +9,7 @@
 #include <MapCollector.hpp>
 
 #include <data_store.hpp>
+#include <parse_utils.hpp>
 #include <http_utils.hpp>
 #include <graphic_utils.hpp>
 #include <logger.hpp>
@@ -84,11 +85,19 @@ std::string readWeatherFromOWM()
     // format string stored in flash (PROGMEM) to save RAM
     static const char WEATHER_FMT[] PROGMEM = "%s: %.1fC (%.1fC, %s)";
 
+    float currentTemp  = parse_value(currentWeather["/root/main/temp"],         NAN);
+    float forecastTemp = parse_value(foracastWeather["/root/list/2/main/temp"], NAN);
+    if (std::isnan(currentTemp) || std::isnan(forecastTemp))
+    {
+        logPrintf("WTH", "failed to parse temperature values from API response");
+        return std::string();
+    }
+
     char weatherInfo[256];
     snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT,
         foracastWeather["/root/city/name"].c_str(),
-        std::stof(currentWeather["/root/main/temp"]),
-        std::stof(foracastWeather["/root/list/2/main/temp"]),
+        currentTemp,
+        forecastTemp,
         foracastWeather["/root/list/2/weather/0/description"].c_str()
     );
 

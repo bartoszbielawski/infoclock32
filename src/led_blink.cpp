@@ -1,8 +1,10 @@
+#include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <Arduino.h>
 
-static const int LED = 8;
+#include <pins.hpp>
+
+static const int LED = LED_BLINK_PIN;
 
 void blink_led_task(void *pvParameter) {
   pinMode(LED, OUTPUT);

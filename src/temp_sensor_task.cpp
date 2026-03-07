@@ -56,7 +56,7 @@ void temp_sensor_task(void* parameter)
 
     while (true)
     {
-        int interval_s = std::stoi(DataStore::getInstance().get_value(CFG_INTERVAL, "30"));
+        int interval_s = DataStore::getInstance().get_value(CFG_INTERVAL, DEFAULT_INTERVAL_S);
         if (interval_s < 5) interval_s = DEFAULT_INTERVAL_S;
 
         // Refresh reading when interval has elapsed

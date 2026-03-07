@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
 
+#include <pins.hpp>
+
 #include <create_tasks.h>
 #include <hardware_init.h>
 #include <resource_manager.hpp>
@@ -168,7 +170,7 @@ void setup() {
   //NTP client
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, 5)); // 8 modules, CS pin 5
+  ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, MATRIX_CS_PIN));
 
   dataStore.load_from_file("/config.txt");
   logger_init();
