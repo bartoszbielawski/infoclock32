@@ -118,6 +118,9 @@ static const char PAGE_FOOT[] PROGMEM =
 
 static bool check_auth_header()
 {
+    std::string pw = DataStore::getInstance().get_value("web_password", "");
+    if (pw.empty()) return true;   // no password set → open access
+
     if (!server.hasHeader("Authorization")) return false;
     String authHeader = server.header("Authorization");
     if (!authHeader.startsWith("Basic ")) return false;
@@ -130,12 +133,11 @@ static bool check_auth_header()
         return false;
     decoded[decoded_len] = '\0';
 
-    String credentials = String((char*)decoded);
+    // Username is ignored — compare only the part after the colon.
+    String credentials((char*)decoded);
     int colon = credentials.indexOf(':');
-    if (colon == -1) return false;
-
-    return (credentials.substring(0, colon)  == "admin" &&
-            credentials.substring(colon + 1) == "password");
+    String submitted = (colon != -1) ? credentials.substring(colon + 1) : credentials;
+    return submitted == pw.c_str();
 }
 
 bool is_authenticated()
@@ -549,6 +551,17 @@ void handle_actions()
                 result = "&#9888;&#65039; Timezone string must not be empty.";
             }
         }
+        else if (action == "password")
+        {
+            String pw = server.arg("web_password");
+            DataStore::getInstance().set_value("web_password", pw.c_str());
+            DataStore::getInstance().save_to_file("/config.txt");
+            if (pw.isEmpty())
+                result = "&#10003; Password cleared &mdash; web UI is now open.";
+            else
+                result = "&#10003; Password updated.";
+            logPrintf("WEB", "web_password %s via /actions", pw.isEmpty() ? "cleared" : "changed");
+        }
     }
 
     int    curBrightness = atoi(DataStore::getInstance().get_value("brightness", "7").c_str());
@@ -700,6 +713,20 @@ void handle_actions()
               "<p style='font-size:.8rem;color:#94a3b8;margin-bottom:10px'>"
               "Allowed: letters, digits and hyphens. Must not start or end with a hyphen.</p>"
               "<button class='btn btn-primary' type='submit'>Set</button>"
+              "</form></div>");
+
+    // Password
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#128274; Web password</h3>"
+              "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+              "Protects all authenticated pages. Leave blank to disable authentication.</p>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='password'>"
+              "<input name='web_password' type='password' placeholder='New password'"
+              " style='width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;"
+              "font-size:.9rem;margin-bottom:10px;box-sizing:border-box'>"
+              "<button class='btn btn-primary' type='submit'>Set password</button>"
               "</form></div>");
 
     // Reboot shortcut
