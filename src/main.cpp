@@ -166,6 +166,12 @@ void listFiles(const char* dirname) {
 }
 
 void setup() {
+  Serial.begin(1000000);
+
+  // Load config before hardware_init so the hostname is available to set
+  // before WiFiManager calls WiFi.begin() inside autoConnect().
+  dataStore.load_from_file("/config.txt");
+
   hardware_init();
   create_tasks();
 
@@ -174,7 +180,6 @@ void setup() {
 
   ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, MATRIX_CS_PIN));
 
-  dataStore.load_from_file("/config.txt");
   logger_init();
   apply_timezone();   // must be after load_from_file so "timezone" key is available
 

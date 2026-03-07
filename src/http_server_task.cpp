@@ -489,6 +489,26 @@ void handle_actions()
             logPrintf("WEB", "night mode %s-%s brightness %d via /actions",
                       start.c_str(), end.c_str(), nbr);
         }
+        else if (action == "hostname")
+        {
+            String hn = server.arg("hostname");
+            hn.trim();
+            bool valid = !hn.isEmpty() && hn.length() <= 63;
+            for (unsigned i = 0; valid && i < hn.length(); i++) {
+                char c = hn[i];
+                if (!isalnum((unsigned char)c) && c != '-') valid = false;
+            }
+            if (!hn.isEmpty() && (hn[0] == '-' || hn[hn.length()-1] == '-')) valid = false;
+            if (valid) {
+                DataStore::getInstance().set_value("hostname", hn.c_str());
+                DataStore::getInstance().save_to_file("/config.txt");
+                WiFi.setHostname(hn.c_str());
+                result = "&#10003; Hostname set to &ldquo;" + hn + "&rdquo;. Reboot to apply fully.";
+                logPrintf("WEB", "hostname set to %s via /actions", hn.c_str());
+            } else {
+                result = "&#9888;&#65039; Invalid hostname &mdash; use letters, digits and hyphens only (max 63 chars).";
+            }
+        }
         else if (action == "timezone")
         {
             String tz = server.arg("tz");
@@ -510,6 +530,7 @@ void handle_actions()
 
     int    curBrightness = atoi(DataStore::getInstance().get_value("brightness", "7").c_str());
     String curTz         = DataStore::getInstance().get_value("timezone", "UTC0").c_str();
+    String curHostname   = WiFi.getHostname();   // reflects the live value
 
     String html = pageHead("Actions");
     html += pageNav("/actions");
@@ -635,6 +656,27 @@ void handle_actions()
               " style='display:block;width:100%;padding:6px 8px;border:1px solid #cbd5e1;"
               "border-radius:6px;font-family:monospace;font-size:.85rem;margin-bottom:10px'>"
               "<button class='btn btn-primary' type='submit'>Apply</button>"
+              "</form></div>");
+
+    // Hostname
+    html += F("<div class='card'>"
+              "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+              "&#127991;&#65039; Hostname</h3>"
+              "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+              "Used for DHCP and the WiFi captive-portal AP name. "
+              "Takes full effect after reboot.</p>"
+              "<form method='POST'>"
+              "<input type='hidden' name='action' value='hostname'>"
+              "<div style='display:flex;gap:8px;align-items:center;margin-bottom:10px'>"
+              "<input name='hostname' type='text' value='");
+    html += curHostname;
+    html += F("' placeholder='infoclock32' maxlength='63'"
+              " style='flex:1;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;"
+              "font-family:monospace;font-size:.9rem'>"
+              "</div>"
+              "<p style='font-size:.8rem;color:#94a3b8;margin-bottom:10px'>"
+              "Allowed: letters, digits and hyphens. Must not start or end with a hyphen.</p>"
+              "<button class='btn btn-primary' type='submit'>Set</button>"
               "</form></div>");
 
     // Reboot shortcut
