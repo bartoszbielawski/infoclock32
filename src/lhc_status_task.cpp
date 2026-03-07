@@ -20,10 +20,22 @@ static std::map<std::string, std::string> interesting_fields =
     {"LhcMachineMode", ""}
 };
 
-void remoteHTMLTags(String& str)
+void removeHTMLTags(String& str)
 {
-    str.replace("<br>", "--");
-    str.replace("<br/>", "--");
+    str.replace("<br>", " -- ");
+    str.replace("<br/>", " -- ");
+
+    // Strip remaining HTML tags
+    String result;
+    bool inTag = false;
+    for (unsigned int i = 0; i < str.length(); i++)
+    {
+        char c = str[i];
+        if (c == '<') inTag = true;
+        else if (c == '>') inTag = false;
+        else if (!inTag) result += c;
+    }
+    str = result;
 }
 
 void lhc_status_task(void *parameter)
@@ -71,7 +83,7 @@ void lhc_status_task(void *parameter)
                 if (interesting_fields.find(title.c_str()) != interesting_fields.end())
                 {
                     String value = line.substring(colonIndex + 1);
-                    remoteHTMLTags(value);
+                    removeHTMLTags(value);
                     value.replace("</title>", "");
                     value.trim();
                     interesting_fields[title.c_str()] = value.c_str();
