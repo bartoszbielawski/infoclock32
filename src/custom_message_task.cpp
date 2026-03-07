@@ -5,6 +5,7 @@
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
 #include <runtime_store.hpp>
+#include <device_store.hpp>
 #include <logger.hpp>
 #include <string>
 #include <vector>
@@ -103,8 +104,9 @@ static std::string expand_placeholders(const std::string& text, int days, bool h
         }
         else
         {
-            // {key} → RuntimeStore first (live readings), then DataStore (config)
+            // {key} → RuntimeStore (sensors) → DeviceStore (WiFi/system) → DataStore (config)
             std::string value = RuntimeStore::getInstance().get(key);
+            if (value.empty()) value = DeviceStore::getInstance().get(key);
             if (value.empty()) value = DataStore::getInstance().get_value(key, "");
             result += value.empty() ? text.substr(i, end - i + 1) : value;
         }

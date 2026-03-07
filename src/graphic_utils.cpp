@@ -57,7 +57,7 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
   for (int i = 0; i <= canvas.width() - display.width() + steps; i += steps)
   {
     copyCanvasToDisplay(canvas, i, display, 0);
-    display.displayToSerial(Serial);
+    //display.displayToSerial(Serial);
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }
   

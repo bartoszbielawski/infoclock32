@@ -98,19 +98,37 @@ void displayClock(void *parameter)
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-    matrix.clear();
+    {
+      time_t now = time(nullptr);
+      struct tm *timeinfo = localtime(&now);
 
-    time_t now = time(nullptr);
-    struct tm *timeinfo = localtime(&now);
+      static const char* const kDayNames[] = {
+        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+      };
+      const char* dayName = kDayNames[timeinfo->tm_wday];
+      char dateStr[12];
+      snprintf(dateStr, sizeof(dateStr), "%04d-%02d-%02d",
+               timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+      logPrintf("DISP", "date %s %s", dayName, dateStr);
 
-    logPrintf("DISP", "date %04d-%02d-%02d",
-              timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
-    
-    matrix.setCursor(2, 0);
-    matrix.printf("%04d-%02d-%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
-    matrix.displayToSerial(Serial);
-    
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+      // Show day name centered
+      matrix.clear();
+      int16_t x1, y1;
+      uint16_t width, height;
+      matrix.getTextBounds(dayName, 0, 0, &x1, &y1, &width, &height);
+      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
+      matrix.print(dayName);
+      matrix.displayToSerial(Serial);
+      vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+      // Show date centered
+      matrix.clear();
+      matrix.getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
+      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
+      matrix.print(dateStr);
+      matrix.displayToSerial(Serial);
+      vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
     rmd.release_access();
     
     // wait a bit before updating again and requesting access again

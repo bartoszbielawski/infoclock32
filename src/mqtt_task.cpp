@@ -5,6 +5,8 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <runtime_store.hpp>
+#include <device_store.hpp>
 #include <logger.hpp>
 
 #include <string>
@@ -105,42 +107,19 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
     {
         DataStore &ds = DataStore::getInstance();
         std::string clientId = ds.get_value("mqtt_client_id", "infoclock32");
-        String varName(buf);
+        std::string varName(buf);
 
-        if (varName.endsWith("assword"))
+        if (varName.find("assword") != std::string::npos)
             return;
 
-        String response;
-        if (varName == "IP")
-        {
-            response = WiFi.localIP().toString();
-        }
-        else if (varName == "HEAP")
-        {
-            response = String((unsigned)esp_get_free_heap_size());
-        }
-        else if (varName == "UPTIME")
-        {
-            unsigned long ms = millis();
-            unsigned long h  = ms / 3600000UL;
-            unsigned long m  = (ms % 3600000UL) / 60000UL;
-            unsigned long s  = (ms % 60000UL) / 1000UL;
-            char upbuf[32];
-            snprintf(upbuf, sizeof(upbuf), "%luh%lum%lus", h, m, s);
-            response = upbuf;
-        }
-        else if (varName == "SSID")
-        {
-            response = WiFi.SSID();
-        }
-        else
-        {
-            response = ds.get_value(varName.c_str(), "").c_str();
-        }
+        // DeviceStore (WiFi/system) → RuntimeStore (sensors) → DataStore (config)
+        std::string response = DeviceStore::getInstance().get(varName);
+        if (response.empty()) response = RuntimeStore::getInstance().get(varName);
+        if (response.empty()) response = ds.get_value(varName.c_str(), "");
 
-        if (!response.isEmpty())
+        if (!response.empty())
         {
-            String pubTopic = String(clientId.c_str()) + "/publish/" + varName;
+            String pubTopic = String(clientId.c_str()) + "/publish/" + varName.c_str();
             mqttClient.publish(pubTopic.c_str(), response.c_str());
         }
     }
