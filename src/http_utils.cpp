@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
+#include <vector>
+#include <utility>
 #if __has_include(<WiFiClientSecure.h>)
   #include <WiFiClientSecure.h>
   #define HAS_WIFI_CLIENT_SECURE
@@ -20,7 +22,8 @@ namespace HttpUtils {
 /// @param outBody    Will be filled with response body on success (empty on failure)
 /// @param insecure   When true, skip TLS certificate verification (for https://)
 /// @return HTTP status code (>0) on success, or a negative value on error
-int httpGet(const String &url, String &outBody, bool insecure) {
+int httpGet(const String &url, String &outBody, bool insecure,
+            const std::vector<std::pair<String, String>> &headers) {
     outBody = String();
 
     if (url.length() == 0) {
@@ -51,11 +54,20 @@ int httpGet(const String &url, String &outBody, bool insecure) {
         return -1;
     }
 
+    for (const auto &h : headers)
+        http.addHeader(h.first, h.second);
+
     int httpCode = http.GET();
     if (httpCode > 0) {
         outBody = http.getString();
+        if (httpCode != 200) {
+            // Log URL + first 100 chars of the body so 4xx/5xx errors are
+            // immediately visible in the web log without a serial monitor.
+            logPrintf("HTTP", "GET %s -> %d: %.100s",
+                      url.c_str(), httpCode, outBody.c_str());
+        }
     } else {
-        logPrintf("HTTP", "GET failed, code=%d", httpCode);
+        logPrintf("HTTP", "GET %s -> err %d", url.c_str(), httpCode);
     }
 
     http.end();

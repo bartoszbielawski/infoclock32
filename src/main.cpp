@@ -19,6 +19,7 @@
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
+#include <resto_menu_task.h>
 
 void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
@@ -136,27 +137,6 @@ void displayClock(void *parameter)
   }
 }
 
-void marqueeDisplay(void *parameter)
-{  
-  auto& rmd = ResourceManager<LMDS>::getInstance();
-  auto& matrix = rmd.getResourceRef();
-  while (true)
-  {   
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    if (not rmd.make_access_request())
-    {
-      Serial.println("MarqueeDisplay: Failed to get access to display");
-      continue;
-    }
-
-
-    scrollMessage("ESP32-C3!", matrix, 50);
-
-    rmd.release_access();
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-  }
-}
-
 void listFiles(const char* dirname) {
   if (!LittleFS.begin()) {
     Serial.println("An Error has occurred while mounting LittleFS");
@@ -205,14 +185,14 @@ void setup() {
   apply_timezone();   // must be after load_from_file so "timezone" key is available
 
   // Restore saved brightness (default 7)
-  int brightness = atoi(dataStore.get_value("brightness", "7").c_str());
+  int brightness = dataStore.get_value<int>("brightness", 7);
   brightness = max(0, min(15, brightness));
   ResourceManager<LMDS>::getInstance().getResourceRef().setIntensity((uint8_t)brightness);
 
   //xTaskCreate(animateDisplay, "DisplayTask", 2048, nullptr, 1, nullptr);
-  xTaskCreate(displayClock, "ClockTask", 2048, nullptr, 1, nullptr);
+  xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
   //xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
-  //xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
+  xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
   xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
   xTaskCreate(mqtt_task,       "MQTTTask",       8192, nullptr, 1, nullptr);
   xTaskCreate(web_server_task, "WebServerTask",  8192, nullptr, 1, nullptr);
@@ -221,6 +201,7 @@ void setup() {
   xTaskCreate(temp_sensor_task,    "TempSensorTask",    4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr,    1, nullptr);
   xTaskCreate(night_mode_task,     "NightModeTask",     2048, nullptr,    1, nullptr);
+  xTaskCreate(resto_menu_task,    "RestoMenuTask",     8192, nullptr,    1, nullptr);
 }
 
 void loop() 

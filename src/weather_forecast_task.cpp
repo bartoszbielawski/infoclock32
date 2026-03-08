@@ -18,10 +18,10 @@
 #include <LMDS.hpp>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
-static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "http://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
-static const char OW_WEATHER_API_FORECAST[] PROGMEM = "http://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric";
+static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
+static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric";
 
-std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
+static std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
 {
     // predicate used by MapCollector to decide which keys to keep, ignore values
     auto keep_pred = [&keys](const std::string& path, const std::string& value) -> bool {
@@ -41,64 +41,78 @@ static const std::set<std::string> weatherKeys = {
     "/root/main/temp"
 };
 
+// OWM forecast returns 3-hour slots; index 2 = ~6 hours ahead from the current slot.
 static const std::set<std::string> forecastKeys = {
     "/root/list/2/main/temp",
     "/root/list/2/weather/0/description",
     "/root/city/name"
 };
 
-std::string readWeatherFromOWM()
+static std::string readWeatherFromOWM()
 {
-    auto apiKey = DataStore::getInstance().get_value("ow_api_key", "");
-    auto cityId = DataStore::getInstance().get_value("ow_city_id", "");
+    auto& ds    = DataStore::getInstance();
+    auto apiKey = ds.get_value("ow_api_key", "");
+    auto cityId = ds.get_value("ow_city_id", "");
 
-    //read current weather
+    if (apiKey.empty() || cityId.empty())
+    {
+        logPrintf("WTH", "ow_api_key or ow_city_id not configured");
+        return std::string();
+    }
+
+    // read current weather
     char url[128];
     snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str());
 
     String output;
-    auto response = HttpUtils::httpGet(url, output, false);
+    auto response = HttpUtils::httpGet(url, output, true);
     if (response != 200)
     {
         logPrintf("WTH", "current weather HTTP GET failed: %d", response);
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
         return std::string();
     }
 
     auto currentWeather = parseJsonWithPredicate(output, weatherKeys);
 
-    //read forcast
+    // read forecast
     snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str());
-    response = HttpUtils::httpGet(url, output, false);
+    response = HttpUtils::httpGet(url, output, true);
     if (response != 200)
     {
         logPrintf("WTH", "forecast HTTP GET failed: %d", response);
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
         return std::string();
     }
 
-    auto foracastWeather = parseJsonWithPredicate(output, forecastKeys);
+    auto forecastWeather = parseJsonWithPredicate(output, forecastKeys);
 
-    //create result string witht he following format:
+    // create result string with the following format:
     // Name: temp ^C (forecast temperature ^C, forecast description))
 
     // format string stored in flash (PROGMEM) to save RAM
     static const char WEATHER_FMT[] PROGMEM = "%s: %.1fC (%.1fC, %s)";
 
     float currentTemp  = parse_value(currentWeather["/root/main/temp"],         NAN);
-    float forecastTemp = parse_value(foracastWeather["/root/list/2/main/temp"], NAN);
+    float forecastTemp = parse_value(forecastWeather["/root/list/2/main/temp"], NAN);
     if (std::isnan(currentTemp) || std::isnan(forecastTemp))
     {
         logPrintf("WTH", "failed to parse temperature values from API response");
         return std::string();
     }
 
+    const std::string& cityName = forecastWeather["/root/city/name"];
+    const std::string& description = forecastWeather["/root/list/2/weather/0/description"];
+    if (cityName.empty() || description.empty())
+    {
+        logPrintf("WTH", "missing city name or description in forecast response");
+        return std::string();
+    }
+
     char weatherInfo[256];
     snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT,
-        foracastWeather["/root/city/name"].c_str(),
+        cityName.c_str(),
         currentTemp,
         forecastTemp,
-        foracastWeather["/root/list/2/weather/0/description"].c_str()
+        description.c_str()
     );
 
     return weatherInfo;
@@ -114,7 +128,7 @@ void open_weather_map_task(void *parameter)
 
     while (true)
     {
-        if (difftime(time(nullptr), last_weather_update) > 900)
+        if (difftime(time(nullptr), last_weather_update) > 30*60) // update weather every 30 minutes
         {
             auto newWeather = readWeatherFromOWM();
             if (not newWeather.empty())
@@ -143,6 +157,6 @@ void open_weather_map_task(void *parameter)
         scrollMessage(messageToBeDisplayed, matrix, 50);
         rmd.release_access();
 
-        vTaskDelay(20000 / portTICK_PERIOD_MS); // update every minute
+        vTaskDelay(20000 / portTICK_PERIOD_MS); // wait 20 s before requesting display again
     }
 }

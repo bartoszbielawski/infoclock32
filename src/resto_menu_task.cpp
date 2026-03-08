@@ -1,361 +1,224 @@
-// /*
-//  * resto_menu_task.cpp
-//  *
-//  * Converted to a single FreeRTOS task (ESP32). No web page support.
-//  *
-//  * Created on: 27.07.2025 (original)
-//  * Converted by: GitHub Copilot
-//  */
+/*
+ * resto_menu_task.cpp
+ *
+ * Fetches lunch (midi) menus from api.mynovae.ch for one or more configured
+ * CERN restaurants and scrolls them during a configurable time window.
+ *
+ * Config keys (set via /edit or MQTT /config):
+ *   resto_restaurants  – comma-separated restaurant numbers, e.g. "2,3" (default "3")
+ *   resto_start_hour   – first hour to display menu, 0-23 (default 9)
+ *   resto_end_hour     – last hour (exclusive) to display menu, 0-23 (default 14)
+ *   novae_codes        – Novae API group code, e.g. "CER103" (default "CER103")
+ */
 
-// #include <WiFi.h>
-// #include <WiFiClientSecure.h>
-// #include <HTTPClient.h>
-// #include <ArduinoJson.h>
+#include <http_utils.hpp>
+#include <resource_manager.hpp>
+#include <LMDS.hpp>
+#include <graphic_utils.hpp>
+#include <data_store.hpp>
+#include <logger.hpp>
+#include <string_utils.h>
 
-// #include <vector>
-// #include <set>
-// #include <map>
-// #include "time.h"
+#include <ArduinoJson.h>
+#include <string>
+#include <vector>
+#include <set>
 
-// // Adjust as needed
-// #define MAX_DISHES 10
-// #define MENU_FETCH_INTERVAL_MS (900 * 1000UL) // 900 seconds = 15 minutes
-// #define DISPLAY_PERIOD_MS 25U
+// ── constants ────────────────────────────────────────────────────────────────
 
-// #define DEFAULT_MENU_START_HOUR 9
-// #define DEFAULT_MENU_END_HOUR 14
+static const char TAG[] = "RST";
 
-// namespace RMenu {
+static const struct { int code; const char* id; } kRestaurants[] = {
+    {1, "13-restaurant-r1"},
+    {2, "21-restaurant-r2"},
+    {3, "33-restaurant-r3"},
+};
+static constexpr size_t kNumRestaurants = sizeof(kRestaurants) / sizeof(kRestaurants[0]);
 
-// static const struct { int code; const char* id; } restaurants[] = {
-//     {1, "13-restaurant-r1"},
-//     {2, "21-restaurant-r2"},
-//     {3, "33-restaurant-r3"}
-// };
-// static constexpr size_t NUM_RESTAURANTS = sizeof(restaurants) / sizeof(restaurants[0]);
+static const int kDefaultStartHour  = 9;
+static const int kDefaultEndHour    = 14;
+static const uint32_t kFetchIntervalMs = 15UL * 60UL * 1000UL; // 15 min
+static const uint32_t kScrollSpeedMs  = 50;
 
-// inline String codeToId(int code) {
-//     for (size_t i = 0; i < NUM_RESTAURANTS; ++i)
-//         if (restaurants[i].code == code)
-//             return restaurants[i].id;
-//     return restaurants[0].id;
-// }
-// inline int codeSanitize(int code) {
-//     for (size_t i = 0; i < NUM_RESTAURANTS; ++i)
-//         if (restaurants[i].code == code)
-//             return code;
-//     return restaurants[0].code;
-// }
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-// String normalizeFrenchText(const String& in) {
-//     String out;
-//     out.reserve(in.length());
-//     for (size_t i = 0; i < in.length(); ++i) {
-//         unsigned char c = (unsigned char)in[i];
-//         if (c < 0xC3) { out += in[i]; continue; }
-//         if (c == 0xC3 && i+1 < in.length()) {
-//             unsigned char d = (unsigned char)in[i+1];
-//             switch (d) {
-//                 case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: out += 'a'; break;
-//                 case 0xA7: out += 'c'; break;
-//                 case 0xA8: case 0xA9: case 0xAA: case 0xAB: out += 'e'; break;
-//                 case 0xAC: case 0xAD: case 0xAE: case 0xAF: out += 'i'; break;
-//                 case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: out += 'o'; break;
-//                 case 0xB9: case 0xBA: case 0xBB: case 0xBC: out += 'u'; break;
-//                 case 0xBF: out += 'y'; break;
-//                 case 0x80: case 0x82: case 0x83: case 0x84: case 0x85: out += 'A'; break;
-//                 case 0x87: out += 'C'; break;
-//                 case 0x88: case 0x89: case 0x8A: case 0x8B: out += 'E'; break;
-//                 case 0x8C: case 0x8D: case 0x8E: case 0x8F: out += 'I'; break;
-//                 case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: out += 'O'; break;
-//                 case 0x99: case 0x9A: case 0x9B: case 0x9C: out += 'U'; break;
-//                 case 0x9F: out += 'Y'; break;
-//                 default: out += in[i]; out += in[i+1];
-//             }
-//             i++; continue;
-//         }
-//         if (c == 0xC5 && i+1 < in.length()) {
-//             unsigned char d = (unsigned char)in[i+1];
-//             if (d == 0x92) { out += "OE"; i++; continue; }
-//             if (d == 0x93) { out += "oe"; i++; continue; }
-//         }
-//         if (c == 0xE2 && i + 2 < in.length()) {
-//             if ((unsigned char)in[i+1] == 0x80 && (unsigned char)in[i+2] == 0x99) {
-//                 out += "'"; i += 2; continue;
-//             }
-//         }
-//         out += in[i];
-//     }
-//     return out;
-// }
+static const char* codeToId(int code) {
+    for (size_t i = 0; i < kNumRestaurants; ++i)
+        if (kRestaurants[i].code == code) return kRestaurants[i].id;
+    return kRestaurants[0].id;
+}
 
-// static String trimmedKeyWords(const String& dish, int maxWords = 4) {
-//     const char* stopwords[] = { "aux","de","et","avec","à","le","la","du","des","en","au","sur","pour","les","un","une","deux","trois","quatre","d'","l'","with","and","of","in","for","the","to","on","at","from","by","an","a","one","two","three","four", "fresh", "old fashioned", "organic", "mature", "traditional", "natural", "style", "sliced", "drenched"};
-//     const size_t nStops = sizeof(stopwords) / sizeof(stopwords[0]);
-//     String out; int found = 0; size_t start = 0;
-//     while (found < maxWords && start < dish.length()) {
-//         size_t end = dish.indexOf(' ', start);
-//         if (end == (size_t)-1) end = dish.length();
-//         String word = dish.substring(start, end);
-//         word.trim();
-//         word.replace(",", ""); word.replace(".", ""); word.replace(";", "");
-//         word.replace("/", " "); word.replace("&", ""); word.replace(":", "");
-//         word.replace("-", " "); word.replace("(", ""); word.replace(")", "");
-//         word.replace("+", ""); word.replace("[", ""); word.replace("]", "");
-//         word.replace("*", ""); word.replace("$", ""); word.replace("#", "");
-//         word.replace("{", ""); word.replace("}", ""); word.replace("@", "");
-//         bool isStop = false;
-//         for (size_t j = 0; j < nStops; ++j)
-//             if (word.equalsIgnoreCase(stopwords[j])) { isStop = true; break; }
-//         if (!isStop && word.length() > 0) { if (!out.isEmpty()) out += ' '; out += word; found++; }
-//         start = end + 1;
-//     }
-//     return out;
-// }
+// Strip everything from the first newline onward (garnish/side-dish annotations).
+static std::string stripSuffix(const std::string& s) {
+    auto pos = s.find('\n');
+    return pos != std::string::npos ? s.substr(0, pos) : s;
+}
 
-// // Shared state protected by mutex
-// static SemaphoreHandle_t menuMutex = nullptr;
-// static String cachedMenuLine;
-// static String cachedMenuDate;
-// static String lastStatusTimestamp;
-// static int restaurantCode = 3;
-// static String restaurantId = codeToId(restaurantCode);
-// static int menuStartHour = DEFAULT_MENU_START_HOUR;
-// static int menuEndHour = DEFAULT_MENU_END_HOUR;
-// static bool menuShowTomorrow = false;
+// Parse a comma-separated string of integers.
+static std::vector<int> parseIntList(const std::string& s) {
+    std::vector<int> result;
+    size_t start = 0;
+    while (start < s.size()) {
+        size_t end = s.find(',', start);
+        if (end == std::string::npos) end = s.size();
+        int v = atoi(s.substr(start, end - start).c_str());
+        if (v > 0) result.push_back(v);
+        start = end + 1;
+    }
+    return result;
+}
 
-// // transient
-// static std::vector<String> dishes;
-// static int lastFetchHour = -1;
-// static String lastFetchedMenuDate;
+// Build YYYY-MM-DD string from a time_t.
+static std::string dateString(time_t t) {
+    char buf[11];
+    struct tm tm_buf;
+    localtime_r(&t, &tm_buf);
+    strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_buf);
+    return buf;
+}
 
-// String makeMenuDateString(time_t base) {
-//     char buf[11];
-//     struct tm t;
-//     localtime_r(&base, &t);
-//     strftime(buf, sizeof(buf), "%Y-%m-%d", &t);
-//     return String(buf);
-// }
+// Returns true if the current hour falls within [startHour, endHour).
+static bool withinWindow(int startHour, int endHour) {
+    struct tm tm_buf;
+    time_t now = time(nullptr);
+    localtime_r(&now, &tm_buf);
+    int h = tm_buf.tm_hour;
+    if (startHour < endHour) return h >= startHour && h < endHour;
+    return h >= startHour || h < endHour; // wraps midnight
+}
 
-// void updateMenuHoursFromConfig() {
-//     int startHour = readConfigWithDefault(F("menuStartHour"), String(DEFAULT_MENU_START_HOUR).c_str()).toInt();
-//     if (startHour >= 0 && startHour <= 23) menuStartHour = startHour;
-//     else menuStartHour = DEFAULT_MENU_START_HOUR;
+// ── fetch ────────────────────────────────────────────────────────────────────
 
-//     int endHour = readConfigWithDefault(F("menuEndHour"), String(DEFAULT_MENU_END_HOUR).c_str()).toInt();
-//     if (endHour >= 0 && endHour <= 23) menuEndHour = endHour;
-//     else menuEndHour = DEFAULT_MENU_END_HOUR;
-// }
+// Fetch and return deduplicated dish titles for one restaurant on a given date.
+static std::string fetchMenu(int restaurantCode, const std::string& dateStr) {
+    const char* restaurantId = codeToId(restaurantCode);
+    char url[128];
+    snprintf(url, sizeof(url),
+             "https://api.mynovae.ch/en/api/v2/salepoints/%s/menus/%s",
+             restaurantId, dateStr.c_str());
 
-// bool isWithinDisplayHour() {
-//     time_t now = time(nullptr);
-//     struct tm t;
-//     localtime_r(&now, &t);
-//     int hour = t.tm_hour;
-//     if (menuStartHour < menuEndHour)
-//         return hour >= menuStartHour && hour < menuEndHour;
-//     else
-//         return hour >= menuStartHour || hour < menuEndHour;
-// }
+    // novae_codes identifies your CERN group to the Novae API.
+    // Set it via /edit or MQTT /config if the default is wrong.
+    String novaeCode = DataStore::getInstance().get_value("novae_codes", "CER103").c_str();
 
-// String getMenuString() {
-//     // returns empty string when no menu should be displayed
-//     // copy under mutex
-//     if (!menuMutex) return String();
+    String body;
+    int code = HttpUtils::httpGet(url, body, true, {
+        {"Novae-Codes",      novaeCode},
+        {"Accept",           "application/json"},
+        {"X-Requested-With", "xmlhttprequest"},
+    });
 
-//     xSemaphoreTake(menuMutex, portMAX_DELAY);
-//     String localCachedLine = cachedMenuLine;
-//     String localCachedDate = cachedMenuDate;
-//     int localMenuStart = menuStartHour;
-//     int localMenuEnd = menuEndHour;
-//     bool localShowTomorrow = menuShowTomorrow;
-//     int localRestaurantCode = restaurantCode;
-//     xSemaphoreGive(menuMutex);
+    if (code != 200) {
+        logPrintf(TAG, "R%d HTTP %d", restaurantCode, code);
+        return {};
+    }
 
-//     time_t now = time(nullptr);
-//     struct tm t;
-//     localtime_r(&now, &t);
-//     int hour = t.tm_hour;
+    // Parse the JSON array, filtering for midi service only.
+    DynamicJsonDocument doc(8192);
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+        logPrintf(TAG, "R%d JSON error: %s", restaurantCode, err.c_str());
+        return {};
+    }
 
-//     bool afterEnd;
-//     if (localMenuStart < localMenuEnd)
-//         afterEnd = (hour >= localMenuEnd);
-//     else
-//         afterEnd = (hour >= localMenuEnd && hour < localMenuStart);
+    std::set<std::string> seen;
+    std::vector<std::string> dishes;
 
-//     bool withinWindow = ( (localMenuStart < localMenuEnd) ? (hour >= localMenuStart && hour < localMenuEnd)
-//                                                          : (hour >= localMenuStart || hour < localMenuEnd) );
+    for (JsonObject item : doc.as<JsonArray>()) {
+        const char* service = item["model"]["service"];
+        if (!service || strcmp(service, "midi") != 0) continue;
 
-//     bool showTomorrow = false;
-//     if (withinWindow) {
-//         // nothing
-//     } else if (afterEnd && localShowTomorrow) {
-//         now += 24 * 60 * 60;
-//         showTomorrow = true;
-//     } else {
-//         return String();
-//     }
+        JsonObject title = item["title"];
+        const char* raw = nullptr;
+        if (title.containsKey("en") && title["en"].as<const char*>() && strlen(title["en"]))
+            raw = title["en"];
+        else if (title.containsKey("fr") && title["fr"].as<const char*>() && strlen(title["fr"]))
+            raw = title["fr"];
+        if (!raw) continue;
 
-//     String wantedDate = makeMenuDateString(now);
-//     if (localCachedDate != wantedDate || localCachedLine.isEmpty())
-//         return String();
+        std::string dish = stripSuffix(normalizeFrench(raw));
 
-//     String labelPrefix = showTomorrow ? "Tomorrow's " : "Today's ";
-//     String menuPrefix = "R" + String(localRestaurantCode) + " menu: ";
-//     return labelPrefix + menuPrefix + localCachedLine;
-// }
+        if (dish.empty() || seen.count(dish)) continue;
+        seen.insert(dish);
+        dishes.push_back(dish);
+        logPrintf(TAG, "R%d: %s", restaurantCode, dish.c_str());
+    }
 
-// void fetchMenu(const String& dateStr) {
-//     logPrintfX(F("RMT"), F("Starting fetchMenu for date: %s restaurant: %s"), dateStr.c_str(), restaurantId.c_str());
+    if (dishes.empty()) {
+        logPrintf(TAG, "R%d: no midi dishes for %s", restaurantCode, dateStr.c_str());
+        return {};
+    }
 
-//     dishes.clear();
-//     std::set<String> seen;
-//     String url = "https://api.mynovae.ch/en/api/v2/salepoints/" + restaurantId + "/menus/" + dateStr;
+    std::string out = "R" + std::to_string(restaurantCode) + ":";
+    for (const auto& d : dishes) {
+        out += " ";
+        out += d;
+        out += " |";
+    }
+    // remove trailing " |"
+    if (out.size() >= 2) out.resize(out.size() - 2);
+    return out;
+}
 
-//     WiFiClientSecure client;
-//     client.setInsecure();
-//     HTTPClient http;
-//     if (!http.begin(client, url)) {
-//         logPrintfX(F("RMT"), F("HTTP begin failed"));
-//         return;
-//     }
-//     http.addHeader("Novae-Codes", novaeKey);
-//     http.addHeader("Accept", "application/json");
-//     http.addHeader("X-Requested-With", "xmlhttprequest");
+// ── task ─────────────────────────────────────────────────────────────────────
 
-//     int httpCode = -1;
-//     int attempts = 3;
-//     while (attempts-- && (httpCode == -1)) {
-//         httpCode = http.GET();
-//         if (httpCode == -1) {
-//             logPrintfX(F("RMT"), F("Fetching Menu returned HTTP Error %d"), httpCode);
-//             vTaskDelay(pdMS_TO_TICKS(2000));
-//         }
-//     }
+void resto_menu_task(void* pvParameters) {
+    (void)pvParameters;
 
-//     if (httpCode == 200) {
-//         WiFiClient* stream = http.getStreamPtr();
-//         // skip whitespace and initial '['
-//         while (stream->available()) {
-//             char c = stream->peek();
-//             if (c == '[') { stream->read(); break; }
-//             if (isspace((unsigned char)c)) stream->read(); else break;
-//         }
-//         while (stream->available()) {
-//             char c = stream->peek();
-//             if (isspace((unsigned char)c) || c == ',') { stream->read(); continue; }
-//             if (c == ']') { stream->read(); break; }
-//             if (c != '{') { stream->read(); continue; }
+    auto& rmd    = ResourceManager<LMDS>::getInstance();
+    auto& matrix = rmd.getResourceRef();
 
-//             StaticJsonDocument<768> doc;
-//             StaticJsonDocument<64> filter;
-//             filter["title"] = true;
-//             filter["model"]["service"] = true;
+    std::vector<std::string> cachedMenus; // one entry per configured restaurant
+    std::string cachedDate;
+    time_t lastFetch = 0;
 
-//             DeserializationError err = deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
-//             if (!err) {
-//                 const char* service = doc["model"]["service"];
-//                 if (!service) continue;
-//                 String serviceStr(service);
-//                 serviceStr.toLowerCase();
-//                 if (serviceStr != "midi") continue;
+    while (true) {
+        // ── config ────────────────────────────────────────────────────────
+        auto& ds = DataStore::getInstance();
+        int startHour = ds.get_value<int>("resto_start_hour", kDefaultStartHour);
+        int endHour   = ds.get_value<int>("resto_end_hour",   kDefaultEndHour);
+        if (startHour < 0 || startHour > 23) startHour = kDefaultStartHour;
+        if (endHour   < 0 || endHour   > 23) endHour   = kDefaultEndHour;
 
-//                 JsonObject title = doc["title"];
-//                 String dish;
-//                 if (title.containsKey("en") && strlen(title["en"])) dish = String(title["en"].as<const char*>());
-//                 else if (title.containsKey("fr") && strlen(title["fr"])) dish = String(title["fr"].as<const char*>());
-//                 if (dish.length()) {
-//                     String tmp = trimmedKeyWords(normalizeFrenchText(dish), 4);
-//                     if (tmp.length() && seen.find(tmp) == seen.end()) {
-//                         seen.insert(tmp);
-//                         dishes.push_back(tmp);
-//                         logPrintfX(F("RMT"), F("Added dish: %s"), tmp.c_str());
-//                         if (dishes.size() >= MAX_DISHES) break;
-//                     }
-//                 }
-//             } else {
-//                 // attempt to skip this malformed object
-//                 int depth = 0;
-//                 while (stream->available()) {
-//                     char cc = stream->read();
-//                     if (cc == '{') depth++;
-//                     if (cc == '}') { if (depth == 0) break; depth--; }
-//                 }
-//             }
-//         }
+        std::vector<int> codes = parseIntList(
+            ds.get_value("resto_restaurants", "3"));
+        if (codes.empty()) codes.push_back(3);
 
-//         logPrintfX(F("RMT"), F("Fetch menu completed"));
+        // ── fetch if needed ───────────────────────────────────────────────
+        // resto_test_date (YYYY-MM-DD) overrides fetch date and bypasses the
+        // time window so you can test on weekends or outside lunch hours.
+        std::string testDate = ds.get_value("resto_test_date", "");
+        bool testing = !testDate.empty();
+        std::string fetchDate = testing ? testDate : dateString(time(nullptr));
 
-//         xSemaphoreTake(menuMutex, portMAX_DELAY);
-//         if (dishes.empty()) {
-//             cachedMenuLine = "";
-//             logPrintfX(F("RMT"), F("No dishes found for date %s"), dateStr.c_str());
-//         } else {
-//             String allDishes;
-//             for (auto& dish : dishes) {
-//                 if (!allDishes.isEmpty()) allDishes += " | ";
-//                 allDishes += dish;
-//             }
-//             cachedMenuLine = allDishes;
-//             cachedMenuDate = dateStr;
-//         }
-//         lastStatusTimestamp = getDateTime();
-//         xSemaphoreGive(menuMutex);
-//     } else {
-//         logPrintfX(F("RMT"), F("HTTP GET failed with code %d, no menu fetched"), httpCode);
-//     }
-//     http.end();
-// }
+        bool stale = (fetchDate != cachedDate) ||
+                     (difftime(time(nullptr), lastFetch) > kFetchIntervalMs / 1000.0);
 
-// void restaurantMenuTask(void* pvParameters) {
-//     (void)pvParameters;
-//     menuMutex = xSemaphoreCreateMutex();
-//     if (!menuMutex) {
-//         logPrintfX(F("RMT"), F("Failed to create mutex"));
-//         vTaskDelete(NULL);
-//         return;
-//     }
+        if (stale) {
+            cachedDate  = fetchDate;
+            lastFetch   = time(nullptr);
+            cachedMenus.clear();
+            for (int code : codes) {
+                std::string menu = fetchMenu(code, fetchDate);
+                if (!menu.empty()) cachedMenus.push_back(menu);
+            }
+        }
 
-//     for (;;) {
-//         updateMenuHoursFromConfig();
+        // ── display ───────────────────────────────────────────────────────
+        if ((!testing && !withinWindow(startHour, endHour)) || cachedMenus.empty()) {
+            vTaskDelay(60000 / portTICK_PERIOD_MS);
+            continue;
+        }
 
-//         int code = readConfigWithDefault(F("restaurant"), "3").toInt();
-//         restaurantCode = codeSanitize(code);
-//         restaurantId = codeToId(restaurantCode);
-
-//         menuShowTomorrow = readConfigWithDefault(F("menuShowTomorrow"), "0").toInt() == 1;
-
-//         time_t now = time(nullptr);
-//         struct tm tm_now;
-//         localtime_r(&now, &tm_now);
-//         int hour = tm_now.tm_hour;
-
-//         bool afterEnd;
-//         if (menuStartHour < menuEndHour) afterEnd = (hour >= menuEndHour);
-//         else afterEnd = (hour >= menuEndHour && hour < menuStartHour);
-
-//         time_t activeTime = now;
-//         if (afterEnd && menuShowTomorrow) activeTime += 24 * 60 * 60;
-
-//         String activeMenuDate = makeMenuDateString(activeTime);
-
-//         bool menuBoundary = (lastFetchedMenuDate != activeMenuDate);
-//         bool hourBoundary = (lastFetchHour != hour);
-//         if (menuBoundary || hourBoundary) {
-//             lastFetchedMenuDate = activeMenuDate;
-//             lastFetchHour = hour;
-//             fetchMenu(activeMenuDate);
-//         }
-
-//         vTaskDelay(pdMS_TO_TICKS(MENU_FETCH_INTERVAL_MS));
-//     }
-// }
-
-// // start helper
-// TaskHandle_t startRestaurantMenuTask(UBaseType_t priority = tskIDLE_PRIORITY + 1, uint32_t stackSize = 8192) {
-//     TaskHandle_t handle = nullptr;
-//     xTaskCreate(restaurantMenuTask, "RestaurantMenu", stackSize / sizeof(StackType_t), nullptr, priority, &handle);
-//     return handle;
-// }
-
-// } // namespace RMenu
+        for (const auto& menu : cachedMenus) {
+            if (!rmd.make_access_request()) {
+                logPrintf(TAG, "display busy");
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                continue;
+            }
+            scrollMessage(menu, matrix, kScrollSpeedMs);
+            rmd.release_access();
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
+        }
+    }
+}

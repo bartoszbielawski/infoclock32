@@ -2,6 +2,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <web_ui.hpp>
+#include <custom_message.hpp>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -192,11 +193,11 @@ void handle_messages()
                                    "<code>{key}</code> inserts any config value "
                                    "(e.g. <code>{hostname}</code>, <code>{location}</code>).</p>"
                                    "<div style='overflow-x:auto'>"
-                                   "<table style='table-layout:fixed;min-width:560px'>"
-                                   "<colgroup><col style='width:130px'><col>"
-                                   "<col style='width:110px'><col style='width:110px'>"
-                                   "<col style='width:110px'></colgroup>"
-                                   "<tr><th>Name</th><th>Text</th>"
+                                   "<table style='table-layout:fixed;min-width:700px'>"
+                                   "<colgroup><col style='width:110px'><col><col style='width:160px'>"
+                                   "<col style='width:100px'><col style='width:100px'>"
+                                   "<col style='width:100px'></colgroup>"
+                                   "<tr><th>Name</th><th>Template</th><th>Preview</th>"
                                    "<th title='Show from'>Start</th>"
                                    "<th title='Hide after'>End</th>"
                                    "<th title='Countdown target'>Countdown</th></tr>\n"));
@@ -205,12 +206,20 @@ void handle_messages()
         {
             const std::string& name = slotNames[i];
             std::string pfx  = "message_" + name;
-            String text  = htmlEsc(ds.get_value(pfx + "_text",      "").c_str());
+            std::string rawText = ds.get_value(pfx + "_text",      "");
+            String text  = htmlEsc(rawText.c_str());
             String start =         ds.get_value(pfx + "_start",     "").c_str();
             String end   =         ds.get_value(pfx + "_end",       "").c_str();
             String cntdn =         ds.get_value(pfx + "_countdown", "").c_str();
             char   idx[8];
             snprintf(idx, sizeof(idx), "%d", i);
+
+            CustomMessage m;
+            m.text      = rawText;
+            m.start     = parse_date(start.c_str());
+            m.end       = parse_date(end.c_str());
+            m.countdown = parse_date(cntdn.c_str());
+            String preview = htmlEsc(build_display(m).c_str());
 
             server.sendContent_P(PSTR("<tr><td class='sn'>"));
             server.sendContent(htmlEsc(name.c_str()).c_str());
@@ -220,22 +229,26 @@ void handle_messages()
             server.sendContent(text.c_str());
             server.sendContent_P(PSTR("' maxlength='128'></td>"));
 
+            server.sendContent_P(PSTR("<td style='font-size:.82rem;color:#475569;word-break:break-word'>"));
+            server.sendContent(preview.c_str());
+            server.sendContent_P(PSTR("</td>"));
+
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='s"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            server.sendContent(start.c_str());
+            if (start.length()) server.sendContent(start.c_str());
             server.sendContent_P(PSTR("'></td>"));
 
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='e"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            server.sendContent(end.c_str());
+            if (end.length()) server.sendContent(end.c_str());
             server.sendContent_P(PSTR("'></td>"));
 
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='c"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            server.sendContent(cntdn.c_str());
+            if (cntdn.length()) server.sendContent(cntdn.c_str());
             server.sendContent_P(PSTR("'></td></tr>\n"));
         }
         server.sendContent_P(PSTR("</table></div></div>"));

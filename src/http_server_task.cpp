@@ -52,7 +52,7 @@ void handle_home()
 
     char brightStr[4];
     snprintf(brightStr, sizeof(brightStr), "%d",
-             atoi(ds.get_value("brightness", "7").c_str()));
+             ds.get_value<int>("brightness", 7));
 
     sendPageHead("Home", "<meta http-equiv='refresh' content='30'>");
     sendPageNav("/");

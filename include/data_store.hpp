@@ -54,6 +54,15 @@ public:
 
             std::string key = line.substr(0, delimiterPos);
             std::string value = line.substr(delimiterPos + 1);
+
+            // Strip trailing CR/LF so config files with Windows (CRLF) line
+            // endings don't embed a '\r' into stored values.  readBytesUntil
+            // consumes the '\n' terminator but leaves the '\r' in the buffer.
+            while (!value.empty() && (value.back() == '\r' || value.back() == '\n'))
+                value.pop_back();
+            while (!key.empty() && (key.back() == '\r' || key.back() == '\n'))
+                key.pop_back();
+
             data[key] = value;
             Serial.printf("Loaded key: %s, value: %s\n", key.c_str(), value.c_str());
         }

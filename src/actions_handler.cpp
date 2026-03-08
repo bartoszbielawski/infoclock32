@@ -119,13 +119,13 @@ void handle_actions()
     auto& ds = DataStore::getInstance();
     char brightStr[4];
     snprintf(brightStr, sizeof(brightStr), "%d",
-             atoi(ds.get_value("brightness", "7").c_str()));
+             ds.get_value<int>("brightness", 7));
     String curTz       = ds.get_value("timezone", "UTC0").c_str();
     String curHostname = WiFi.getHostname();
     String nStart      = ds.get_value("night_start", "").c_str();
     String nEnd        = ds.get_value("night_end",   "").c_str();
     char   nBrStr[4];
-    snprintf(nBrStr, sizeof(nBrStr), "%d", (int)ds.get_value("night_brightness", 1));
+    snprintf(nBrStr, sizeof(nBrStr), "%d", ds.get_value<int>("night_brightness", 1));
 
     sendPageHead("Actions");
     sendPageNav("/actions");
