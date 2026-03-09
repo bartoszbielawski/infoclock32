@@ -7,7 +7,7 @@
 #include <LMDS.hpp>
 
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset = 0);
-void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 6);
+void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1);
 
 
 void wipeDisplayLeftToRight(LMDS& display, int speed = 50);

@@ -44,7 +44,7 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
     display.clear();
     int offset = (display.width() - msgLength) / 2;
     copyCanvasToDisplay(canvas, 0, display, offset);
-    display.displayToSerial(Serial);
+    display.display();
     vTaskDelay(10 * speed / portTICK_PERIOD_MS);
     return;
   }
@@ -57,7 +57,7 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
   for (int i = 0; i <= canvas.width() - display.width() + steps; i += steps)
   {
     copyCanvasToDisplay(canvas, i, display, 0);
-    //display.displayToSerial(Serial);
+    display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }
   
@@ -70,7 +70,7 @@ void wipeDisplayLeftToRight(LMDS& display, int speed)
   for (int col = 0; col < display.getSegments() * 8; col++)
   {
     display.setColumn(col, 0x00);
-    display.displayToSerial(Serial);
+    display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }
 }
@@ -81,7 +81,7 @@ void scrollOutDisplayRight(LMDS& display, int speed)
   for (int col = 0; col < display.getSegments() * 8; col++)
   {
     display.scroll(LMDS::scrollDirection::scrollRight);
-    display.displayToSerial(Serial);
+    display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }
 }

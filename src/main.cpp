@@ -65,7 +65,8 @@ void displayClock(void *parameter)
       matrix.getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
       matrix.printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-      matrix.displayToSerial(Serial);
+      //matrix.displayToSerial(Serial);
+      matrix.display();
 
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
@@ -93,7 +94,9 @@ void displayClock(void *parameter)
       matrix.getTextBounds(dayName, 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
       matrix.print(dayName);
-      matrix.displayToSerial(Serial);
+      //matrix.displayToSerial(Serial);
+      matrix.display();
+      
       vTaskDelay(2000 / portTICK_PERIOD_MS);
 
       // Show date centered for 2 seconds
@@ -101,7 +104,8 @@ void displayClock(void *parameter)
       matrix.getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
       matrix.print(dateStr);
-      matrix.displayToSerial(Serial);
+      //matrix.displayToSerial(Serial);
+      matrix.display();
       vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 
@@ -158,8 +162,13 @@ void setup() {
   // Configure SNTP time sources (UTC base; timezone handled separately)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
+  // Configure SPI bus with explicit pins before constructing the LED matrix driver
+  SPI.begin(MATRIX_SCK_PIN, /*miso=*/-1, MATRIX_MOSI_PIN);
+
   // Create and register LED matrix resource
-  ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, MATRIX_CS_PIN));
+  auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, MATRIX_CS_PIN);
+  lmds->begin();
+  ResourceManager<LMDS>::getInstance().initialize(lmds);
 
   // Logging and boot banner
   logger_init();
