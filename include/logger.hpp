@@ -12,5 +12,14 @@ void logger_init();
 // format — printf format string (stored in flash is fine)
 void logPrintf(const char *tag, const char *format, ...);
 
-// Read-only access to the in-memory log buffer (newest entry at back).
-const std::deque<String> &getLogHistory();
+// One entry in the in-memory log buffer.
+struct LogEntry {
+    uint32_t seq;   // monotonically increasing, starts at 1
+    String   line;  // "YYYY-MM-DDTHH:MM:SS [TAG] message"
+};
+
+// Read-only access to the in-memory log buffer (oldest entry at front, newest at back).
+const std::deque<LogEntry> &getLogHistory();
+
+// Sequence number of the newest entry, or 0 if the buffer is empty.
+uint32_t getLogSeq();

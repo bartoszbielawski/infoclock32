@@ -12,7 +12,8 @@
 static constexpr size_t MAX_HISTORY   = 40;
 static constexpr uint16_t SYSLOG_PORT = 514;
 
-static std::deque<String>  logHistory;
+static std::deque<LogEntry> logHistory;
+static uint32_t             logNextSeq = 1; // seq 0 is reserved as "nothing seen yet"
 static SemaphoreHandle_t   logMutex   = nullptr;
 static WiFiUDP             udp;
 static String              syslogServer;
@@ -72,14 +73,19 @@ void logPrintf(const char *tag, const char *format, ...)
 
     if (logMutex && xSemaphoreTake(logMutex, pdMS_TO_TICKS(50)) == pdTRUE)
     {
-        logHistory.push_back(String(line));
+        logHistory.push_back({logNextSeq++, String(line)});
         while (logHistory.size() > MAX_HISTORY)
             logHistory.pop_front();
         xSemaphoreGive(logMutex);
     }
 }
 
-const std::deque<String> &getLogHistory()
+const std::deque<LogEntry> &getLogHistory()
 {
     return logHistory;
+}
+
+uint32_t getLogSeq()
+{
+    return logHistory.empty() ? 0 : logHistory.back().seq;
 }

@@ -21,46 +21,17 @@
 #include <night_mode_task.h>
 #include <resto_menu_task.h>
 
+// External task entry points
 void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
 void mqtt_task(void *parameter);
 void web_server_task(void *parameter);
 
+// Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
 
-// void animateDisplay(void *parameter)
-// {
-//   matrix.clear();
-//   int count = 0;
-//   int totalPixels = matrix.getSegments() * 8 * 8;
-//   while (true)
-//   {
-//     if (displayManager.make_access_request())
-//     {
-//       bool target_state = count < totalPixels / 2;
-//       if (target_state)
-//         count++;
-//       else
-//         count--;
-      
-//       int x = random(0, matrix.getSegments() * 8);
-//       int y = random(0, 8);
-
-//       while (matrix.getPixel(x, y) == target_state) {
-//         x = random(0, matrix.getSegments() * 8);
-//         y = random(0, 8);
-//       }
-
-//       matrix.setPixel(x, y, target_state);
-      
-//       matrix.displayToSerial(Serial);
-//       displayManager.release_access();
-//     }
-//     vTaskDelay(100 / portTICK_PERIOD_MS);
-//   }
-// }
-
-
+// Main clock display task.
+// It periodically takes display ownership, shows time, day, and date, then releases ownership.
 void displayClock(void *parameter)
 {
   auto& rmd = ResourceManager<LMDS>::getInstance();
@@ -68,14 +39,15 @@ void displayClock(void *parameter)
 
   while (true)
   {
+    // Try to lock display resource
     if (not rmd.make_access_request())
     {
       Serial.println("ClockDisplay: Failed to get access to display");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
       continue;
     }
-    
-    //print the time
+
+    // Show HH:MM:SS for 3 seconds (updated once per second)
     for (int i = 0; i < 3; i++)
     {
       matrix.clear();
@@ -87,10 +59,9 @@ void displayClock(void *parameter)
         logPrintf("DISP", "clock %02d:%02d:%02d",
                   timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
-      //print to the matrix centered
+      // Center fixed-width time string
       int16_t x1, y1;
       uint16_t width, height;
-
       matrix.getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
       matrix.printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
@@ -99,6 +70,7 @@ void displayClock(void *parameter)
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
+    // Show day name and then date
     {
       time_t now = time(nullptr);
       struct tm *timeinfo = localtime(&now);
@@ -107,12 +79,14 @@ void displayClock(void *parameter)
         "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
       };
       const char* dayName = kDayNames[timeinfo->tm_wday];
+
       char dateStr[12];
       snprintf(dateStr, sizeof(dateStr), "%04d-%02d-%02d",
                timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+
       logPrintf("DISP", "date %s %s", dayName, dateStr);
 
-      // Show day name centered
+      // Show day name centered for 2 seconds
       matrix.clear();
       int16_t x1, y1;
       uint16_t width, height;
@@ -122,7 +96,7 @@ void displayClock(void *parameter)
       matrix.displayToSerial(Serial);
       vTaskDelay(2000 / portTICK_PERIOD_MS);
 
-      // Show date centered
+      // Show date centered for 2 seconds
       matrix.clear();
       matrix.getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
@@ -130,18 +104,22 @@ void displayClock(void *parameter)
       matrix.displayToSerial(Serial);
       vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
+
+    // Release display so other tasks can draw
     rmd.release_access();
-    
-    // wait a bit before updating again and requesting access again
+
+    // Idle before trying to acquire display again
     vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
 
+// Utility: list files in a LittleFS directory over serial output
 void listFiles(const char* dirname) {
   if (!LittleFS.begin()) {
     Serial.println("An Error has occurred while mounting LittleFS");
     return;
   }
+
   File root = LittleFS.open(dirname);
   if (!root) {
     Serial.println("Failed to open directory");
@@ -160,6 +138,7 @@ void listFiles(const char* dirname) {
     Serial.println(file.size());
     file = root.openNextFile();
   }
+
   root.close();
   LittleFS.end();
   Serial.println("End of file list");
@@ -168,42 +147,68 @@ void listFiles(const char* dirname) {
 void setup() {
   Serial.begin(1000000);
 
-  // Load config before hardware_init so the hostname is available to set
-  // before WiFiManager calls WiFi.begin() inside autoConnect().
+  // Load persisted config first (hostname/timezone/task toggles, etc.)
+  // Must happen before WiFi auto-connect logic in hardware_init().
   dataStore.load_from_file("/config.txt");
 
+  // Initialize board/network and core task infrastructure
   hardware_init();
   create_tasks();
 
-  //NTP client
+  // Configure SNTP time sources (UTC base; timezone handled separately)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
+  // Create and register LED matrix resource
   ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, MATRIX_CS_PIN));
 
+  // Logging and boot banner
   logger_init();
   logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
-  apply_timezone();   // must be after load_from_file so "timezone" key is available
 
-  // Restore saved brightness (default 7)
+  // Apply timezone loaded from config
+  apply_timezone();
+
+  // Restore display brightness from config, clamp to valid [0..15]
   int brightness = dataStore.get_value<int>("brightness", 7);
   brightness = max(0, min(15, brightness));
   ResourceManager<LMDS>::getInstance().getResourceRef().setIntensity((uint8_t)brightness);
 
-  //xTaskCreate(animateDisplay, "DisplayTask", 2048, nullptr, 1, nullptr);
+  // Always-on local display task
   xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
-  //xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
-  xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
-  xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
-  xTaskCreate(mqtt_task,       "MQTTTask",       8192, nullptr, 1, nullptr);
-  xTaskCreate(web_server_task, "WebServerTask",  8192, nullptr, 1, nullptr);
 
-  TempSensor* tempSensor = new StubTempSensor(); // replace with real sensor when ready
-  xTaskCreate(temp_sensor_task,    "TempSensorTask",    4096, tempSensor, 1, nullptr);
-  xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr,    1, nullptr);
-  xTaskCreate(night_mode_task,     "NightModeTask",     2048, nullptr,    1, nullptr);
-  xTaskCreate(resto_menu_task,    "RestoMenuTask",     8192, nullptr,    1, nullptr);
+  // Optional tasks controlled via config flags
+  if (dataStore.get_value<int>("enable_weather", 1))
+    xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
+
+  if (dataStore.get_value<int>("enable_lhc", 1))
+    xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "LHCStatusTask disabled (enable_lhc=0)");
+
+  if (dataStore.get_value<int>("enable_mqtt", 1))
+    xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
+
+  // HTTP server task
+  xTaskCreate(web_server_task, "WebServerTask", 8192, nullptr, 1, nullptr);
+
+  // Sensor/message/night mode tasks
+  TempSensor* tempSensor = new StubTempSensor(); // Replace with real sensor implementation
+  xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
+  xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
+  xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
+
+  // Optional restaurant menu task
+  if (dataStore.get_value<int>("enable_resto", 1))
+    xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "RestoMenuTask disabled (enable_resto=0)");
 }
 
-void loop() 
+// Arduino main loop is unused; FreeRTOS tasks do the work.
+void loop()
 {
 }

@@ -155,20 +155,36 @@ void handle_status()
 
 // ── /log ──────────────────────────────────────────────────────────────────────
 
+// Polling script: reads _logSince (set in the page head) and appends new rows
+// every 3 s without reloading the page.
+static const char LOG_POLL_JS[] PROGMEM = R"js(<script>(function(){
+function p(){fetch('/log/entries?since='+_logSince).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){
+if(d.entries)d.entries.forEach(function(e){
+var t=document.querySelector('table'),r=t.insertRow(1);
+var c0=r.insertCell(0);c0.className='mono';c0.style.whiteSpace='nowrap';c0.textContent=e.ts;
+var c1=r.insertCell(1);var s=document.createElement('span');s.className='tag tag-info';s.textContent=e.tag;c1.appendChild(s);
+var c2=r.insertCell(2);c2.className='mono';c2.textContent=e.msg;});
+if(d.seq!==undefined)_logSince=d.seq;}).catch(function(){}).then(function(){setTimeout(p,3000);});}
+p();})();</script>)js";
+
 void handle_log()
 {
     if (!is_authenticated()) return;
 
-    sendPageHead("Log", "<meta http-equiv='refresh' content='5'>");
+    // Embed the current high-water seq so the first poll only fetches new entries.
+    char extraHead[64];
+    snprintf(extraHead, sizeof(extraHead), "<script>var _logSince=%u;</script>", getLogSeq());
+
+    sendPageHead("Log", extraHead);
     sendPageNav("/log");
     server.sendContent_P(PSTR("<h2>Log <small style='font-weight:400;color:#94a3b8'>"
-                               "(newest first, last 40 entries, auto-refreshes)</small></h2>"
+                               "(newest first, last 40 entries, live)</small></h2>"
                                "<table><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
 
     const auto& history = getLogHistory();
     for (auto it = history.rbegin(); it != history.rend(); ++it)
     {
-        const String& line = *it;
+        const String& line = it->line;
         int tagOpen  = line.indexOf('[');
         int tagClose = line.indexOf(']');
 
@@ -191,7 +207,73 @@ void handle_log()
     }
 
     server.sendContent_P(PSTR("</table>"));
+    server.sendContent_P(LOG_POLL_JS);
     sendPageFoot();
+}
+
+// ── /log/entries ──────────────────────────────────────────────────────────────
+
+// Escape a String value for embedding inside a JSON string literal.
+static void jsonAppendEscaped(String& out, const String& s)
+{
+    for (unsigned i = 0; i < s.length(); ++i) {
+        char c = s[i];
+        if      (c == '"')  out += "\\\"";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
+        else                out += c;
+    }
+}
+
+// GET /log/entries?since=N
+// Returns JSON: {"seq":N,"entries":[{"seq":N,"ts":"...","tag":"...","msg":"..."},...]}
+// Entries with seq > since, ordered oldest-first so the browser can insertRow(1) each
+// one and the newest naturally lands at the top of the table.
+static void handle_log_entries()
+{
+    if (!is_authenticated()) return;
+
+    uint32_t since = server.hasArg("since")
+                     ? (uint32_t)server.arg("since").toInt()
+                     : 0;
+
+    const auto& history = getLogHistory();
+
+    String json;
+    json.reserve(512);
+    json += "{\"seq\":";
+    json += getLogSeq();
+    json += ",\"entries\":[";
+
+    bool first = true;
+    for (const auto& entry : history) {
+        if (entry.seq <= since) continue;
+
+        const String& line = entry.line;
+        int tagOpen  = line.indexOf('[');
+        int tagClose = line.indexOf(']');
+
+        if (!first) json += ',';
+        first = false;
+
+        json += "{\"seq\":";
+        json += entry.seq;
+        json += ",\"ts\":\"";
+        if (tagOpen > 1)
+            jsonAppendEscaped(json, line.substring(0, tagOpen - 1));
+        json += "\",\"tag\":\"";
+        if (tagOpen >= 0 && tagClose > tagOpen)
+            jsonAppendEscaped(json, line.substring(tagOpen + 1, tagClose));
+        json += "\",\"msg\":\"";
+        if (tagClose >= 0)
+            jsonAppendEscaped(json, line.substring(tagClose + 2));
+        json += "\"}";
+    }
+
+    json += "]}";
+    server.send(200, "application/json", json);
 }
 
 // ── /edit ─────────────────────────────────────────────────────────────────────
@@ -283,7 +365,8 @@ void web_server_task(void* pvParameters)
     server.on("/status",  HTTP_GET,  handle_status);
     server.on("/edit",               handle_file_edit);
     server.on("/reboot",  HTTP_POST, handle_reboot);
-    server.on("/log",     HTTP_GET,  handle_log);
+    server.on("/log",         HTTP_GET,  handle_log);
+    server.on("/log/entries", HTTP_GET,  handle_log_entries);
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
     server.on("/update",  HTTP_GET,  handle_update_get);
