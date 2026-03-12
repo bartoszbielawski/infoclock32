@@ -179,11 +179,11 @@ void handle_actions()
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
                                "<label style='font-size:.9rem'>From</label>"
                                "<input type='time' name='night_start' value='"));
-    server.sendContent(nStart.c_str());
+    if (!nStart.isEmpty()) server.sendContent(nStart.c_str());
     server.sendContent_P(PSTR("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<label style='font-size:.9rem'>To</label>"
                                "<input type='time' name='night_end' value='"));
-    server.sendContent(nEnd.c_str());
+    if (!nEnd.isEmpty()) server.sendContent(nEnd.c_str());
     server.sendContent_P(PSTR("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<label style='font-size:.9rem'>Brightness</label>"
                                "<input type='number' name='night_brightness' min='0' max='15' value='"));

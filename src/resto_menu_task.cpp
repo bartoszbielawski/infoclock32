@@ -37,8 +37,8 @@ static constexpr size_t kNumRestaurants = sizeof(kRestaurants) / sizeof(kRestaur
 
 static const int kDefaultStartHour  = 9;
 static const int kDefaultEndHour    = 14;
-static const uint32_t kFetchIntervalMs = 15UL * 60UL * 1000UL; // 15 min
-static const uint32_t kScrollSpeedMs  = 50;
+static const uint32_t kFetchIntervalMs = 60UL * 60UL * 1000UL; // 1 hour
+static const uint32_t kScrollSpeedMs  = 10;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -191,8 +191,10 @@ void resto_menu_task(void* pvParameters) {
         bool testing = !testDate.empty();
         std::string fetchDate = testing ? testDate : dateString(time(nullptr));
 
+        auto currentTime = time(nullptr);
+
         bool stale = (fetchDate != cachedDate) ||
-                     (difftime(time(nullptr), lastFetch) > kFetchIntervalMs / 1000.0);
+                     (difftime(currentTime, lastFetch) > kFetchIntervalMs / 1000.0) && (!currentTime < 3600); // sanity check to avoid treating an invalid clock as stale
 
         if (stale) {
             cachedDate  = fetchDate;
@@ -218,7 +220,9 @@ void resto_menu_task(void* pvParameters) {
             }
             scrollMessage(menu, matrix, kScrollSpeedMs);
             rmd.release_access();
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            
+            //this delay is to avoid scrolling multiple menus back-to-back without giving a chance for other tasks to show their messages in between; adjust as needed
+            vTaskDelay(120 * 1000 / portTICK_PERIOD_MS);
         }
     }
 }

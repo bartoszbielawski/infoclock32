@@ -71,35 +71,25 @@ void displayClock(void *parameter)
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-    // Show day name and then date
+    // Show day name and date for 2 seconds
     {
       time_t now = time(nullptr);
       struct tm *timeinfo = localtime(&now);
 
       static const char* const kDayNames[] = {
-        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
       };
       const char* dayName = kDayNames[timeinfo->tm_wday];
 
-      char dateStr[12];
-      snprintf(dateStr, sizeof(dateStr), "%04d-%02d-%02d",
-               timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
+      char dateStr[16];
+      snprintf(dateStr, sizeof(dateStr), "%s %02d/%02d",
+               dayName, timeinfo->tm_mday, timeinfo->tm_mon + 1);
 
-      logPrintf("DISP", "date %s %s", dayName, dateStr);
-
-      // Show day name centered for 2 seconds
-      matrix.clear();
+      logPrintf("DISP", "date %s", dateStr);
+      
+      // Show date centered for 2 seconds
       int16_t x1, y1;
       uint16_t width, height;
-      matrix.getTextBounds(dayName, 0, 0, &x1, &y1, &width, &height);
-      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
-      matrix.print(dayName);
-      //matrix.displayToSerial(Serial);
-      matrix.display();
-      
-      vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-      // Show date centered for 2 seconds
       matrix.clear();
       matrix.getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
       matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
@@ -177,10 +167,25 @@ void setup() {
   // Apply timezone loaded from config
   apply_timezone();
 
+  auto& rmd = ResourceManager<LMDS>::getInstance();
   // Restore display brightness from config, clamp to valid [0..15]
   int brightness = dataStore.get_value<int>("brightness", 7);
   brightness = max(0, min(15, brightness));
-  ResourceManager<LMDS>::getInstance().getResourceRef().setIntensity((uint8_t)brightness);
+  rmd.getResourceRef().setIntensity((uint8_t)brightness);
+
+  auto& matrix = rmd.getResourceRef();
+
+  if (not rmd.make_access_request())
+  {
+      Serial.println("Setup: Failed to get access to display");
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+  else
+  { 
+    scrollMessage(APP_VERSION, matrix, 30);  
+    vTaskDelay(10000 / portTICK_PERIOD_MS);    
+    rmd.release_access();
+  }
 
   // Always-on local display task
   xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
@@ -215,6 +220,10 @@ void setup() {
     xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "RestoMenuTask disabled (enable_resto=0)");
+
+
+  
+  //by this time we should have received the correct time from NTP, so we can scroll the date to verify that timezone is applied correctly
 }
 
 // Arduino main loop is unused; FreeRTOS tasks do the work.

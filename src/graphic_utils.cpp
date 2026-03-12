@@ -23,26 +23,23 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
   }
 }
 
-//put it here to avoid reallocation on each call
-//and it can be bigger as well because it doesn't belng to any task stack
-static GFXcanvas1 canvas(512, 8);
-
-
-
 
 void scrollMessage(std::string message, LMDS& display, int speed, int steps)
-{ 
+{
+  //message = substituteGlyphs(message);
   auto msgLength = message.size();
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
 
   logPrintf("DISP", "scrolling '%s'", message.c_str());
 
   //center shorter messages
-  if (msgLength * FONT_WIDTH <= display.width())
+  if (msgLength * FONT_WIDTH <= (size_t)display.width())
   {
-    //message fits on the display, no need to scroll, but center the message
+    logPrintf("DISP", "message fits on display, centering without scrolling");
+    GFXcanvas1 canvas(msgLength * FONT_WIDTH, 8);
+    canvas.print(message.c_str());
     display.clear();
-    int offset = (display.width() - msgLength) / 2;
+    int offset = (display.width() - (int)(msgLength * FONT_WIDTH)) / 2;
     copyCanvasToDisplay(canvas, 0, display, offset);
     display.display();
     vTaskDelay(10 * speed / portTICK_PERIOD_MS);
@@ -54,11 +51,14 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
 
   vTaskDelay(10 * speed / portTICK_PERIOD_MS);
 
-  for (int i = 0; i <= canvas.width() - display.width() + steps; i += steps)
-  {
+  size_t last = canvas.width() - display.width() + steps;
+  for (int i = 0; i <= last; i += steps)
+  {    
     copyCanvasToDisplay(canvas, i, display, 0);
     display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
+    if (i == 0) vTaskDelay(10 * speed / portTICK_PERIOD_MS);
+    if (i == last) vTaskDelay(10 * speed / portTICK_PERIOD_MS);    
   }
   
   vTaskDelay(10 * speed / portTICK_PERIOD_MS);

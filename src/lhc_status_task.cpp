@@ -20,10 +20,27 @@ static std::map<std::string, std::string> interesting_fields =
     {"LhcMachineMode", ""}
 };
 
+/**
+ * @brief Normalizes and strips HTML-like markup from a mutable String.
+ *
+ * This function cleans the input text in several stages:
+ * 1. Replaces known line-break tags (`<br>` and `<br/>`) with `" - "` as a separator.
+ * 2. Collapses repeated separators (`" -  - "`) into a single `" - "`.
+ * 3. Collapses multiple spaces (`"  "`) into single spaces.
+ * 4. Removes a trailing separator pattern (`" -"`) if present at the end.
+ * 5. Removes any remaining content enclosed in angle brackets by scanning characters
+ *    and ignoring text while inside a tag (`<...>`).
+ *
+ * @param str Reference to the input String; modified in place to contain cleaned plain text.
+ *
+ * @note Tag stripping is character-based and simple: it does not validate HTML structure.
+ * @note The trailing separator cleanup uses global replace semantics, which may affect
+ *       other `" -"` occurrences depending on String::replace behavior.
+ */
 void removeHTMLTags(String& str)
 {
-    str.replace("<br>", " -- ");
-    str.replace("<br/>", " -- ");
+    str.replace("<br>", " - ");
+    str.replace("<br/>", " - ");
 
     // Strip remaining HTML tags
     String result;
@@ -36,7 +53,16 @@ void removeHTMLTags(String& str)
         else if (!inTag) result += c;
     }
     str = result;
+
+    str.trim();
+
+    str.replace(" -  - ", " - ");
+    str.replace("  ", " ");
+    if (str.endsWith(" -"))
+        str.replace(" -", ""); //remove trailing separator if exists        
 }
+
+
 
 void lhc_status_task(void *parameter)
 {
@@ -57,7 +83,7 @@ void lhc_status_task(void *parameter)
             if (response != 200)
             {
                 logPrintf("LHC", "HTTP GET failed, response: %d", response);
-                vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before
+                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // wait a minute before
                 continue;
             }      
             
@@ -117,7 +143,7 @@ void lhc_status_task(void *parameter)
 
         if (not modeAndEnergyMessage.empty())
         {
-            scrollMessage(modeAndEnergyMessage, matrix, 50);
+            scrollMessage(modeAndEnergyMessage, matrix, 20);
         }
         rmd.release_access();
 
@@ -131,7 +157,7 @@ void lhc_status_task(void *parameter)
         if (not page1Message.empty())
         {
             logPrintf("LHC", "Page1: %s", page1Message.c_str());
-            scrollMessage(page1Message, matrix, 50);
+            scrollMessage(page1Message, matrix, 20);
         }
         rmd.release_access();
         vTaskDelay(5000 / portTICK_PERIOD_MS);

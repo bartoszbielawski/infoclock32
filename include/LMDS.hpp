@@ -19,7 +19,7 @@ public:
         setEnabled(true);
         setIntensity(8); // Set medium brightness
         clear();
-        display();
+        display();                
     }
 
     template <class S>

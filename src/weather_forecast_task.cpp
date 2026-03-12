@@ -89,7 +89,7 @@ static std::string readWeatherFromOWM()
     // Name: temp ^C (forecast temperature ^C, forecast description))
 
     // format string stored in flash (PROGMEM) to save RAM
-    static const char WEATHER_FMT[] PROGMEM = "%s: %.1fC (%.1fC, %s)";
+    static const char WEATHER_FMT[] PROGMEM = "%s: %.1f\xF7" "C (%.1f\xF7" "C, %s)";
 
     float currentTemp  = parse_value(currentWeather["/root/main/temp"],         NAN);
     float forecastTemp = parse_value(forecastWeather["/root/list/2/main/temp"], NAN);
@@ -154,7 +154,7 @@ void open_weather_map_task(void *parameter)
         }
 
 
-        scrollMessage(messageToBeDisplayed, matrix, 50);
+        scrollMessage(messageToBeDisplayed, matrix, 30);
         rmd.release_access();
 
         vTaskDelay(20000 / portTICK_PERIOD_MS); // wait 20 s before requesting display again

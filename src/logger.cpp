@@ -55,7 +55,7 @@ void logger_init()
 
 void logPrintf(const char *tag, const char *format, ...)
 {
-    char msgBuf[192];
+    char msgBuf[512];
     va_list args;
     va_start(args, format);
     vsnprintf(msgBuf, sizeof(msgBuf), format, args);
