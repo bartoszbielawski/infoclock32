@@ -11,6 +11,7 @@
 #include <web_ui.hpp>
 
 // Handlers defined in other translation units
+void handle_push();
 void handle_actions();
 void handle_messages();
 void handle_update_get();
@@ -375,6 +376,7 @@ void handle_reboot()
 
 void web_server_task(void* pvParameters)
 {
+    server.on("/push",               handle_push);
     server.on("/",          handle_home);
     server.on("/style.css", HTTP_GET, handle_style_css);
     server.on("/status",    HTTP_GET, handle_status);

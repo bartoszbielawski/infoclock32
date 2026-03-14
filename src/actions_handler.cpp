@@ -9,6 +9,50 @@
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
 
+// ── /push ─────────────────────────────────────────────────────────────────────
+// Simple JSON endpoint for scripted / programmatic message display.
+//
+//   GET  /push?msg=Hello+World
+//   POST /push   (body: msg=Hello+World)
+//
+// Optional: &speed=<ms>  — scroll delay in ms, 10–500 (default 50).
+// Returns: {"ok":true} or {"ok":false,"error":"..."}
+// No authentication required.
+
+void handle_push()
+{
+    String msg = server.hasArg("msg") ? server.arg("msg") : server.arg("message");
+    if (msg.isEmpty())
+    {
+        server.send(400, "application/json",
+                    "{\"ok\":false,\"error\":\"missing 'msg' parameter\"}");
+        return;
+    }
+
+    int speed = 50;
+    if (server.hasArg("speed"))
+    {
+        int s = server.arg("speed").toInt();
+        if (s >= 10 && s <= 500) speed = s;
+    }
+
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+    if (rmd.make_access_request())
+    {
+        scrollMessage(std::string(msg.c_str()), rmd.getResourceRef(), speed);
+        rmd.release_access();
+        logPrintf("WEB", "push via /push: %.48s", msg.c_str());
+        server.send(200, "application/json", "{\"ok\":true}");
+    }
+    else
+    {
+        server.send(503, "application/json",
+                    "{\"ok\":false,\"error\":\"display busy\"}");
+    }
+}
+
+// ── /actions ──────────────────────────────────────────────────────────────────
+
 void handle_actions()
 {
     if (!is_authenticated()) return;
