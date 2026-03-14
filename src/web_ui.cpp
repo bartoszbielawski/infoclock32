@@ -66,6 +66,14 @@ static const char PAGE_FOOT[] PROGMEM =
     "</footer>"
     "</body></html>";
 
+// ── CSS endpoint ──────────────────────────────────────────────────────────────
+
+void handle_style_css()
+{
+    server.sendHeader("Cache-Control", "public, max-age=86400");
+    server.send_P(200, "text/css", CSS);
+}
+
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
 void sendPageHead(const char* title, const char* extraHead)
@@ -79,9 +87,8 @@ void sendPageHead(const char* title, const char* extraHead)
     server.sendContent(title);
     server.sendContent_P(PSTR(" \xe2\x80\x94 "));
     server.sendContent(WiFi.getHostname());
-    server.sendContent_P(PSTR("</title><style>"));
-    server.sendContent_P(CSS);
-    server.sendContent_P(PSTR("</style>"));
+    server.sendContent_P(PSTR("</title>"
+        "<link rel='stylesheet' href='/style.css?v=" APP_VERSION "'>"));
     if (extraHead[0]) server.sendContent(extraHead);
     server.sendContent_P(PSTR("</head><body>"
                                "<header><h1>&#128336; "));
@@ -132,9 +139,19 @@ void sendRow(const char* label, const char* value)
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
+// Cached password — avoids DataStore lookup + mbedtls decode on every request.
+static std::string s_cachedPw;
+static bool        s_pwLoaded = false;
+
+void invalidate_auth_cache() { s_pwLoaded = false; }
+
 bool check_auth_header()
 {
-    std::string pw = DataStore::getInstance().get_value("web_password", "");
+    if (!s_pwLoaded) {
+        s_cachedPw = DataStore::getInstance().get_value("web_password", "");
+        s_pwLoaded = true;
+    }
+    const std::string& pw = s_cachedPw;
     if (pw.empty()) return true;   // no password set → open access
 
     if (!server.hasHeader("Authorization")) return false;

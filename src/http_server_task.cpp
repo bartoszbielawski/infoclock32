@@ -213,17 +213,20 @@ void handle_log()
 
 // ── /log/entries ──────────────────────────────────────────────────────────────
 
-// Escape a String value for embedding inside a JSON string literal.
-static void jsonAppendEscaped(String& out, const String& s)
+// Append a JSON-escaped version of 's' into buf[cap], advancing pos.
+// Stops writing (but keeps pos accurate) if buffer is nearly full.
+static void jsonAppendEscaped(char* buf, size_t cap, size_t& pos, const String& s)
 {
     for (unsigned i = 0; i < s.length(); ++i) {
+        // Reserve space for longest escape sequence (2 chars) + null terminator
+        if (pos + 3 >= cap) return;
         char c = s[i];
-        if      (c == '"')  out += "\\\"";
-        else if (c == '\\') out += "\\\\";
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else                out += c;
+        if      (c == '"')  { buf[pos++] = '\\'; buf[pos++] = '"';  }
+        else if (c == '\\') { buf[pos++] = '\\'; buf[pos++] = '\\'; }
+        else if (c == '\n') { buf[pos++] = '\\'; buf[pos++] = 'n';  }
+        else if (c == '\r') { buf[pos++] = '\\'; buf[pos++] = 'r';  }
+        else if (c == '\t') { buf[pos++] = '\\'; buf[pos++] = 't';  }
+        else                  buf[pos++] = c;
     }
 }
 
@@ -241,39 +244,49 @@ static void handle_log_entries()
 
     const auto& history = getLogHistory();
 
-    String json;
-    json.reserve(512);
-    json += "{\"seq\":";
-    json += getLogSeq();
-    json += ",\"entries\":[";
+    // Static buffer avoids heap allocation on every 3-second poll.
+    static char jsonBuf[2048];
+    size_t pos = 0;
+
+    pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos,
+                    "{\"seq\":%u,\"entries\":[", getLogSeq());
 
     bool first = true;
     for (const auto& entry : history) {
         if (entry.seq <= since) continue;
+        // Stop if buffer is too full to safely write another entry
+        if (pos + 64 >= sizeof(jsonBuf)) break;
 
         const String& line = entry.line;
         int tagOpen  = line.indexOf('[');
         int tagClose = line.indexOf(']');
 
-        if (!first) json += ',';
+        if (!first) jsonBuf[pos++] = ',';
         first = false;
 
-        json += "{\"seq\":";
-        json += entry.seq;
-        json += ",\"ts\":\"";
+        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos,
+                        "{\"seq\":%u,\"ts\":\"", entry.seq);
         if (tagOpen > 1)
-            jsonAppendEscaped(json, line.substring(0, tagOpen - 1));
-        json += "\",\"tag\":\"";
+            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+                              line.substring(0, tagOpen - 1));
+        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\",\"tag\":\"");
         if (tagOpen >= 0 && tagClose > tagOpen)
-            jsonAppendEscaped(json, line.substring(tagOpen + 1, tagClose));
-        json += "\",\"msg\":\"";
+            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+                              line.substring(tagOpen + 1, tagClose));
+        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\",\"msg\":\"");
         if (tagClose >= 0)
-            jsonAppendEscaped(json, line.substring(tagClose + 2));
-        json += "\"}";
+            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+                              line.substring(tagClose + 2));
+        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\"}");
     }
 
-    json += "]}";
-    server.send(200, "application/json", json);
+    if (pos + 3 < sizeof(jsonBuf)) {
+        jsonBuf[pos++] = ']';
+        jsonBuf[pos++] = '}';
+        jsonBuf[pos]   = '\0';
+    }
+
+    server.send(200, "application/json", jsonBuf);
 }
 
 // ── /edit ─────────────────────────────────────────────────────────────────────
@@ -323,6 +336,7 @@ void handle_file_edit()
         file.close();
 
         DataStore::getInstance().load_from_file(FILENAME);
+        invalidate_auth_cache();
         logPrintf("WEB", "config saved and reloaded via /edit");
 
         sendPageHead("Config editor");
@@ -361,8 +375,9 @@ void handle_reboot()
 
 void web_server_task(void* pvParameters)
 {
-    server.on("/",        handle_home);
-    server.on("/status",  HTTP_GET,  handle_status);
+    server.on("/",          handle_home);
+    server.on("/style.css", HTTP_GET, handle_style_css);
+    server.on("/status",    HTTP_GET, handle_status);
     server.on("/edit",               handle_file_edit);
     server.on("/reboot",  HTTP_POST, handle_reboot);
     server.on("/log",         HTTP_GET,  handle_log);
@@ -376,6 +391,6 @@ void web_server_task(void* pvParameters)
     while (true)
     {
         server.handleClient();
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(2 / portTICK_PERIOD_MS);
     }
 }

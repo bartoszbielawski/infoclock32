@@ -18,9 +18,16 @@ void sendPageNav(const char* active);
 void sendPageFoot();
 void sendRow(const char* label, const char* value);
 
+// ── CSS endpoint ──────────────────────────────────────────────────────────────
+// Serves the shared stylesheet with a long-lived cache header.
+void handle_style_css();
+
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 // check_auth_header() → true when no password is configured, or the submitted
 //                        password matches the "web_password" DataStore entry.
 // is_authenticated()  → same check; sends 401 and returns false on failure.
+// invalidate_auth_cache() → force re-read of web_password from DataStore on
+//                           the next request (call after /edit saves config).
 bool check_auth_header();
 bool is_authenticated();
+void invalidate_auth_cache();

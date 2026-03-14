@@ -207,7 +207,7 @@ void setup() {
     logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
 
   // HTTP server task
-  xTaskCreate(web_server_task, "WebServerTask", 8192, nullptr, 1, nullptr);
+  xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
 
   // Sensor/message/night mode tasks
   TempSensor* tempSensor = new StubTempSensor(); // Replace with real sensor implementation

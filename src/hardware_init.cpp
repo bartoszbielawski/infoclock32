@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFiManager.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <data_store.hpp>
 
 void hardware_init()
@@ -22,4 +23,12 @@ void hardware_init()
     Serial.println("hardware_init: connecting to WiFi...");
     bool result = wifiManager.autoConnect(hostname.c_str());
     Serial.println(result ? "hardware_init: WiFi connected" : "hardware_init: WiFi not connected");
+
+    // Start mDNS responder so the device is reachable as <hostname>.local
+    if (MDNS.begin(hostname.c_str())) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("hardware_init: mDNS started — http://%s.local\n", hostname.c_str());
+    } else {
+        Serial.println("hardware_init: mDNS start failed");
+    }
 }

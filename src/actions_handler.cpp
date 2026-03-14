@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
@@ -80,7 +81,10 @@ void handle_actions()
                 DataStore::getInstance().set_value("hostname", hn.c_str());
                 DataStore::getInstance().save_to_file("/config.txt");
                 WiFi.setHostname(hn.c_str());
-                result = "&#10003; Hostname set to &ldquo;" + hn + "&rdquo;. Reboot to apply fully.";
+                MDNS.end();
+                MDNS.begin(hn.c_str());
+                MDNS.addService("http", "tcp", 80);
+                result = "&#10003; Hostname set to &ldquo;" + hn + "&rdquo;. Now reachable at <a href='http://" + hn + ".local'>" + hn + ".local</a>.";
                 logPrintf("WEB", "hostname set to %s via /actions", hn.c_str());
             } else {
                 result = "&#9888;&#65039; Invalid hostname &mdash; use letters, digits and hyphens only (max 63 chars).";
