@@ -77,7 +77,7 @@ void temp_sensor_task(void* parameter)
             continue;
         }
 
-        if (!rmd.make_access_request([](LMDS& m){ wipeStaticNoise(m); }))
+        if (!rmd.make_access_request())
         {
             logPrintf("TMP", "failed to get display access");
             vTaskDelay(1000 / portTICK_PERIOD_MS);
