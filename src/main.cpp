@@ -17,7 +17,7 @@
 #include <version.hpp>
 #include <Wire.h>
 #include <temp_sensor.hpp>
-#include <bmp280_sensor.hpp>
+#include <temp_sensor_factory.hpp>
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
@@ -220,9 +220,8 @@ void setup() {
   xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
 
   // Sensor/message/night mode tasks
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  uint8_t bmpAddr = (uint8_t)DataStore::getInstance().get_value<int>("bmp280_addr", 0x76);
-  TempSensor* tempSensor = new Bmp280TempSensor(bmpAddr); // set bmp280_addr=0x77 in config if SDO pulled high
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);  // needed by all I2C sensors
+  TempSensor* tempSensor = createTempSensor();  // sensor type from temp_sensor config key
   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);

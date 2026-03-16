@@ -95,7 +95,7 @@ void temp_sensor_task(void* parameter)
         {
             snprintf(buffer, sizeof(buffer), "%.0f hPa", pressure);
             scrollMessage(buffer, matrix, 25);
-        }   
+        }
         rmd.release_access();
 
         vTaskDelay(20000 / portTICK_PERIOD_MS);
