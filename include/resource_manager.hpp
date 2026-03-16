@@ -80,12 +80,20 @@ public:
         return true;
     }
 
+    void setPreReleaseHook(void (*hook)(R&))
+    {
+        pre_release_hook = hook;
+    }
+
     void release_access()
     {
         // Only the task that currently has access can release it
         if (xTaskGetCurrentTaskHandle() == current_task)
         {
             //Serial.printf("ResourceManager: Task %s releasing access\n", pcTaskGetName(current_task));
+            // Optional transition effect before handing off to the next task
+            if (pre_release_hook)
+                pre_release_hook(*resource);
             // Notify the display manager that the task is done
             xTaskNotifyGive(manager_task);
         }
@@ -106,6 +114,7 @@ private:
     TaskHandle_t current_task;
     QueueHandle_t request_queue;
     TaskHandle_t manager_task;
+    void (*pre_release_hook)(R&) = nullptr;
 };
 
 

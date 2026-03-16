@@ -161,6 +161,28 @@ void wipeStaticNoise(LMDS& display, int speed)
   }
 }
 
+// Scroll content upward and off the top edge (8 steps)
+void scrollOutDisplayUp(LMDS& display, int speed)
+{
+  for (int row = 0; row < 8; row++)
+  {
+    display.scroll(LMDS::scrollDirection::scrollUp);
+    display.display();
+    vTaskDelay(speed / portTICK_PERIOD_MS);
+  }
+}
+
+// Scroll content downward and off the bottom edge (8 steps)
+void scrollOutDisplayDown(LMDS& display, int speed)
+{
+  for (int row = 0; row < 8; row++)
+  {
+    display.scroll(LMDS::scrollDirection::scrollDown);
+    display.display();
+    vTaskDelay(speed / portTICK_PERIOD_MS);
+  }
+}
+
 // Clear even rows first, then odd rows — venetian-blinds effect (2 steps)
 void wipeVenetianBlinds(LMDS& display, int speed)
 {
@@ -170,6 +192,101 @@ void wipeVenetianBlinds(LMDS& display, int speed)
     for (int y = phase; y < 8; y += 2)
       for (int x = 0; x < width; x++)
         display.setPixel(x, y, false);
+    display.display();
+    vTaskDelay(speed / portTICK_PERIOD_MS);
+  }
+}
+
+// Spiral inward: clear pixels one at a time following a rectangular spiral from the
+// outermost ring toward the centre.  With 8 rows and 64 cols there are 4 rings.
+// speed = ms per pixel (default 1 ms → ~512 ms total).
+void wipeSpiralInward(LMDS& display, int speed)
+{
+  int width  = display.getSegments() * 8;
+  int top    = 0, bottom = 7, left = 0, right = width - 1;
+
+  while (top <= bottom && left <= right)
+  {
+    // Top row: left → right
+    for (int x = left; x <= right; x++) {
+      display.setPixel(x, top, false);
+      display.display();
+      vTaskDelay(speed / portTICK_PERIOD_MS);
+    }
+    top++;
+
+    // Right column: top → bottom
+    for (int y = top; y <= bottom; y++) {
+      display.setPixel(right, y, false);
+      display.display();
+      vTaskDelay(speed / portTICK_PERIOD_MS);
+    }
+    right--;
+
+    // Bottom row: right → left (guard against single-row remainder)
+    if (top <= bottom) {
+      for (int x = right; x >= left; x--) {
+        display.setPixel(x, bottom, false);
+        display.display();
+        vTaskDelay(speed / portTICK_PERIOD_MS);
+      }
+      bottom--;
+    }
+
+    // Left column: bottom → top (guard against single-column remainder)
+    if (left <= right) {
+      for (int y = bottom; y >= top; y--) {
+        display.setPixel(left, y, false);
+        display.display();
+        vTaskDelay(speed / portTICK_PERIOD_MS);
+      }
+      left++;
+    }
+  }
+}
+
+// NW→SE diagonal sweep: clear one anti-diagonal per step.
+// Diagonals are indexed by d = x + y (0 … width+6).
+// speed = ms per diagonal (default 15 ms → ~1 s total for 64-wide display).
+void wipeDiagonal(LMDS& display, int speed)
+{
+  int width = display.getSegments() * 8;
+  for (int d = 0; d < width + 8; d++)
+  {
+    for (int y = 0; y < 8; y++) {
+      int x = d - y;
+      if (x >= 0 && x < width)
+        display.setPixel(x, y, false);
+    }
+    display.display();
+    vTaskDelay(speed / portTICK_PERIOD_MS);
+  }
+}
+
+// Horizontal curtain: clear columns from both edges simultaneously toward the centre.
+// speed = ms per step (32 steps for a 64-wide display).
+void wipeSplitToCenter(LMDS& display, int speed)
+{
+  int width = display.getSegments() * 8;
+  for (int i = 0; i < width / 2; i++)
+  {
+    display.setColumn(i,           0x00);
+    display.setColumn(width - 1 - i, 0x00);
+    display.display();
+    vTaskDelay(speed / portTICK_PERIOD_MS);
+  }
+}
+
+// Reverse horizontal curtain: clear columns from the centre outward to both edges.
+// speed = ms per step (32 steps for a 64-wide display).
+void wipeColumnsFromCenter(LMDS& display, int speed)
+{
+  int width  = display.getSegments() * 8;
+  int center = width / 2;
+  for (int i = 0; i < center; i++)
+  {
+    display.setColumn(center - 1 - i, 0x00);
+    display.setColumn(center     + i, 0x00);
     display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
   }

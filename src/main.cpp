@@ -22,6 +22,8 @@
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <resto_menu_task.h>
+#include <screen_wipe_task.h>
+
 
 // External task entry points
 void open_weather_map_task(void *parameter);
@@ -166,6 +168,7 @@ void setup() {
   auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, MATRIX_CS_PIN);
   lmds->begin();
   ResourceManager<LMDS>::getInstance().initialize(lmds);
+  ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
 
   // Logging and boot banner
   logger_init();
@@ -223,6 +226,7 @@ void setup() {
   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
+
 
   // Optional restaurant menu task
   if (dataStore.get_value<int>("enable_resto", 1))
