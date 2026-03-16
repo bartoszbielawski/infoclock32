@@ -15,7 +15,9 @@
 #include <logger.hpp>
 #include <timezone_utils.hpp>
 #include <version.hpp>
+#include <Wire.h>
 #include <temp_sensor.hpp>
+#include <bmp280_sensor.hpp>
 #include <temp_sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
@@ -68,7 +70,7 @@ void displayClock(void *parameter)
       //matrix.displayToSerial(Serial);
       matrix.display();
 
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);      
     }
 
     // Show day name and date for 2 seconds
@@ -140,6 +142,11 @@ void listFiles(const char* dirname) {
 
 void setup() {
   Serial.begin(1000000);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // HWCDC: wait up to 2 s for the host to open the port so early log lines aren't lost.
+  // On standalone boot (no PC connected) this times out and continues normally.
+  { unsigned long t = millis(); while (!Serial && millis() - t < 2000) delay(10); }
+#endif
 
   // Load persisted config first (hostname/timezone/task toggles, etc.)
   // Must happen before WiFi auto-connect logic in hardware_init().
@@ -210,7 +217,9 @@ void setup() {
   xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
 
   // Sensor/message/night mode tasks
-  TempSensor* tempSensor = new StubTempSensor(); // Replace with real sensor implementation
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  uint8_t bmpAddr = (uint8_t)DataStore::getInstance().get_value<int>("bmp280_addr", 0x76);
+  TempSensor* tempSensor = new Bmp280TempSensor(bmpAddr); // set bmp280_addr=0x77 in config if SDO pulled high
   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);

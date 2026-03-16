@@ -20,46 +20,59 @@ static std::map<std::string, std::string> interesting_fields =
     {"LhcMachineMode", ""}
 };
 
-/**
- * @brief Normalizes and strips HTML-like markup from a mutable String.
- *
- * This function cleans the input text in several stages:
- * 1. Replaces known line-break tags (`<br>` and `<br/>`) with `" - "` as a separator.
- * 2. Collapses repeated separators (`" -  - "`) into a single `" - "`.
- * 3. Collapses multiple spaces (`"  "`) into single spaces.
- * 4. Removes a trailing separator pattern (`" -"`) if present at the end.
- * 5. Removes any remaining content enclosed in angle brackets by scanning characters
- *    and ignoring text while inside a tag (`<...>`).
- *
- * @param str Reference to the input String; modified in place to contain cleaned plain text.
- *
- * @note Tag stripping is character-based and simple: it does not validate HTML structure.
- * @note The trailing separator cleanup uses global replace semantics, which may affect
- *       other `" -"` occurrences depending on String::replace behavior.
- */
+static const char sentinel_char = '\x07';
+static const char sentinel_str[] = "\x07";
+static const char double_sentinel_char[] = "\x07\x07";
+
 void removeHTMLTags(String& str)
 {
-    str.replace("<br>", " - ");
-    str.replace("<br/>", " - ");
-
-    // Strip remaining HTML tags
-    String result;
-    bool inTag = false;
-    for (unsigned int i = 0; i < str.length(); i++)
-    {
-        char c = str[i];
-        if (c == '<') inTag = true;
-        else if (c == '>') inTag = false;
-        else if (!inTag) result += c;
-    }
-    str = result;
-
     str.trim();
+    String result;
+    result.reserve(str.length());
+    int i = 0;
+    while (i < str.length()) {
 
-    str.replace(" -  - ", " - ");
-    str.replace("  ", " ");
-    if (str.endsWith(" -"))
-        str.replace(" -", ""); //remove trailing separator if exists        
+        if (str[i] != '<') 
+        {
+            result += str[i++];
+            continue;
+        }
+
+        int close = str.indexOf('>', i);
+        if (close == -1) break;
+        String tag = str.substring(i + 1, close);
+        tag.trim();
+        if (tag.endsWith("/")) tag.remove(tag.length() - 1);
+        tag.trim();
+        tag.toUpperCase();
+        //replace <br> with a special char that will later be replaced with a space, this way we preserve intentional line breaks
+        if (tag == "BR") result += sentinel_char; 
+        i = close + 1;        
+    }
+
+    result.trim();
+
+    while (result.indexOf(double_sentinel_char) != -1)
+        result.replace(double_sentinel_char, sentinel_str);
+    
+    if (result.startsWith(sentinel_str)) result.remove(0, 1);
+    if (result.endsWith(sentinel_str)) result.remove(result.length() - 1, 1);
+
+    //replace remaining sentinel chars (originally <br>) with spaces, adding extra sentinels around them to preserve intentional multiple spaces
+    result.replace(sentinel_str, " \x07 "); 
+    result.trim();
+
+    // Decode HTML entities (&amp; must be last)
+    result.replace("&nbsp;",  " ");
+    result.replace("&lt;",    "<");
+    result.replace("&gt;",    ">");
+    result.replace("&quot;",  "\"");
+    result.replace("&apos;",  "'");
+    result.replace("&ndash;", "-");
+    result.replace("&mdash;", "-");
+    result.replace("&amp;",   "&");
+
+    str = result;
 }
 
 
@@ -109,8 +122,8 @@ void lhc_status_task(void *parameter)
                 if (interesting_fields.find(title.c_str()) != interesting_fields.end())
                 {
                     String value = line.substring(colonIndex + 1);
-                    removeHTMLTags(value);
                     value.replace("</title>", "");
+                    removeHTMLTags(value);                    
                     value.trim();
                     interesting_fields[title.c_str()] = value.c_str();
                     logPrintf("LHC", "%s = %s", title.c_str(), value.c_str());

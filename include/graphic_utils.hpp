@@ -13,5 +13,10 @@ void scrollMessage(std::string message, LMDS& display, int speed = 100, int step
 
 void wipeDisplayLeftToRight(LMDS& display, int speed = 50);
 void scrollOutDisplayRight(LMDS& display, int speed = 50);
+void scrollOutDisplayLeft(LMDS& display, int speed = 50);
+void wipeTopToBottom(LMDS& display, int speed = 50);
+void wipeCurtain(LMDS& display, int speed = 50);
+void wipeVenetianBlinds(LMDS& display, int speed = 150);
+void wipeStaticNoise(LMDS& display, int speed = 5);
 
 #endif // GRAPHIC_UTILS_HPP

@@ -16,7 +16,7 @@ public:
         current_task = nullptr;
         request_queue = nullptr;
         manager_task = nullptr;
-    }   
+    }
 
     static ResourceManager& getInstance()
     {
@@ -73,7 +73,7 @@ public:
         //Serial.printf("ResourceManager: Task %s making access request\n", pcTaskGetName(requester));
         if (xQueueSend(request_queue, &requester, 0) != pdTRUE)
             return false;
-        
+
         // wait for the display manager to grant access
         // the task will be suspended and resumed by the display manager
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
