@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <WiFiManager.h>
 
 #include <pins.hpp>
 
@@ -30,6 +29,7 @@ void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
 void mqtt_task(void *parameter);
 void web_server_task(void *parameter);
+void wrap_task(void *parameter);
 
 // Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
@@ -191,9 +191,15 @@ void setup() {
       vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
   else
-  { 
-    scrollMessage(APP_VERSION, matrix, 30);  
-    vTaskDelay(10000 / portTICK_PERIOD_MS);    
+  {
+    scrollMessage(APP_VERSION, matrix, 30);
+    if (wifi_is_ap_mode()) {
+      std::string apMsg = "WiFi setup: connect to "
+                          + dataStore.get_value("hostname", "infoclock32")
+                          + "-setup  then browse 192.168.4.1/edit";
+      scrollMessage(apMsg, matrix, 40);
+    }
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
     rmd.release_access();
   }
 
@@ -215,6 +221,11 @@ void setup() {
     xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
+
+  if (dataStore.get_value<int>("enable_wrap", 0))
+    xTaskCreate(wrap_task, "WrapTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "WrapTask disabled (enable_wrap=0)");
 
   // HTTP server task
   xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);

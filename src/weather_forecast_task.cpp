@@ -10,6 +10,7 @@
 
 #include <data_store.hpp>
 #include <parse_utils.hpp>
+#include <WiFi.h>
 #include <http_utils.hpp>
 #include <graphic_utils.hpp>
 #include <logger.hpp>
@@ -128,6 +129,11 @@ void open_weather_map_task(void *parameter)
 
     while (true)
     {
+        if (WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
         if (difftime(time(nullptr), last_weather_update) > 30*60) // update weather every 30 minutes
         {
             auto newWeather = readWeatherFromOWM();

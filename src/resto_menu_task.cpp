@@ -11,6 +11,7 @@
  *   novae_codes        – Novae API group code, e.g. "CER103" (default "CER103")
  */
 
+#include <WiFi.h>
 #include <http_utils.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
@@ -183,6 +184,11 @@ void resto_menu_task(void* pvParameters) {
         std::vector<int> codes = parseIntList(
             ds.get_value("resto_restaurants", "3"));
         if (codes.empty()) codes.push_back(3);
+
+        if (WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
 
         // ── fetch if needed ───────────────────────────────────────────────
         // resto_test_date (YYYY-MM-DD) overrides fetch date and bypasses the

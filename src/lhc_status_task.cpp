@@ -1,6 +1,7 @@
 
 
 #include <pgmspace.h>
+#include <WiFi.h>
 #include <http_utils.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
@@ -89,6 +90,11 @@ void lhc_status_task(void *parameter)
 
     while (true)
     {
+        if (WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
         if (difftime(time(nullptr), last_update) > 30)
         {
             String output;
