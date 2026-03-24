@@ -29,7 +29,6 @@ void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
 void mqtt_task(void *parameter);
 void web_server_task(void *parameter);
-void wrap_task(void *parameter);
 
 // Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
@@ -226,11 +225,6 @@ void setup() {
     xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
-
-  if (dataStore.get_value<int>("enable_wrap", 0))
-    xTaskCreate(wrap_task, "WrapTask", 8192, nullptr, 1, nullptr);
-  else
-    logPrintf("SYS", "WrapTask disabled (enable_wrap=0)");
 
   // HTTP server task
   xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
