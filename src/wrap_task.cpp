@@ -14,17 +14,9 @@ static void onWrapMsg(const WrapMsg& msg)
         return;
     }
 
-    // Find the matching subscription to know which field to extract.
-    for (size_t i = 0; i < kWrapSubscriptionCount; i++)
-    {
-        if (kWrapSubscriptions[i].key != msg.key) continue;
-
-        const char* field = kWrapSubscriptions[i].field.c_str();
-        std::string val   = msg.values[field] | "";
-        RuntimeStore::getInstance().set(msg.key, val);
-        logPrintf("WRAP", "%s = %s", msg.key.c_str(), val.c_str());
-        break;
-    }
+    std::string val = msg.values[msg.field.c_str()] | "";
+    RuntimeStore::getInstance().set(msg.key, val);
+    logPrintf("WRAP", "%s = %s", msg.key.c_str(), val.c_str());
 }
 
 void wrap_task(void* parameter)

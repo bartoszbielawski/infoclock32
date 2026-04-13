@@ -18,7 +18,6 @@ WrapClient::WrapClient(const std::string& wsHost, uint16_t port,
     , port_(port)
     , rdaBase_(rdaBase)
     , callback_(callback)
-    , rxDoc_(4096)
     , closed_(false)
 {
     connect_();
@@ -28,14 +27,14 @@ WrapClient::WrapClient(const std::string& wsHost, uint16_t port,
 
 void WrapClient::subscribe(const WrapParam& param) {
     if (subs_.count(param.key)) return;
-    subs_[param.key] = { param };
+    subs_[param.key] = param;
     sendSub_(param, true);
 }
 
 void WrapClient::unsubscribe(const WrapParam& param) {
     auto it = subs_.find(param.key);
     if (it == subs_.end()) return;
-    sendSub_(it->second.param, false);
+    sendSub_(it->second, false);
     subs_.erase(it);
 }
 
@@ -109,42 +108,40 @@ void WrapClient::sendSub_(const WrapParam& param, bool subscribe) {
 }
 
 void WrapClient::resubscribeAll_() {
-    for (auto it = subs_.begin(); it != subs_.end(); ++it) {
-        sendSub_(it->second.param, true);
-    }
+    for (auto& [key, param] : subs_)
+        sendSub_(param, true);
 }
 
 void WrapClient::dispatch_(const uint8_t* payload, size_t length) {
-    rxDoc_.clear();
-    DeserializationError err = deserializeJson(rxDoc_, payload, length);
+    DynamicJsonDocument doc(4096);
+    DeserializationError err = deserializeJson(doc, payload, length);
     if (err) {
         logPrintf("WRAP", "JSON parse error: %s", err.c_str());
         return;
     }
 
-    const char* ap = rxDoc_["accessPoint"];
+    const char* ap = doc["accessPoint"];
     if (!ap) return;
 
-    const char* typeStr = rxDoc_["type"] | "?";
+    const char* typeStr = doc["type"] | "?";
     char type = typeStr[0];
 
-    for (auto it = subs_.begin(); it != subs_.end(); ++it) {
-        const WrapParam& p = it->second.param;
-        // accessPoint from server is "DEVICE/PROPERTY"
-        std::string expectedAp = p.device + "/" + p.property;
+    for (auto& [key, param] : subs_) {
+        std::string expectedAp = param.device + "/" + param.property;
         if (expectedAp != ap) continue;
 
         WrapMsg msg;
-        msg.key         = it->first;
+        msg.key         = key;
         msg.accessPoint = ap;
-        msg.selector    = rxDoc_["selector"] | "";
-        msg.timestamp   = rxDoc_["timestamp"] | 0UL;
+        msg.field       = param.field;
+        msg.selector    = doc["selector"] | "";
+        msg.timestamp   = doc["timestamp"] | 0UL;
         msg.type        = type;
 
         if (type == 'E') {
-            msg.error = rxDoc_["message"] | "";
+            msg.error = doc["message"] | "";
         } else {
-            msg.values = rxDoc_["values"];
+            msg.values = doc["values"];
         }
 
         if (callback_) callback_(msg);
@@ -180,7 +177,8 @@ bool WrapClient::httpPut_(const String& body) {
     }
 
     http.addHeader("Content-Type", "application/json");
-    int code = http.PUT(const_cast<String&>(body));
+    String mutableBody = body;
+    int code = http.PUT(mutableBody);
     http.end();
 
     if (code != 200) {

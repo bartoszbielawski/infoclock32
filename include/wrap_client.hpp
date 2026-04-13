@@ -27,6 +27,7 @@ struct WrapParam {
 struct WrapMsg {
     std::string      key;          ///< Matches WrapParam::key.
     std::string      accessPoint;  ///< "DEVICE/PROPERTY" as sent by the server.
+    std::string      field;        ///< The field name from the subscription.
     std::string      selector;
     unsigned long    timestamp;
     char             type;         ///< 'V'=value, 'C'=cycle-bound, 'E'=error.
@@ -96,15 +97,12 @@ public:
     bool connected();
 
 private:
-    struct Sub { WrapParam param; };
-
     std::string       host_;
     uint16_t          port_;
     std::string       rdaBase_;
     WrapCb            callback_;
     WebSocketsClient  ws_;
-    std::map<std::string, Sub> subs_;  // key → Sub
-    DynamicJsonDocument rxDoc_;
+    std::map<std::string, WrapParam> subs_;  // key → WrapParam
     bool              closed_;
 
     void connect_();
