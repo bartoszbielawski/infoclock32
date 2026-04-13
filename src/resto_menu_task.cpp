@@ -91,12 +91,15 @@ static bool withinWindow(int startHour, int endHour) {
 // ── fetch ────────────────────────────────────────────────────────────────────
 
 // Fetch and return deduplicated dish titles for one restaurant on a given date.
-static std::string fetchMenu(int restaurantCode, const std::string& dateStr) {
+static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
+                             const std::string& lang) {
     const char* restaurantId = codeToId(restaurantCode);
+    // API path language: "en" or "fr" (no Polish menu available).
+    const char* apiLang = (lang == "fr") ? "fr" : "en";
     char url[128];
     snprintf(url, sizeof(url),
-             "https://api.mynovae.ch/en/api/v2/salepoints/%s/menus/%s",
-             restaurantId, dateStr.c_str());
+             "https://api.mynovae.ch/%s/api/v2/salepoints/%s/menus/%s",
+             apiLang, restaurantId, dateStr.c_str());
 
     // novae_codes identifies your CERN group to the Novae API.
     // Set it via /edit or MQTT /config if the default is wrong.
@@ -130,11 +133,14 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr) {
         if (!service || strcmp(service, "midi") != 0) continue;
 
         JsonObject title = item["title"];
+        // Prefer the configured language, fall back to the other.
+        const char* pref = (lang == "fr") ? "fr" : "en";
+        const char* fall = (lang == "fr") ? "en" : "fr";
         const char* raw = nullptr;
-        if (title.containsKey("en") && title["en"].as<const char*>() && strlen(title["en"]))
-            raw = title["en"];
-        else if (title.containsKey("fr") && title["fr"].as<const char*>() && strlen(title["fr"]))
-            raw = title["fr"];
+        if (title.containsKey(pref) && title[pref].as<const char*>() && strlen(title[pref]))
+            raw = title[pref];
+        else if (title.containsKey(fall) && title[fall].as<const char*>() && strlen(title[fall]))
+            raw = title[fall];
         if (!raw) continue;
 
         std::string dish = stripSuffix(normalizeFrench(raw));
@@ -207,7 +213,8 @@ void resto_menu_task(void* pvParameters) {
             lastFetch   = time(nullptr);
             cachedMenus.clear();
             for (int code : codes) {
-                std::string menu = fetchMenu(code, fetchDate);
+                std::string lang = ds.get_value("language", "en");
+                std::string menu = fetchMenu(code, fetchDate, lang);
                 if (!menu.empty()) cachedMenus.push_back(menu);
             }
         }

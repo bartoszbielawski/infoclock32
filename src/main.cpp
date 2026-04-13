@@ -80,10 +80,15 @@ void displayClock(void *parameter)
       time_t now = time(nullptr);
       struct tm *timeinfo = localtime(&now);
 
-      static const char* const kDayNames[] = {
-        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-      };
-      const char* dayName = kDayNames[timeinfo->tm_wday];
+      static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+      static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
+      static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
+
+      std::string lang = dataStore.get_value("language", "en");
+      const char* const* dayNames = kDayNamesEn;
+      if (lang == "fr") dayNames = kDayNamesFr;
+      else if (lang == "pl") dayNames = kDayNamesPl;
+      const char* dayName = dayNames[timeinfo->tm_wday];
 
       char dateStr[16];
       snprintf(dateStr, sizeof(dateStr), "%s %02d/%02d",
