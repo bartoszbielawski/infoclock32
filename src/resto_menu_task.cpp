@@ -212,8 +212,8 @@ void resto_menu_task(void* pvParameters) {
             cachedDate  = fetchDate;
             lastFetch   = time(nullptr);
             cachedMenus.clear();
+            std::string lang = ds.get_value("language", "en");
             for (int code : codes) {
-                std::string lang = ds.get_value("language", "en");
                 std::string menu = fetchMenu(code, fetchDate, lang);
                 if (!menu.empty()) cachedMenus.push_back(menu);
             }
