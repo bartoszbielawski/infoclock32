@@ -22,6 +22,12 @@ void sendRow(const char* label, const char* value);
 // Serves the shared stylesheet with a long-lived cache header.
 void handle_style_css();
 
+// ── Status helpers ────────────────────────────────────────────────────────────
+// Populate character buffers for status display (uptime, heap, RSSI).
+void getStatusFields(char* uptime, size_t uptime_sz,
+                     char* heap, size_t heap_sz,
+                     char* rssi, size_t rssi_sz);
+
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 // check_auth_header() → true when no password is configured, or the submitted
 //                        password matches the "web_password" DataStore entry.

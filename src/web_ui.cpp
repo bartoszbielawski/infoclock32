@@ -56,6 +56,14 @@ textarea{width:100%;font-family:monospace;font-size:.85rem;padding:10px;
 .tag-info{background:#dbeafe;color:#1d4ed8}
 .tag-warn{background:#fef3c7;color:#92400e}
 .tag-err {background:#fee2e2;color:#991b1b}
+.meta{font-weight:400;color:#94a3b8;font-size:.85rem}
+.card-title{font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px}
+.form-input{width:100%;padding:8px 10px;border:1px solid #cbd5e1;
+            border-radius:6px;font-size:.9rem;margin-bottom:10px;
+            background:#fff;color:#1e293b}
+.flex-between{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.flex-between input{flex:1}
+.flex-between span{font-family:monospace;min-width:2ch}
 )css";
 
 static const char PAGE_FOOT[] PROGMEM =
@@ -72,6 +80,26 @@ void handle_style_css()
 {
     server.sendHeader("Cache-Control", "public, max-age=86400");
     server.send_P(200, "text/css", CSS);
+}
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+void getStatusFields(char* uptime, size_t uptime_sz,
+                     char* heap, size_t heap_sz,
+                     char* rssi, size_t rssi_sz)
+{
+    unsigned long ms = millis();
+    snprintf(uptime, uptime_sz, "%luh %lum %lus",
+             ms / 3600000UL, (ms % 3600000UL) / 60000UL, (ms % 60000UL) / 1000UL);
+
+    snprintf(heap, heap_sz, "%u KB  (%u B)",
+             (unsigned)esp_get_free_heap_size() / 1024,
+             (unsigned)esp_get_free_heap_size());
+
+    int rssiVal = WiFi.RSSI();
+    const char* quality = rssiVal >= -60 ? "excellent" : rssiVal >= -70 ? "good"
+                        : rssiVal >= -80 ? "fair" : "weak";
+    snprintf(rssi, rssi_sz, "%d dBm (%s)", rssiVal, quality);
 }
 
 // ── Layout helpers ────────────────────────────────────────────────────────────

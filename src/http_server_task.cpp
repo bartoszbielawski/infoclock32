@@ -22,21 +22,8 @@ void handle_update_upload();
 
 void handle_home()
 {
-    unsigned long ms = millis();
-    char uptime[32];
-    snprintf(uptime, sizeof(uptime), "%luh %lum %lus",
-             ms / 3600000UL, (ms % 3600000UL) / 60000UL, (ms % 60000UL) / 1000UL);
-
-    char heap[24];
-    snprintf(heap, sizeof(heap), "%u KB (%u B)",
-             (unsigned)esp_get_free_heap_size() / 1024,
-             (unsigned)esp_get_free_heap_size());
-
-    char rssiStr[20];
-    int rssi = WiFi.RSSI();
-    const char* quality = rssi >= -60 ? "excellent" : rssi >= -70 ? "good"
-                        : rssi >= -80 ? "fair" : "weak";
-    snprintf(rssiStr, sizeof(rssiStr), "%d dBm (%s)", rssi, quality);
+    char uptime[32], heap[24], rssiStr[20];
+    getStatusFields(uptime, sizeof(uptime), heap, sizeof(heap), rssiStr, sizeof(rssiStr));
 
     auto& ds = DataStore::getInstance();
     std::string mqttServer = ds.get_value("mqtt_server", "");
@@ -55,7 +42,7 @@ void handle_home()
     snprintf(brightStr, sizeof(brightStr), "%d",
              ds.get_value<int>("brightness", 7));
 
-    sendPageHead("Home", "<meta http-equiv='refresh' content='30'>");
+    sendPageHead("Home");
     sendPageNav("/");
 
     server.sendContent_P(PSTR("<h2>&#9881;&#65039; Device status</h2>"
@@ -64,46 +51,57 @@ void handle_home()
     sendRow("IP address", WiFi.localIP().toString().c_str());
     sendRow("Hostname",   WiFi.getHostname());
     sendRow("SSID",       WiFi.SSID().c_str());
-    sendRow("Signal",     rssiStr);
-    server.sendContent_P(PSTR("<tr><th colspan='2'>&#128421;&#65039; System</th></tr>"));
+    server.sendContent_P(PSTR("<tr><td class='label'>Signal</td><td id='rssi'>"));
+    server.sendContent(rssiStr);
+    server.sendContent_P(PSTR("</td></tr>\n<tr><th colspan='2'>&#128421;&#65039; System</th></tr>"));
     sendRow("Firmware",   APP_VERSION " &bull; built " BUILD_DATE);
-    sendRow("Uptime",     uptime);
-    sendRow("Free heap",  heap);
+    server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
+    server.sendContent(uptime);
+    server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));
+    server.sendContent(heap);
+    server.sendContent_P(PSTR("</td></tr>\n"));
     sendRow("Chip",       ESP.getChipModel());
-    server.sendContent_P(PSTR("<tr><th colspan='2'>&#128225; MQTT</th></tr>"));
-    sendRow("Status",     mqttStatus);
+    server.sendContent_P(PSTR("<tr><th colspan='2'>&#128225; MQTT</th></tr>"
+                               "<tr><td class='label'>Status</td><td id='mqtt'>"));
+    server.sendContent(mqttStatus);
+    server.sendContent_P(PSTR("</td></tr>\n"));
     server.sendContent_P(PSTR("</table>"
                                "<h2>&#9889;&#65039; Actions</h2>"
                                "<div class='card'>"
-                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-                               "&#128172; Push message</h3>"
+                               "<h3 class='card-title'>&#128172; Push message</h3>"
                                "<form method='POST' action='/actions'>"
                                "<input type='hidden' name='action' value='push'>"
                                "<input name='message' type='text' placeholder='Message to scroll&hellip;' "
-                               "style='width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;"
-                               "font-size:.9rem;margin-bottom:10px;background:#fff;color:#1e293b'>"
+                               "class='form-input'>"
                                "<button class='btn btn-primary' type='submit'>&#9654; Send</button>"
                                "</form></div>"
                                "<div class='card'>"
-                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
-                               "&#9728;&#65039; Brightness (0&ndash;15)</h3>"
+                               "<h3 class='card-title'>&#9728;&#65039; Brightness (0&ndash;15)</h3>"
                                "<form method='POST' action='/actions'>"
                                "<input type='hidden' name='action' value='brightness'>"
-                               "<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px'>"
+                               "<div class='flex-between'>"
                                "<input name='level' type='range' min='0' max='15' value='"));
     server.sendContent(brightStr);
-    server.sendContent_P(PSTR("' style='flex:1' oninput='this.nextElementSibling.textContent=this.value'>"
-                               "<span style='font-family:monospace;min-width:2ch'>"));
+    server.sendContent_P(PSTR("' oninput='this.nextElementSibling.textContent=this.value'>"
+                               "<span>"));
     server.sendContent(brightStr);
     server.sendContent_P(PSTR("</span></div>"
                                "<button class='btn btn-primary' type='submit'>Set</button>"
                                "</form></div>"
                                "<div class='card'>"
-                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+                               "<h3 class='card-title'>"
                                "&#128260; Reboot</h3>"
                                "<form method='POST' action='/reboot'>"
                                "<button class='btn btn-danger' type='submit'>Reboot device</button>"
-                               "</form></div>"));
+                               "</form></div>"
+                               "<script>"
+                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
+                               "startPolling('/api/status',5000,function(d){"
+                               "document.getElementById('uptime').textContent=d.uptime;"
+                               "document.getElementById('heap').textContent=d.heap;"
+                               "document.getElementById('rssi').textContent=d.rssi;"
+                               "});"
+                               "</script>"));
     sendPageFoot();
 }
 
@@ -111,62 +109,60 @@ void handle_home()
 
 void handle_status()
 {
-    unsigned long ms = millis();
-    char uptime[32];
-    snprintf(uptime, sizeof(uptime), "%luh %lum %lus",
-             ms / 3600000UL, (ms % 3600000UL) / 60000UL, (ms % 60000UL) / 1000UL);
+    char uptime[32], heap[24], rssiStr[20];
+    getStatusFields(uptime, sizeof(uptime), heap, sizeof(heap), rssiStr, sizeof(rssiStr));
 
-    char heap[24];
-    snprintf(heap, sizeof(heap), "%u KB  (%u B)",
-             (unsigned)esp_get_free_heap_size() / 1024,
-             (unsigned)esp_get_free_heap_size());
-
-    char rssiStr[20];
-    int rssi = WiFi.RSSI();
-    const char* quality = rssi >= -60 ? "excellent" : rssi >= -70 ? "good"
-                        : rssi >= -80 ? "fair" : "weak";
-    snprintf(rssiStr, sizeof(rssiStr), "%d dBm (%s)", rssi, quality);
-
-    sendPageHead("Status", "<meta http-equiv='refresh' content='10'>");
+    sendPageHead("Status");
     sendPageNav("/status");
     server.sendContent_P(PSTR("<h2>Device status</h2><table>"
                                "<tr><th colspan='2'>&#127760; Network</th></tr>"));
     sendRow("IP address",  WiFi.localIP().toString().c_str());
     sendRow("Hostname",    WiFi.getHostname());
     sendRow("SSID",        WiFi.SSID().c_str());
-    sendRow("Signal",      rssiStr);
+    server.sendContent_P(PSTR("<tr><td class='label'>Signal</td><td id='rssi'>"));
+    server.sendContent(rssiStr);
+    server.sendContent_P(PSTR("</td></tr>\n"));
     sendRow("MAC address", WiFi.macAddress().c_str());
     server.sendContent_P(PSTR("<tr><th colspan='2'>&#9881;&#65039; System</th></tr>"));
     sendRow("Firmware",    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME);
-    sendRow("Uptime",      uptime);
-    sendRow("Free heap",   heap);
+    server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
+    server.sendContent(uptime);
+    server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));
+    server.sendContent(heap);
+    server.sendContent_P(PSTR("</td></tr>\n"));
     sendRow("Chip",        ESP.getChipModel());
 
     auto rtSnap = RuntimeStore::getInstance().snapshot();
     if (!rtSnap.empty())
     {
         server.sendContent_P(PSTR("<tr><th colspan='2'>&#9889;&#65039; Runtime values</th></tr>"));
-        for (const auto& kv : rtSnap)
-            sendRow(kv.first.c_str(), kv.second.c_str());
+        for (const auto& kv : rtSnap) {
+            server.sendContent_P(PSTR("<tr><td class='label'>"));
+            server.sendContent(kv.first.c_str());
+            server.sendContent_P(PSTR("</td><td id='rt-"));
+            server.sendContent(kv.first.c_str());
+            server.sendContent_P(PSTR("'>"));
+            server.sendContent(kv.second.c_str());
+            server.sendContent_P(PSTR("</td></tr>\n"));
+        }
     }
 
-    server.sendContent_P(PSTR("</table>"));
+    server.sendContent_P(PSTR("</table>"
+                               "<script>"
+                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
+                               "startPolling('/api/status',5000,function(d){"
+                               "document.getElementById('uptime').textContent=d.uptime;"
+                               "document.getElementById('heap').textContent=d.heap;"
+                               "document.getElementById('rssi').textContent=d.rssi;"
+                               "});"
+                               "startPolling('/api/runtime',5000,function(d){"
+                               "for(let k in d.entries){let e=document.getElementById('rt-'+k);e&&(e.textContent=d.entries[k])}"
+                               "});"
+                               "</script>"));
     sendPageFoot();
 }
 
 // ── /log ──────────────────────────────────────────────────────────────────────
-
-// Polling script: reads _logSince (set in the page head) and appends new rows
-// every 3 s without reloading the page.
-static const char LOG_POLL_JS[] PROGMEM = R"js(<script>(function(){
-function p(){fetch('/log/entries?since='+_logSince).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){
-if(d.entries)d.entries.forEach(function(e){
-var t=document.querySelector('table'),r=t.insertRow(1);
-var c0=r.insertCell(0);c0.className='mono';c0.style.whiteSpace='nowrap';c0.textContent=e.ts;
-var c1=r.insertCell(1);var s=document.createElement('span');s.className='tag tag-info';s.textContent=e.tag;c1.appendChild(s);
-var c2=r.insertCell(2);c2.className='mono';c2.textContent=e.msg;});
-if(d.seq!==undefined)_logSince=d.seq;}).catch(function(){}).then(function(){setTimeout(p,3000);});}
-p();})();</script>)js";
 
 void handle_log()
 {
@@ -180,7 +176,7 @@ void handle_log()
     sendPageNav("/log");
     server.sendContent_P(PSTR("<h2>Log <small style='font-weight:400;color:#94a3b8'>"
                                "(newest first, last 40 entries, live)</small></h2>"
-                               "<table><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
+                               "<table id='log-table'><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
 
     const auto& history = getLogHistory();
     for (auto it = history.rbegin(); it != history.rend(); ++it)
@@ -207,8 +203,21 @@ void handle_log()
         }
     }
 
-    server.sendContent_P(PSTR("</table>"));
-    server.sendContent_P(LOG_POLL_JS);
+    server.sendContent_P(PSTR("</table>"
+                               "<script>"
+                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
+                               "startPolling('/log/entries?since='+_logSince,3000,function(d){"
+                               "if(!d.entries||0===d.entries.length)return;"
+                               "var t=document.getElementById('log-table');"
+                               "d.entries.forEach(function(e){"
+                               "var o=t.insertRow(1);"
+                               "var l=o.insertCell(0);l.className='mono',l.style.whiteSpace='nowrap',l.textContent=e.ts;"
+                               "var n=o.insertCell(1),a=document.createElement('span');a.className='tag tag-info',a.textContent=e.tag,n.appendChild(a);"
+                               "var s=o.insertCell(2);s.className='mono',s.textContent=e.msg"
+                               "}),"
+                               "_logSince=d.seq"
+                               "});"
+                               "</script>"));
     sendPageFoot();
 }
 
@@ -246,7 +255,7 @@ static void handle_log_entries()
     const auto& history = getLogHistory();
 
     // Static buffer avoids heap allocation on every 3-second poll.
-    static char jsonBuf[2048];
+    static char jsonBuf[1024];
     size_t pos = 0;
 
     pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos,
@@ -372,6 +381,64 @@ void handle_reboot()
     ESP.restart();
 }
 
+// ── /api/status ───────────────────────────────────────────────────────────────
+
+void handle_api_status()
+{
+    if (!is_authenticated()) {
+        server.send(401, "application/json", "{\"error\":\"unauthorized\"}");
+        return;
+    }
+
+    char uptime[32], heap[24], rssi[20];
+    getStatusFields(uptime, sizeof(uptime), heap, sizeof(heap), rssi, sizeof(rssi));
+
+    std::string mqttServer = DataStore::getInstance().get_value("mqtt_server", "");
+    bool mqttConnected = !mqttServer.empty() && mqtt_is_connected();
+
+    char json[512];
+    snprintf(json, sizeof(json),
+        "{\"uptime\":\"%s\",\"heap\":\"%s\",\"rssi\":\"%s\","
+        "\"ip\":\"%s\",\"hostname\":\"%s\",\"ssid\":\"%s\","
+        "\"mqtt\":%s,\"firmware\":\"" APP_VERSION "\",\"chip\":\"%s\"}",
+        uptime, heap, rssi,
+        WiFi.localIP().toString().c_str(),
+        WiFi.getHostname(),
+        WiFi.SSID().c_str(),
+        mqttConnected ? "true" : "false",
+        ESP.getChipModel());
+
+    server.send(200, "application/json", json);
+}
+
+// ── /api/runtime ──────────────────────────────────────────────────────────────
+
+void handle_api_runtime()
+{
+    if (!is_authenticated()) {
+        server.send(401, "application/json", "{\"error\":\"unauthorized\"}");
+        return;
+    }
+
+    auto rtSnap = RuntimeStore::getInstance().snapshot();
+
+    char json[1024];
+    snprintf(json, sizeof(json), "{\"entries\":{");
+
+    bool first = true;
+    for (const auto& kv : rtSnap) {
+        if (!first) strcat(json, ",");
+        snprintf(json + strlen(json), sizeof(json) - strlen(json),
+                 "\"%s\":\"%s\"", kv.first.c_str(), kv.second.c_str());
+        first = false;
+        // Safety: stop if we're near buffer limit
+        if (strlen(json) + 256 >= sizeof(json)) break;
+    }
+    strcat(json, "}}");
+
+    server.send(200, "application/json", json);
+}
+
 // ── Server task / routing ─────────────────────────────────────────────────────
 
 void web_server_task(void* pvParameters)
@@ -384,6 +451,8 @@ void web_server_task(void* pvParameters)
     server.on("/reboot",  HTTP_POST, handle_reboot);
     server.on("/log",         HTTP_GET,  handle_log);
     server.on("/log/entries", HTTP_GET,  handle_log_entries);
+    server.on("/api/status",  HTTP_GET, handle_api_status);
+    server.on("/api/runtime", HTTP_GET, handle_api_runtime);
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
     server.on("/update",  HTTP_GET,  handle_update_get);
