@@ -168,15 +168,11 @@ void handle_log()
 {
     if (!is_authenticated()) return;
 
-    // Embed the current high-water seq so the first poll only fetches new entries.
-    char extraHead[64];
-    snprintf(extraHead, sizeof(extraHead), "<script>var _logSince=%u;</script>", getLogSeq());
-
-    sendPageHead("Log", extraHead);
+    sendPageHead("Log", "<meta http-equiv='refresh' content='5'>");
     sendPageNav("/log");
     server.sendContent_P(PSTR("<h2>Log <small style='font-weight:400;color:#94a3b8'>"
-                               "(newest first, last 40 entries, live)</small></h2>"
-                               "<table id='log-table'><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
+                               "(newest first, last 40 entries, auto-refresh 5s)</small></h2>"
+                               "<table><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
 
     const auto& history = getLogHistory();
     for (auto it = history.rbegin(); it != history.rend(); ++it)
@@ -203,21 +199,7 @@ void handle_log()
         }
     }
 
-    server.sendContent_P(PSTR("</table>"
-                               "<script>"
-                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
-                               "startPolling('/log/entries?since='+_logSince,3000,function(d){"
-                               "if(!d.entries||0===d.entries.length)return;"
-                               "var t=document.getElementById('log-table');"
-                               "d.entries.forEach(function(e){"
-                               "var o=t.insertRow(1);"
-                               "var l=o.insertCell(0);l.className='mono',l.style.whiteSpace='nowrap',l.textContent=e.ts;"
-                               "var n=o.insertCell(1),a=document.createElement('span');a.className='tag tag-info',a.textContent=e.tag,n.appendChild(a);"
-                               "var s=o.insertCell(2);s.className='mono',s.textContent=e.msg"
-                               "}),"
-                               "_logSince=d.seq"
-                               "});"
-                               "</script>"));
+    server.sendContent_P(PSTR("</table>"));
     sendPageFoot();
 }
 
@@ -240,63 +222,49 @@ static void jsonAppendEscaped(char* buf, size_t cap, size_t& pos, const String& 
     }
 }
 
-// GET /log/entries?since=N
-// Returns JSON: {"seq":N,"entries":[{"seq":N,"ts":"...","tag":"...","msg":"..."},...]}
-// Entries with seq > since, ordered oldest-first so the browser can insertRow(1) each
-// one and the newest naturally lands at the top of the table.
+// GET /log/entries — returns JSON {"entries":[{"ts":"...","tag":"...","msg":"..."},...]}
+// Newest entry first (matches the initial HTML render order).
+// Streams one entry at a time so there is no fixed buffer size limit.
 static void handle_log_entries()
 {
     if (!is_authenticated()) return;
 
-    uint32_t since = server.hasArg("since")
-                     ? (uint32_t)server.arg("since").toInt()
-                     : 0;
-
     const auto& history = getLogHistory();
 
-    // Static buffer avoids heap allocation on every 3-second poll.
-    static char jsonBuf[1024];
-    size_t pos = 0;
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    server.sendContent("{\"entries\":[");
 
-    pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos,
-                    "{\"seq\":%u,\"entries\":[", getLogSeq());
-
+    char entryBuf[600]; // sized for worst-case single entry (see comment in jsonAppendEscaped)
     bool first = true;
-    for (const auto& entry : history) {
-        if (entry.seq <= since) continue;
-        // Stop if buffer is too full to safely write another entry
-        if (pos + 64 >= sizeof(jsonBuf)) break;
 
-        const String& line = entry.line;
+    for (auto it = history.rbegin(); it != history.rend(); ++it) {
+        const String& line = it->line;
         int tagOpen  = line.indexOf('[');
         int tagClose = line.indexOf(']');
 
-        if (!first) jsonBuf[pos++] = ',';
+        size_t pos = 0;
+        if (!first) entryBuf[pos++] = ',';
         first = false;
 
-        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos,
-                        "{\"seq\":%u,\"ts\":\"", entry.seq);
+        pos += snprintf(entryBuf + pos, sizeof(entryBuf) - pos, "{\"ts\":\"");
         if (tagOpen > 1)
-            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+            jsonAppendEscaped(entryBuf, sizeof(entryBuf), pos,
                               line.substring(0, tagOpen - 1));
-        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\",\"tag\":\"");
+        pos += snprintf(entryBuf + pos, sizeof(entryBuf) - pos, "\",\"tag\":\"");
         if (tagOpen >= 0 && tagClose > tagOpen)
-            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+            jsonAppendEscaped(entryBuf, sizeof(entryBuf), pos,
                               line.substring(tagOpen + 1, tagClose));
-        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\",\"msg\":\"");
+        pos += snprintf(entryBuf + pos, sizeof(entryBuf) - pos, "\",\"msg\":\"");
         if (tagClose >= 0)
-            jsonAppendEscaped(jsonBuf, sizeof(jsonBuf), pos,
+            jsonAppendEscaped(entryBuf, sizeof(entryBuf), pos,
                               line.substring(tagClose + 2));
-        pos += snprintf(jsonBuf + pos, sizeof(jsonBuf) - pos, "\"}");
+        pos += snprintf(entryBuf + pos, sizeof(entryBuf) - pos, "\"}");
+
+        server.sendContent(entryBuf);
     }
 
-    if (pos + 3 < sizeof(jsonBuf)) {
-        jsonBuf[pos++] = ']';
-        jsonBuf[pos++] = '}';
-        jsonBuf[pos]   = '\0';
-    }
-
-    server.send(200, "application/json", jsonBuf);
+    server.sendContent("]}");
 }
 
 // ── /edit ─────────────────────────────────────────────────────────────────────
