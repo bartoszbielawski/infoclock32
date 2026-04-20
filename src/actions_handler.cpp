@@ -151,6 +151,20 @@ void handle_actions()
                 result = "&#9888;&#65039; Timezone string must not be empty.";
             }
         }
+        else if (action == "reset_display")
+        {
+            if (rmd.make_access_request())
+            {
+                auto& matrix = rmd.getResourceRef();
+                matrix.begin();
+                int level = DataStore::getInstance().get_value<int>("brightness", 7);
+                matrix.setIntensity((uint8_t)level);
+                rmd.release_access();
+                result = "&#10003; Display reset.";
+                logPrintf("WEB", "display reset via /actions");
+            }
+            else { result = "&#9888; Display busy &mdash; try again."; }
+        }
         else if (action == "password")
         {
             String pw = server.arg("web_password");
@@ -330,6 +344,17 @@ void handle_actions()
                                " style='width:100%;padding:6px 8px;border:1px solid #cbd5e1;"
                                "border-radius:6px;font-size:.9rem;margin-bottom:10px;box-sizing:border-box'>"
                                "<button class='btn btn-primary' type='submit'>Set password</button>"
+                               "</form></div>"));
+
+    // Reset display
+    server.sendContent_P(PSTR("<div class='card'>"
+                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+                               "&#128165; Reset display</h3>"
+                               "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+                               "Re-initialises the MAX7219 chip. Use if the display looks glitched.</p>"
+                               "<form method='POST'>"
+                               "<input type='hidden' name='action' value='reset_display'>"
+                               "<button class='btn btn-primary' type='submit'>Reset display</button>"
                                "</form></div>"));
 
     // Reboot
