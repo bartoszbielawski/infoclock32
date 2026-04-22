@@ -87,5 +87,27 @@ const std::deque<LogEntry> &getLogHistory()
 
 uint32_t getLogSeq()
 {
-    return logHistory.empty() ? 0 : logHistory.back().seq;
+    if (!logMutex) return logHistory.empty() ? 0 : logHistory.back().seq;
+    uint32_t seq = 0;
+    if (xSemaphoreTake(logMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        seq = logHistory.empty() ? 0 : logHistory.back().seq;
+        xSemaphoreGive(logMutex);
+    }
+    return seq;
+}
+
+uint32_t copyLogEntriesSince(uint32_t since, std::vector<LogEntry>& out)
+{
+    if (!logMutex) return 0;
+    uint32_t seq = 0;
+    if (xSemaphoreTake(logMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        seq = logHistory.empty() ? 0 : logHistory.back().seq;
+        // Iterate newest-first; seq is monotonically increasing so break early.
+        for (auto it = logHistory.rbegin(); it != logHistory.rend(); ++it) {
+            if (it->seq <= since) break;
+            out.push_back(*it);
+        }
+        xSemaphoreGive(logMutex);
+    }
+    return seq;
 }

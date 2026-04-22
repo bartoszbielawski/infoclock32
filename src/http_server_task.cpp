@@ -95,8 +95,8 @@ void handle_home()
                                "<button class='btn btn-danger' type='submit'>Reboot device</button>"
                                "</form></div>"
                                "<script>"
-                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
-                               "startPolling('/api/status',5000,function(d){"
+                               "function startPolling(e,t,o){let l=t,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=t}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
+                               "startPolling('/api/status',2000,function(d){"
                                "document.getElementById('uptime').textContent=d.uptime;"
                                "document.getElementById('heap').textContent=d.heap;"
                                "document.getElementById('rssi').textContent=d.rssi;"
@@ -149,13 +149,13 @@ void handle_status()
 
     server.sendContent_P(PSTR("</table>"
                                "<script>"
-                               "function startPolling(e,t,o){let l=500,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=500}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
-                               "startPolling('/api/status',5000,function(d){"
+                               "function startPolling(e,t,o){let l=t,n=async function(){try{let s=await fetch(e);if(!s.ok)throw new Error(s.status);o(await s.json()),l=t}catch(e){l=Math.min(1.5*l,3e4)}setTimeout(n,l)};n()}"
+                               "startPolling('/api/status',2000,function(d){"
                                "document.getElementById('uptime').textContent=d.uptime;"
                                "document.getElementById('heap').textContent=d.heap;"
                                "document.getElementById('rssi').textContent=d.rssi;"
                                "});"
-                               "startPolling('/api/runtime',5000,function(d){"
+                               "startPolling('/api/runtime',2000,function(d){"
                                "for(let k in d.entries){let e=document.getElementById('rt-'+k);e&&(e.textContent=d.entries[k])}"
                                "});"
                                "</script>"));
@@ -168,11 +168,17 @@ void handle_log()
 {
     if (!is_authenticated()) return;
 
-    sendPageHead("Log", "<meta http-equiv='refresh' content='5'>");
+    char seqAttr[32];
+    snprintf(seqAttr, sizeof(seqAttr), "%u", getLogSeq());
+
+    sendPageHead("Log", "");
     sendPageNav("/log");
     server.sendContent_P(PSTR("<h2>Log <small style='font-weight:400;color:#94a3b8'>"
-                               "(newest first, last 40 entries, auto-refresh 5s)</small></h2>"
-                               "<table><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>\n"));
+                               "(newest first, last 40 entries, live)</small></h2>"
+                               "<table><tr><th>Timestamp</th><th>Tag</th><th>Message</th></tr>"
+                               "<tbody id='log-body' data-seq='"));
+    server.sendContent(seqAttr);
+    server.sendContent_P(PSTR("'>\n"));
 
     const auto& history = getLogHistory();
     for (auto it = history.rbegin(); it != history.rend(); ++it)
@@ -199,7 +205,29 @@ void handle_log()
         }
     }
 
-    server.sendContent_P(PSTR("</table>"));
+    server.sendContent_P(PSTR("</tbody></table>"
+        "<script>"
+        "setInterval(function(){"
+          "var tb=document.getElementById('log-body');"
+          "if(!tb)return;"
+          "var since=tb.dataset.seq||0;"
+          "fetch('/log/entries?since='+since,{credentials:'include'})"
+          ".then(function(r){return r.ok?r.json():null;})"
+          ".then(function(d){"
+            "if(!d)return;"
+            "if(d.seq)tb.dataset.seq=d.seq;"
+            "if(!d.entries||!d.entries.length)return;"
+            "d.entries.forEach(function(e){"
+              "var tr=document.createElement('tr');"
+              "tr.innerHTML=\"<td class='mono' style='white-space:nowrap'>\"+e.ts+"
+                "\"</td><td><span class='tag tag-info'>\"+e.tag+"
+                "\"</span></td><td class='mono'>\"+e.msg+\"</td>\";"
+              "tb.insertBefore(tr,tb.firstChild);"
+            "});"
+            "while(tb.rows.length>40)tb.lastElementChild.remove();"
+          "});"
+        "},5000);"
+        "</script>"));
     sendPageFoot();
 }
 
@@ -210,36 +238,50 @@ void handle_log()
 static void jsonAppendEscaped(char* buf, size_t cap, size_t& pos, const String& s)
 {
     for (unsigned i = 0; i < s.length(); ++i) {
-        // Reserve space for longest escape sequence (2 chars) + null terminator
-        if (pos + 3 >= cap) return;
+        // Reserve space for longest escape sequence (\uXXXX = 6 chars) + null terminator
+        if (pos + 7 >= cap) return;
         char c = s[i];
         if      (c == '"')  { buf[pos++] = '\\'; buf[pos++] = '"';  }
         else if (c == '\\') { buf[pos++] = '\\'; buf[pos++] = '\\'; }
         else if (c == '\n') { buf[pos++] = '\\'; buf[pos++] = 'n';  }
         else if (c == '\r') { buf[pos++] = '\\'; buf[pos++] = 'r';  }
         else if (c == '\t') { buf[pos++] = '\\'; buf[pos++] = 't';  }
+        else if ((unsigned char)c < 0x20) {
+            pos += snprintf(buf + pos, cap - pos, "\\u%04x", (unsigned char)c);
+        }
         else                  buf[pos++] = c;
     }
 }
 
-// GET /log/entries — returns JSON {"entries":[{"ts":"...","tag":"...","msg":"..."},...]}
+// GET /log/entries[?since=<seq>] — returns JSON {"seq":N,"entries":[{"ts":"...","tag":"...","msg":"..."},...]}
 // Newest entry first (matches the initial HTML render order).
+// When ?since=N is given, only entries with seq > N are returned (delta polling).
 // Streams one entry at a time so there is no fixed buffer size limit.
 static void handle_log_entries()
 {
     if (!is_authenticated()) return;
 
-    const auto& history = getLogHistory();
+    uint32_t since = 0;
+    if (server.hasArg("since"))
+        since = (uint32_t)server.arg("since").toInt();
 
+    // Copy relevant entries under mutex so the HTTP task sees updates from other cores.
+    std::vector<LogEntry> entries;
+    uint32_t currentSeq = copyLogEntriesSince(since, entries);
+
+    server.sendHeader("Cache-Control", "no-store");
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "application/json", "");
-    server.sendContent("{\"entries\":[");
+
+    char seqBuf[32];
+    snprintf(seqBuf, sizeof(seqBuf), "{\"seq\":%u,\"entries\":[", currentSeq);
+    server.sendContent(seqBuf);
 
     char entryBuf[600]; // sized for worst-case single entry (see comment in jsonAppendEscaped)
     bool first = true;
 
-    for (auto it = history.rbegin(); it != history.rend(); ++it) {
-        const String& line = it->line;
+    for (const auto& entry : entries) {
+        const String& line = entry.line;
         int tagOpen  = line.indexOf('[');
         int tagClose = line.indexOf(']');
 
