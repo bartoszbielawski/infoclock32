@@ -31,9 +31,7 @@ night_end=07:00
 night_brightness=1
 
 # ── OTA updates ──────────────────────────────────────────────────────────────
-# Set enable_ota=0 to disable the OTA task entirely
-enable_ota=1
-# Password required for OTA uploads. Leave blank to allow unauthenticated OTA.
+# Set a password to enable OTA firmware updates. Leave blank to disable OTA entirely.
 ota_password=
 
 # ── Web UI ────────────────────────────────────────────────────────────────────

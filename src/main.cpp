@@ -2,7 +2,6 @@
 
 #include <pins.hpp>
 
-#include <create_tasks.h>
 #include <hardware_init.h>
 #include <resource_manager.hpp>
 
@@ -156,9 +155,10 @@ void setup() {
   // Must happen before WiFi auto-connect logic in hardware_init().
   dataStore.load_from_file("/config.txt");
 
+  pinMode(LED_BLINK_PIN, OUTPUT);
+
   // Initialize board/network and core task infrastructure
   hardware_init();
-  create_tasks();
 
   // Configure SNTP time sources (UTC base; timezone handled separately)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -235,10 +235,10 @@ void setup() {
   xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
 
 
-  if (dataStore.get_value<int>("enable_ota", 1))
+  if (!dataStore.get_value("ota_password", "").empty())
     xTaskCreate(ota_task, "OTATask", 4096, nullptr, 2, nullptr);
   else
-    logPrintf("SYS", "OTATask disabled (enable_ota=0)");
+    logPrintf("SYS", "OTATask disabled (ota_password not set)");
 
   // Optional restaurant menu task
   if (dataStore.get_value<int>("enable_resto", 1))
@@ -251,7 +251,11 @@ void setup() {
   //by this time we should have received the correct time from NTP, so we can scroll the date to verify that timezone is applied correctly
 }
 
-// Arduino main loop is unused; FreeRTOS tasks do the work.
+// loopTask is a real FreeRTOS task so vTaskDelay yields properly here.
 void loop()
 {
+  digitalWrite(LED_BLINK_PIN, HIGH);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  digitalWrite(LED_BLINK_PIN, LOW);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
