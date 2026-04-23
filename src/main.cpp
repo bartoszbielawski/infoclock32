@@ -117,11 +117,6 @@ void displayClock(void *parameter)
 
 // Utility: list files in a LittleFS directory over serial output
 void listFiles(const char* dirname) {
-  if (!LittleFS.begin()) {
-    Serial.println("An Error has occurred while mounting LittleFS");
-    return;
-  }
-
   File root = LittleFS.open(dirname);
   if (!root) {
     Serial.println("Failed to open directory");
@@ -142,7 +137,6 @@ void listFiles(const char* dirname) {
   }
 
   root.close();
-  LittleFS.end();
   Serial.println("End of file list");
 }
 
@@ -153,6 +147,8 @@ void setup() {
   // On standalone boot (no PC connected) this times out and continues normally.
   { unsigned long t = millis(); while (!Serial && millis() - t < 2000) delay(10); }
 #endif
+
+  LittleFS.begin(true);
 
   // Load persisted config first (hostname/timezone/task toggles, etc.)
   // Must happen before WiFi auto-connect logic in hardware_init().

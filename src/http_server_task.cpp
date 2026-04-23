@@ -317,8 +317,6 @@ void handle_file_edit()
 {
     if (!is_authenticated()) return;
 
-    LittleFS.begin(true);
-
     if (server.method() == HTTP_GET)
     {
         File file = LittleFS.open(FILENAME, "r");
@@ -433,18 +431,19 @@ void handle_api_runtime()
     auto rtSnap = RuntimeStore::getInstance().snapshot();
 
     char json[1024];
-    snprintf(json, sizeof(json), "{\"entries\":{");
+    size_t pos = 0;
+    pos += snprintf(json + pos, sizeof(json) - pos, "{\"entries\":{");
 
     bool first = true;
     for (const auto& kv : rtSnap) {
-        if (!first) strcat(json, ",");
-        snprintf(json + strlen(json), sizeof(json) - strlen(json),
-                 "\"%s\":\"%s\"", kv.first.c_str(), kv.second.c_str());
+        if (sizeof(json) - pos < 300) break;
+        pos += snprintf(json + pos, sizeof(json) - pos,
+                        "%s\"%s\":\"%s\"",
+                        first ? "" : ",",
+                        kv.first.c_str(), kv.second.c_str());
         first = false;
-        // Safety: stop if we're near buffer limit
-        if (strlen(json) + 256 >= sizeof(json)) break;
     }
-    strcat(json, "}}");
+    snprintf(json + pos, sizeof(json) - pos, "}}");
 
     server.send(200, "application/json", json);
 }

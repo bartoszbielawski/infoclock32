@@ -25,8 +25,6 @@ public:
 
     void load_from_file(const std::string& filename)
     {
-        LittleFS.begin(true);
-
         File file = LittleFS.open(filename.c_str(), "r");
         if (!file) {
             Serial.println("Failed to open file for reading");
@@ -67,9 +65,8 @@ public:
             Serial.printf("Loaded key: %s, value: %s\n", key.c_str(), value.c_str());
         }
         file.close();
-        LittleFS.end();
     }
-   
+
     void set_value(const std::string& key, const std::string& value)
     {
         data[key] = value;
@@ -92,13 +89,11 @@ public:
 
     void save_to_file(const std::string& filename)
     {
-        LittleFS.begin(true);
         File file = LittleFS.open(filename.c_str(), "w");
         if (!file) return;
         for (const auto& kv : data)
             file.printf("%s=%s\n", kv.first.c_str(), kv.second.c_str());
         file.close();
-        LittleFS.end();
     }
 
     // Typed overload: delegates to parse_value(). Supported: int, long, float.
