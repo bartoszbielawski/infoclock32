@@ -73,6 +73,38 @@ syslog_server=
 # ── Temperature sensor ───────────────────────────────────────────────────────
 # Poll interval in seconds
 temp_interval=30
+#
+# I2C pin assignments (SDA / SCL) by board:
+#   ESP32-C3 SuperMini : SDA=GPIO1,  SCL=GPIO0
+#   ESP32-S2 Saola-1   : SDA=GPIO8,  SCL=GPIO9
+#   ESP32-S3 DevKitC-1 : SDA=GPIO8,  SCL=GPIO9
+#   ESP32 DevKit v1    : SDA=GPIO21, SCL=GPIO22
+#
+# Set temp_sensor to one of the supported drivers (default: stub = disabled).
+# Uncomment the block that matches your hardware.
+#
+# BMP180 (I2C, fixed address 0x77, temperature + pressure):
+#temp_sensor=bmp180
+#
+# BMP280 (I2C, temperature + pressure — no humidity):
+#temp_sensor=bmp280
+#bmp280_addr=0x76   ; alt address: 0x77
+#
+# BME280 (I2C, temperature + humidity + pressure):
+#temp_sensor=bme280
+#bme280_addr=0x76   ; alt address: 0x77
+#
+# SHT31 (I2C, temperature + humidity):
+#temp_sensor=sht31
+#sht31_addr=0x44    ; alt address: 0x45
+#
+# AHT10 / AHT20 (I2C, temperature + humidity, fixed address 0x38):
+#temp_sensor=aht10
+#temp_sensor=aht20
+#
+# DS18B20 (1-Wire, temperature only):
+#temp_sensor=ds18b20
+#ds18b20_pin=4      ; GPIO pin connected to the data line (default GPIO4)
 
 # ── Custom messages ───────────────────────────────────────────────────────────
 # How often to cycle through messages (seconds)

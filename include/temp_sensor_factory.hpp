@@ -6,6 +6,7 @@
 //
 // Config key   | Sensor class         | Extra config keys
 // -------------|----------------------|-----------------------------------
+// bmp180       | Bmp180TempSensor     | — (address 0x77, fixed)
 // bmp280       | Bmp280TempSensor     | bmp280_addr  (default 0x76)
 // bme280       | Bme280TempSensor     | bme280_addr  (default 0x76)
 // sht31        | Sht31TempSensor      | sht31_addr   (default 0x44)
@@ -19,6 +20,7 @@
 
 #include <string>
 #include <temp_sensor.hpp>
+#include <bmp180_sensor.hpp>
 #include <bmp280_sensor.hpp>
 #include <bme280_sensor.hpp>
 #include <sht31_sensor.hpp>
@@ -30,6 +32,9 @@ inline TempSensor* createTempSensor() {
     auto& ds = DataStore::getInstance();
     std::string type = ds.get_value("temp_sensor", "stub");
 
+    if (type == "bmp180") {
+        return new Bmp180TempSensor();
+    }
     if (type == "bmp280") {
         uint8_t addr = (uint8_t)ds.get_value<int>("bmp280_addr", 0x76);
         return new Bmp280TempSensor(addr);
