@@ -3,6 +3,7 @@
 #include <pgmspace.h>
 #include <WiFi.h>
 #include <http_utils.hpp>
+#include <task_registry.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
@@ -80,6 +81,7 @@ void removeHTMLTags(String& str)
 
 void lhc_status_task(void *parameter)
 {
+    registerTask("LHC");
     std::string modeAndEnergyMessage;
     std::string page1Message;
 

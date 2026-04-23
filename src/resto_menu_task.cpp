@@ -14,6 +14,7 @@
 #include <WiFi.h>
 #include <http_utils.hpp>
 #include <resource_manager.hpp>
+#include <task_registry.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
@@ -170,6 +171,7 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
 // ── task ─────────────────────────────────────────────────────────────────────
 
 void resto_menu_task(void* pvParameters) {
+    registerTask("RestoMenu");
     (void)pvParameters;
 
     auto& rmd    = ResourceManager<LMDS>::getInstance();

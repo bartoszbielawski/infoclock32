@@ -17,6 +17,7 @@
 #include <pgmspace.h>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
+#include <task_registry.hpp>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
 static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
@@ -121,6 +122,7 @@ static std::string readWeatherFromOWM()
 
 void open_weather_map_task(void *parameter)
 {
+    registerTask("Weather");
     std::string messageToBeDisplayed;
     time_t last_weather_update = 0;
 

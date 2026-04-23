@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
+#include <task_registry.hpp>
 #include <freertos/task.h>
 
 #include <resource_manager.hpp>
@@ -26,6 +27,7 @@ static bool in_night_window(int now_min, int start_min, int end_min)
 
 void night_mode_task(void* parameter)
 {
+    registerTask("NightMode");
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     // Let DataStore load and NTP sync before first check.

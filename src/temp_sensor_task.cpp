@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <pgmspace.h>
 #include <resource_manager.hpp>
+#include <task_registry.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
@@ -18,6 +19,7 @@ static const char CFG_TEMP_OFFSET[] = "temp_offset";
 
 void temp_sensor_task(void* parameter)
 {
+    registerTask("TempSensor");
     TempSensor* sensor = static_cast<TempSensor*>(parameter);
 
     logPrintf("TMP", "starting with sensor '%s'", sensor->name());

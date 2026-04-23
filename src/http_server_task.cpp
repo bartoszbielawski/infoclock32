@@ -9,6 +9,7 @@
 #include <version.hpp>
 #include <mqtt_task.h>
 #include <web_ui.hpp>
+#include <task_registry.hpp>
 
 // Handlers defined in other translation units
 void handle_push();
@@ -105,6 +106,56 @@ void handle_home()
     sendPageFoot();
 }
 
+// ── Task list helper ──────────────────────────────────────────────────────────
+
+static const char* taskStateName(eTaskState s)
+{
+    switch (s) {
+        case eRunning:   return "Run";
+        case eReady:     return "Ready";
+        case eBlocked:   return "Blocked";
+        case eSuspended: return "Suspended";
+        default:         return "Dead";
+    }
+}
+
+static const char* taskStateColor(eTaskState s)
+{
+    switch (s) {
+        case eRunning:   return "#15803d";
+        case eReady:     return "#1d4ed8";
+        case eBlocked:   return "#64748b";
+        case eSuspended: return "#b45309";
+        default:         return "#dc2626";
+    }
+}
+
+static void sendTasksSection()
+{
+    const TaskRegistry& reg = TaskRegistry::getInstance();
+    int n = reg.count();
+    if (n == 0) return;
+
+    server.sendContent_P(PSTR("<tr><th colspan='2'>&#129529; Tasks</th></tr>"));
+
+    char buf[256];
+    for (int i = 0; i < n; ++i) {
+        const RegisteredTask& t = reg.get(i);
+        eTaskState state = eTaskGetState(t.handle);
+        UBaseType_t watermark = uxTaskGetStackHighWaterMark(t.handle);
+
+        snprintf(buf, sizeof(buf),
+            "<tr><td class='label mono'>%s</td>"
+            "<td><span style='color:%s;font-weight:500'>%s</span>"
+            " &bull; stack&nbsp;free&nbsp;%u&nbsp;B</td></tr>\n",
+            t.name,
+            taskStateColor(state),
+            taskStateName(state),
+            (unsigned)watermark * sizeof(StackType_t));
+        server.sendContent(buf);
+    }
+}
+
 // ── /status ───────────────────────────────────────────────────────────────────
 
 void handle_status()
@@ -146,6 +197,8 @@ void handle_status()
             server.sendContent_P(PSTR("</td></tr>\n"));
         }
     }
+
+    sendTasksSection();
 
     server.sendContent_P(PSTR("</table>"
                                "<script>"
@@ -452,6 +505,7 @@ void handle_api_runtime()
 
 void web_server_task(void* pvParameters)
 {
+    registerTask("WebServer");
     server.on("/push",               handle_push);
     server.on("/",          handle_home);
     server.on("/style.css", HTTP_GET, handle_style_css);

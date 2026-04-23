@@ -30,6 +30,12 @@ night_end=07:00
 # Brightness during night hours (0–15)
 night_brightness=1
 
+# ── OTA updates ──────────────────────────────────────────────────────────────
+# Set enable_ota=0 to disable the OTA task entirely
+enable_ota=1
+# Password required for OTA uploads. Leave blank to allow unauthenticated OTA.
+ota_password=
+
 # ── Web UI ────────────────────────────────────────────────────────────────────
 # HTTP basic auth password for protected routes (/log, /edit, /actions, /reboot)
 # Any username is accepted. Leave blank to disable auth entirely.

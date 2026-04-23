@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <pgmspace.h>
 #include <resource_manager.hpp>
+#include <task_registry.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
@@ -43,6 +44,7 @@ static std::vector<CustomMessage> load_messages()
 
 void custom_message_task(void* /*parameter*/)
 {
+    registerTask("CustomMsg");
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     while (true)

@@ -21,8 +21,9 @@
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <resto_menu_task.h>
+#include <ota_task.h>
 #include <screen_wipe_task.h>
-
+#include <task_registry.hpp>
 
 // External task entry points
 void open_weather_map_task(void *parameter);
@@ -37,6 +38,7 @@ DataStore& dataStore = DataStore::getInstance();
 // It periodically takes display ownership, shows time, day, and date, then releases ownership.
 void displayClock(void *parameter)
 {
+  registerTask("Clock");
   auto& rmd = ResourceManager<LMDS>::getInstance();
   auto& matrix = rmd.getResourceRef();
 
@@ -232,6 +234,11 @@ void setup() {
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
 
+
+  if (dataStore.get_value<int>("enable_ota", 1))
+    xTaskCreate(ota_task, "OTATask", 4096, nullptr, 2, nullptr);
+  else
+    logPrintf("SYS", "OTATask disabled (enable_ota=0)");
 
   // Optional restaurant menu task
   if (dataStore.get_value<int>("enable_resto", 1))

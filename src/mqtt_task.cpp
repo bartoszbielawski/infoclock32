@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <task_registry.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
@@ -192,6 +193,7 @@ static void applyPendingHardware(ResourceManager<LMDS> &rmd)
 
 void mqtt_task(void *parameter)
 {
+    registerTask("MQTT");
     pushQueue = xQueueCreate(4, sizeof(char *));
 
     auto &rmd    = ResourceManager<LMDS>::getInstance();

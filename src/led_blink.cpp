@@ -3,10 +3,12 @@
 #include <freertos/task.h>
 
 #include <pins.hpp>
+#include <task_registry.hpp>
 
 static const int LED = LED_BLINK_PIN;
 
 void blink_led_task(void *pvParameter) {
+    registerTask("BlinkLED");
   pinMode(LED, OUTPUT);
   while (1) {
     digitalWrite(LED, HIGH);
