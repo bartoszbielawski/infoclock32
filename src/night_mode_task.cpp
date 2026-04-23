@@ -27,7 +27,7 @@ static bool in_night_window(int now_min, int start_min, int end_min)
 
 void night_mode_task(void* parameter)
 {
-    registerTask("NightMode");
+    registerTask("NightMode", 2048);
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     // Let DataStore load and NTP sync before first check.

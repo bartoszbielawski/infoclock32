@@ -8,7 +8,7 @@
 static const int LED = LED_BLINK_PIN;
 
 void blink_led_task(void *pvParameter) {
-    registerTask("BlinkLED");
+    registerTask("BlinkLED", 1024);
   pinMode(LED, OUTPUT);
   while (1) {
     digitalWrite(LED, HIGH);

@@ -193,7 +193,7 @@ static void applyPendingHardware(ResourceManager<LMDS> &rmd)
 
 void mqtt_task(void *parameter)
 {
-    registerTask("MQTT");
+    registerTask("MQTT", 8192);
     pushQueue = xQueueCreate(4, sizeof(char *));
 
     auto &rmd    = ResourceManager<LMDS>::getInstance();

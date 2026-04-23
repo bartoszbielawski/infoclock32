@@ -122,7 +122,7 @@ static std::string readWeatherFromOWM()
 
 void open_weather_map_task(void *parameter)
 {
-    registerTask("Weather");
+    registerTask("Weather", 8192);
     std::string messageToBeDisplayed;
     time_t last_weather_update = 0;
 

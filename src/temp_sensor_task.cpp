@@ -19,7 +19,7 @@ static const char CFG_TEMP_OFFSET[] = "temp_offset";
 
 void temp_sensor_task(void* parameter)
 {
-    registerTask("TempSensor");
+    registerTask("TempSensor", 4096);
     TempSensor* sensor = static_cast<TempSensor*>(parameter);
 
     logPrintf("TMP", "starting with sensor '%s'", sensor->name());

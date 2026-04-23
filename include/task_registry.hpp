@@ -7,6 +7,7 @@ static const int kTaskRegistryMax = 24;
 struct RegisteredTask {
     char name[configMAX_TASK_NAME_LEN + 4];
     TaskHandle_t handle;
+    uint32_t totalStack;
 };
 
 class TaskRegistry {
@@ -16,11 +17,12 @@ public:
         return inst;
     }
 
-    void add(const char* displayName) {
+    void add(const char* displayName, uint32_t totalStack) {
         taskENTER_CRITICAL(&mux_);
         if (count_ < kTaskRegistryMax) {
             strlcpy(tasks_[count_].name, displayName, sizeof(tasks_[0].name));
-            tasks_[count_].handle = xTaskGetCurrentTaskHandle();
+            tasks_[count_].handle     = xTaskGetCurrentTaskHandle();
+            tasks_[count_].totalStack = totalStack;
             count_++;
         }
         taskEXIT_CRITICAL(&mux_);
@@ -35,6 +37,6 @@ private:
     portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 };
 
-inline void registerTask(const char* name) {
-    TaskRegistry::getInstance().add(name);
+inline void registerTask(const char* name, uint32_t totalStack) {
+    TaskRegistry::getInstance().add(name, totalStack);
 }

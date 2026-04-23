@@ -81,7 +81,7 @@ void removeHTMLTags(String& str)
 
 void lhc_status_task(void *parameter)
 {
-    registerTask("LHC");
+    registerTask("LHC", 8192);
     std::string modeAndEnergyMessage;
     std::string page1Message;
 

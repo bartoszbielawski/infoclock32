@@ -38,7 +38,7 @@ DataStore& dataStore = DataStore::getInstance();
 // It periodically takes display ownership, shows time, day, and date, then releases ownership.
 void displayClock(void *parameter)
 {
-  registerTask("Clock");
+  registerTask("Clock", 4096);
   auto& rmd = ResourceManager<LMDS>::getInstance();
   auto& matrix = rmd.getResourceRef();
 

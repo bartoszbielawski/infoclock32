@@ -44,7 +44,7 @@ static std::vector<CustomMessage> load_messages()
 
 void custom_message_task(void* /*parameter*/)
 {
-    registerTask("CustomMsg");
+    registerTask("CustomMsg", 4096);
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     while (true)

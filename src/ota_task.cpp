@@ -8,7 +8,7 @@
 
 void ota_task(void*)
 {
-    registerTask("OTA");
+    registerTask("OTA", 4096);
     while (WiFi.status() != WL_CONNECTED)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 
