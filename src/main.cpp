@@ -45,7 +45,7 @@ void displayClock(void *parameter)
     if (auto display = rmd.acquire())
     {
       // Show HH:MM:SS for 3 seconds (updated once per second)
-      for (int i = 0; i < 3; i++)
+      for (int i = 0; i < 5; i++)
       {
         display->clear();
 
@@ -173,7 +173,18 @@ void setup() {
 
   if (auto display = rmd.acquire())
   {
-    scrollMessage(APP_VERSION, display, 30);
+    // Show firmware version + reset reason so it's visible on every boot
+    static const char* const resetReasonStr[] = {
+      "unknown", "power on", "external rst", "software rst",
+      "panic", "interrupt wdt", "task wdt", "watchdog",
+      "deepsleep rst", "brownout", "SDIO rst"
+    };
+    esp_reset_reason_t reason = esp_reset_reason();
+    int reasonIdx = (int)reason < (int)(sizeof(resetReasonStr)/sizeof(resetReasonStr[0]))
+                    ? (int)reason : 0;
+    char bootMsg[64];
+    snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
+    scrollMessage(bootMsg, display, 30);
     if (wifi_is_ap_mode()) {
       std::string apMsg = "WiFi setup: connect to "
                           + dataStore.get_value("hostname", "infoclock32")

@@ -57,7 +57,7 @@ void temp_sensor_task(void* parameter)
                 last_update = time(nullptr);                
                 auto& rs = RuntimeStore::getInstance();
                 temp = sensor->temperature() + temp_offset;
-                rs.set("temp_c", temp);
+                rs.set("temp_c", temp, "%.1f\xC2\xB0" "C");
                 if (sensor->hasPressure())  
                 {
                     pressure = sensor->pressure();
@@ -83,18 +83,18 @@ void temp_sensor_task(void* parameter)
         if (auto display = rmd.acquire())
         {
             snprintf(buffer, sizeof(buffer), "%.1f\xF7" "C", temp);
-            scrollMessage(buffer, display, 25);
+            scrollMessage(buffer, display, 20);
 
             if (sensor->hasPressure())
             {
+                //vTaskDelay(1000 / portTICK_PERIOD_MS);
                 snprintf(buffer, sizeof(buffer), "%.0f hPa", pressure);
-                scrollMessage(buffer, display, 25);
-            }
-            vTaskDelay(20000 / portTICK_PERIOD_MS);
+                scrollMessage(buffer, display, 20);
+            }            
         }
-        else
-        {
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
+        
+        vTaskDelay(30000 / portTICK_PERIOD_MS);
+        
+        
     }
 }

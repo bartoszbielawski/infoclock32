@@ -1,310 +1,263 @@
 # infoclock32
 
-An ESP32 LED matrix info display — scrolling clock, weather, messages, LHC status, and custom content.
+An ESP32 LED matrix info display — scrolling clock, weather, LHC beam status, temperature, custom messages, and more.
 
 ## Hardware
 
-- **Microcontroller**: ESP32 (tested on `esp32dev`, `esp32-c3-devkitm-1`, `esp32-s2-saola-1`, `esp32-s3-devkitc-1`)
+- **Microcontroller**: ESP32 family (see supported targets below)
 - **Display**: 8× MAX7219 8×8 LED matrix modules (64×8 pixels), cascaded via SPI
-  - Data pin: GPIO 23 (MOSI)
-  - Clock pin: GPIO 18 (SCK)
-  - Chip Select: GPIO 5 (configurable per target in `include/pins.hpp`)
 - **WiFi**: Built-in; auto-config via captive portal on first boot
 - **Storage**: LittleFS (`/config.txt` for persistent settings)
-- **Logging**: Serial UART (1 Mbaud), optional UDP syslog, in-memory deque
+- **Logging**: Serial UART (1 Mbaud), optional UDP syslog, in-memory ring buffer
+
+### Pin assignments
+
+Pins are board-specific and defined in `include/pins.hpp`.
+
+| Board | SDA | SCL | SPI CS | SPI SCK | SPI MOSI |
+|-------|-----|-----|--------|---------|----------|
+| ESP32-C3 | GPIO 1 | GPIO 0 | GPIO 7 | GPIO 4 | GPIO 6 |
+| ESP32-S2 | GPIO 8 | GPIO 9 | GPIO 5 | GPIO 36 | GPIO 35 |
+| ESP32-S3 | GPIO 8 | GPIO 9 | GPIO 5 | GPIO 12 | GPIO 11 |
+| ESP32 (original) | GPIO 21 | GPIO 22 | GPIO 5 | GPIO 18 | GPIO 23 |
 
 ## Features
 
-| Feature | Status | Config |
-|---------|--------|--------|
-| **Clock + Date** | ✅ Live | — |
-| **MQTT integration** | ✅ Live | `mqtt_server`, `mqtt_client_id`, `mqtt_user`, `mqtt_password` |
-| **LHC beam status** (CERN) | ✅ Live | — |
-| **Weather forecast** (OpenWeatherMap) | ✅ Live | `ow_api_key`, `ow_city_id` |
-| **Custom scrolling messages** | ✅ Live | Web UI → `/actions` |
-| **Temperature sensor** | ✅ Stub | Implement `TempSensor` interface, swap in `main.cpp` |
-| **Night mode** (blank display at scheduled hours) | ✅ Live | `night_mode_start`, `night_mode_end` |
-| **Brightness control** (0–15) | ✅ Live | Web UI or config |
-| **Timezone + DST** | ✅ Live | Web UI → `/actions` (POSIX TZ strings) |
-| **Hostname configuration** | ✅ Live | Web UI → `/actions` |
-| **Firmware version** | ✅ Live | Displayed on home page & all pages (footer) |
-| **Full activity log** | ✅ Live | Web UI → `/log` (40-entry deque + serial + syslog) |
-| **HTTP OTA firmware update** | ✅ Live | Web UI → `/update` |
+| Feature | Config key(s) |
+|---------|--------------|
+| Clock + date display | `language` (`en`/`fr`/`pl`), `timezone` |
+| Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` |
+| LHC beam status (CERN) | `enable_lhc` |
+| Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval` |
+| Custom scrolling messages | `message_<name>_*`, `msg_interval` |
+| Night mode (auto-dim/blank) | `night_start`, `night_end`, `night_brightness` |
+| MQTT integration | `enable_mqtt`, `mqtt_server`, `mqtt_client_id`, … |
+| Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes` |
+| OTA firmware update (wireless) | `ota_password` (disabled if unset) |
+| HTTP firmware upload | Web UI → `/update` |
+| Web configuration editor | Web UI → `/edit` |
 
 ## Building & Flashing
 
-**Requirements:**
-- PlatformIO CLI
-- Python 3.7+
+**Requirements:** PlatformIO CLI, Python 3.7+
 
-**Build for your target:**
 ```bash
+# Build (defaults to esp32-c3-devkitm-1 if platformio.local.ini sets it)
+pio run
+
+# Build for a specific target
 pio run -e esp32dev
-```
 
-**Upload (PlatformIO will auto-detect COM port):**
-```bash
+# Flash firmware
 pio run -e esp32dev -t upload
+
+# Upload filesystem (config + web assets)
+pio run -e esp32dev -t uploadfs
+
+# Serial monitor
+pio device monitor -b 1000000
 ```
 
-If auto-detection fails, specify the port:
-```bash
-pio run -e esp32dev -t upload --upload-port /dev/ttyUSB0  # Linux
-pio run -e esp32dev -t upload --upload-port /dev/cu.usbserial-*  # macOS
-pio run -e esp32dev -t upload --upload-port COM3  # Windows
+**Supported targets:** `esp32dev`, `esp32-c3-devkitm-1`, `esp32-s2-saola-1`, `esp32-s3-devkitc-1`
+
+### OTA flashing
+
+Set `ota_password` in config, then create `platformio.local.ini`:
+
+```ini
+[env:esp32-c3-devkitm-1]
+upload_protocol = espota
+upload_port = infoclock32.local
 ```
 
-**Supported targets:**
-- `esp32dev` (generic ESP32)
-- `esp32-c3-devkitm-1`
-- `esp32-s2-saola-1`
-- `esp32-s3-devkitc-1`
-
-Adjust the environment name as needed (e.g., `esp32-c3-devkitm-1` for the C3 board).
+The first flash must always be wired.
 
 ## Configuration
 
-### First Boot
-On first boot, the device enters WiFi Manager captive portal mode:
-1. Scan for WiFi network named `infoclock32` (or your configured hostname)
-2. Connect from any device
-3. A captive portal should auto-open; if not, manually visit `192.168.4.1`
-4. Enter your home WiFi SSID and password
-5. Device will reboot and connect to your network
+### First boot
+
+On a freshly flashed device LittleFS is empty — all settings use defaults until the user saves via `/edit` or MQTT `/config`.
+
+If `wifi_ssid` is not configured the device starts a WiFi setup AP named `<hostname>-setup` (default: `infoclock32-setup`). Connect to it and browse to `192.168.4.1/edit` to set credentials, then reboot.
 
 ### Web UI
-Access the device at `http://<device-ip>/` or `http://<hostname>/`
 
-**Public pages** (no auth):
-- `/` — Dashboard with status, actions, and quick controls
-- `/status` — Full system info (IP, hostname, uptime, RAM, firmware version)
+Access at `http://<device-ip>/` or `http://<hostname>.local/`
 
-**Protected pages** (HTTP Basic Auth: `admin` / `password`):
-- `/log` — Live activity log (40 entries, auto-refresh 5s)
-- `/edit` — Config editor (`/config.txt`)
-- `/actions` — Advanced controls: timezone, hostname, night mode, messages
-- `/update` — HTTP firmware upload
-- `/reboot` — Reboot device
+| Route | Auth | Description |
+|-------|------|-------------|
+| `GET /` | — | Dashboard: status + quick controls |
+| `GET /status` | — | Full system info (IP, heap, uptime, tasks), auto-refresh |
+| `GET /log` | ✓ | Live log viewer (40 entries, newest first, auto-refresh 5 s) |
+| `GET /edit` | ✓ | Edit `/config.txt`; reloads DataStore on save |
+| `GET /actions` | ✓ | Push message, brightness, power on/off, reboot |
+| `GET /update` | ✓ | HTTP firmware upload |
+| `POST /reboot` | ✓ | Restart device |
 
-### Config File Format
-`/config.txt` is a simple key=value file stored in LittleFS. Examples:
+Auth: HTTP Basic with any username and the `web_password` config value. Leave `web_password` empty to disable auth entirely.
 
+### Config file
+
+`/config.txt` is a `key=value` file on LittleFS. Lines starting with `#` are comments. A fully-commented example is included in `data/config.txt` and uploaded with `uploadfs`.
+
+Key config keys:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `wifi_ssid` / `wifi_password` | — | WiFi credentials |
+| `hostname` | `infoclock32` | DHCP name, mDNS `.local`, AP portal name |
+| `brightness` | `7` | Display intensity 0–15 |
+| `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
+| `language` | `en` | Date labels: `en`, `fr`, `pl` |
+| `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
+| `night_brightness` | `1` | Intensity during night hours |
+| `web_password` | — | HTTP Basic Auth password (blank = open) |
+| `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
+| `syslog_server` | — | UDP syslog destination IP (port 514) |
+| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
+| `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
+| `mqtt_user` / `mqtt_password` | — | MQTT credentials |
+| `temp_sensor` | `stub` | Sensor driver (see below) |
+| `temp_interval` | `30` | Sensor poll interval (seconds) |
+| `msg_interval` | `60` | Custom message cycle interval (seconds) |
+| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` | `1` | Enable/disable individual tasks |
+
+## Temperature sensor
+
+Set `temp_sensor` in config to one of the supported drivers:
+
+| Value | Sensor | Interface | Extra keys |
+|-------|--------|-----------|------------|
+| `bmp180` | BMP180 | I2C 0x77 (fixed) | — |
+| `bmp280` | BMP280 | I2C | `bmp280_addr` (default `0x76`) |
+| `bme280` | BME280 | I2C | `bme280_addr` (default `0x76`) |
+| `sht31` | SHT31 | I2C | `sht31_addr` (default `0x44`) |
+| `aht10` / `aht20` | AHT10 / AHT20 | I2C 0x38 (fixed) | — |
+| `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
+| `stub` (default) | None | — | — |
+
+Sensor readings are published to RuntimeStore (`temp_c`, `temp_hpa`, `temp_rh`) and visible on the `/status` page. Use them in custom messages as `{temp_c}` placeholders.
+
+To add a new sensor, implement the `TempSensor` interface in a new header and add an entry to `createTempSensor()` in `include/temp_sensor_factory.hpp`.
+
+## Custom messages
+
+Define named message slots in config:
+
+```ini
+# Always-on message
+message_hello_text=Hello world!
+
+# Time-windowed message
+message_lunch_text=Lunch time!
+message_lunch_start=12:00
+message_lunch_end=13:00
+
+# Countdown
+message_event_text=Conference in
+message_event_countdown=2026-09-01 09:00
 ```
-hostname=infoclock
-brightness=10
-timezone=UTC0
-mqtt_server=192.168.x.x
-mqtt_client_id=infoclock32
-ow_api_key=your_openweathermap_api_key
-ow_city_id=your_city_id
-temp_interval=30
-msg_interval=60
-```
 
-**Edit via Web UI** → `/edit` (protected), or set programmatically via **MQTT `/config` topic**.
+Messages cycle every `msg_interval` seconds. Placeholders like `{temp_c}` are expanded from RuntimeStore and DataStore at display time.
 
-Common keys:
-- `hostname` — device name (RFC-952: letters, digits, hyphens; max 63 chars)
-- `brightness` — 0–15
-- `timezone` — POSIX TZ string (e.g., `Europe/Zurich`, `EST5EDT,M3.2.0,M11.1.0`)
-- `mqtt_server`, `mqtt_client_id`, `mqtt_user`, `mqtt_password` — MQTT broker credentials
-- `ow_api_key`, `ow_city_id` — OpenWeatherMap API key and city ID
-- `temp_interval`, `msg_interval` — polling intervals in seconds
+Push a one-off message via the `/` dashboard, MQTT, or `/actions`.
 
-## Features in Detail
+## Display messages on boot and reboot
 
-### Custom Messages
+- **Boot**: scrolls firmware version and reset reason (e.g. `v1.2.3 | rst: power on`)
+- **Reboot**: scrolls `Rebooting` before the CPU restarts, regardless of trigger (web UI, MQTT, OTA)
 
-Push scrolling messages via:
-1. **Web UI** (`/`) — "Push message" card
-2. **MQTT** — publish to `{clientId}/push` (scroll once) or `{clientId}/looped` (repeat)
-3. **Scheduled custom messages** — define start/end dates, countdown timers, and placeholders in web UI
+## MQTT integration
 
-**Message placeholders:**
-- `{}` — countdown day count (e.g., "Launch in {} days")
-  - Requires `message_<name>_countdown` date in config (YYYY-MM-DD format)
-  - Supports "today!", "past date prefix +Nd"
-- `{key}` — insert any DataStore value (e.g., `{hostname}`, `{temp_c}`, `{location}`)
-  - RuntimeStore checked first (live sensor readings), then DataStore (config)
+Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All topics are prefixed with the client ID.
 
-**Example custom message:**
-```
-Config:
-  message_event_text=LS3 starts in {} days from {location}
-  message_event_countdown=2026-04-20
-  message_event_start=2026-03-15
-  message_event_end=2026-04-21
-  location=Geneva
-```
+| Topic | Payload | Action |
+|-------|---------|--------|
+| `…/push` | text | Scroll once immediately |
+| `…/looped` | text | Store and repeat; send empty to clear |
+| `…/brightness` | `0`–`15` | Set display intensity |
+| `…/power` | `on`\|`off` | Blank / unblank display |
+| `…/config` | `key=value` | Set DataStore key (keys containing `password`/`secret` are blocked) |
+| `…/reboot` | — | Restart device |
+| `…/request` | `IP`\|`HEAP`\|`UPTIME`\|`SSID`\|`<key>` | Reply to `…/publish/<name>` |
+| `…/status` | — | Device publishes heartbeat JSON here every 60 s |
 
-### RuntimeStore (Volatile Data)
-
-Live sensor readings and computed values that survive until reboot (not persisted to flash):
-- Published by sensor tasks: `temp_c`, `temp_hpa`, `temp_rh`
-- Accessible in custom messages as `{temp_c}` placeholders
-- Visible on `/status` page under "⚡ Runtime values"
-
-### Timezone & DST Support
-
-Web UI → `/actions` → "Timezone"
-- **Preset dropdown:** 20+ common timezones (US, EU, Asia, etc.)
-- **Custom input:** Full POSIX TZ string (e.g., `EST5EDT,M3.2.0,M11.1.0`)
-- Automatically applies DST rules via newlib's `setenv`/`tzset`
-
-### Logging
-
-All events log to three destinations:
-1. **Serial** (1 Mbaud, UART)
-2. **UDP syslog** (port 514, if `syslog_server` config key is set)
-3. **In-memory deque** (40 newest entries, visible on `/log` page)
-
-**Log tags in use:**
-- `SYS` — system startup, version
-- `DISP` — display activity (clock, date, scrolling messages)
-- `TMP` — temperature sensor readings
-- `LHC` — LHC beam status
-- `WTH` — weather forecast
-- `MSG` — custom message events
-- `MQT` — MQTT connect/publish
-- `HTTP` — HTTP client requests
-- `WEB` — HTTP server events
-
-### MQTT Integration
-
-**Connection:**
-- Broker: `mqtt_server` config
-- Client ID: `mqtt_client_id` (default: `infoclock32`)
-- Auth: `mqtt_user` / `mqtt_password` (optional)
-
-**Topics:**
-- `{clientId}/push <message>` — scroll once immediately
-- `{clientId}/looped <message>` — store and repeat; send `{clientId}/clear` to clear
-- `{clientId}/brightness <0-15>` — set display intensity
-- `{clientId}/power <on|off>` — blank/unblank display
-- `{clientId}/config <key=value>` — set config (blocks sensitive keys: `password`, `secret`)
-- `{clientId}/reboot` — restart device
-- `{clientId}/request <IP|HEAP|UPTIME|SSID|<config_key>>` → `{clientId}/publish/<name>`
-- `{clientId}/status` — device publishes heartbeat JSON every 60s
-
-**Example (mosquitto_pub):**
 ```bash
-mosquitto_pub -h <broker_ip> -t infoclock32/push -m "Hello World!"
-mosquitto_pub -h <broker_ip> -t infoclock32/brightness -m "15"
-mosquitto_pub -h <broker_ip> -t infoclock32/looped -m "Status: OK"
-mosquitto_pub -h <broker_ip> -t infoclock32/clear -m ""
+mosquitto_pub -h <broker> -t infoclock32/push -m "Hello!"
+mosquitto_pub -h <broker> -t infoclock32/brightness -m "12"
+mosquitto_pub -h <broker> -t infoclock32/config -m "temp_interval=60"
 ```
 
-Replace `<broker_ip>` with your MQTT broker's IP or hostname.
+## Logging
+
+All events are written to three destinations simultaneously:
+
+1. **Serial** — 1 Mbaud UART
+2. **UDP syslog** — port 514 (set `syslog_server` to enable)
+3. **In-memory ring buffer** — last 40 entries, visible at `/log`
+
+Log tags: `SYS`, `DISP`, `TMP`, `LHC`, `WTH`, `MSG`, `MQT`, `HTTP`, `WEB`, `OTA`, `RES`
 
 ## Development
 
-### Project Structure
+### Project structure
+
 ```
 infoclock32/
 ├── include/
-│   ├── version.hpp              # APP_VERSION, BUILD_DATE, BUILD_TIME
-│   ├── runtime_store.hpp        # Volatile KV store (FreeRTOS mutex-protected)
-│   ├── timezone_utils.hpp       # apply_timezone() helper
-│   ├── temp_sensor.hpp          # Abstract sensor interface + stub
-│   ├── logger.hpp               # logPrintf() / logger_init()
-│   ├── resource_manager.hpp     # Display access queue (Meyers singleton)
-│   ├── data_store.hpp           # Config storage (LittleFS)
-│   ├── pins.hpp                 # Board-specific pin definitions
-│   ├── graphic_utils.hpp        # scrollMessage(), display effects
-│   ├── http_utils.hpp           # HttpUtils::httpGet()
-│   └── ...
+│   ├── pins.hpp                  # Board-specific pin definitions
+│   ├── temp_sensor.hpp           # TempSensor abstract base + StubTempSensor
+│   ├── temp_sensor_factory.hpp   # createTempSensor() — picks driver from config
+│   ├── bmp180/280/bme280/…       # Concrete sensor implementations
+│   ├── resource_manager.hpp      # RAII display access (ResourceGuard + drop counter)
+│   ├── task_registry.hpp         # Self-registering FreeRTOS task list (for /status)
+│   ├── runtime_store.hpp         # Volatile KV store (sensor readings, etc.)
+│   ├── data_store.hpp            # Persistent config (LittleFS key=value)
+│   ├── reboot_utils.hpp          # reboot_with_message() — show "Rebooting" then restart
+│   ├── logger.hpp                # logPrintf() / logger_init()
+│   ├── graphic_utils.hpp         # scrollMessage(), display effects
+│   └── http_utils.hpp            # HttpUtils::httpGet()
 ├── src/
-│   ├── main.cpp                 # setup() / loop() / displayClock()
-│   ├── http_server_task.cpp     # Web UI (all routes)
-│   ├── mqtt_task.cpp            # MQTT client
-│   ├── lhc_status_task.cpp      # LHC beam status polling
-│   ├── weather_forecast_task.cpp # OpenWeatherMap API
-│   ├── temp_sensor_task.cpp     # Sensor reading & RuntimeStore publishing
-│   ├── custom_message_task.cpp  # Scheduled message display + placeholder expansion
-│   ├── night_mode_task.cpp      # Auto-blank display on schedule
-│   ├── logger.cpp               # Logging system (serial + syslog + deque)
-│   ├── graphic_utils.cpp        # Display rendering
-│   └── ...
-├── platformio.ini               # Build config (4 target boards)
-└── README.md                    # You are here
+│   ├── main.cpp                  # setup() / loop() / displayClock task
+│   ├── http_server_task.cpp      # Web UI — all routes
+│   ├── mqtt_task.cpp             # MQTT client
+│   ├── lhc_status_task.cpp       # LHC beam status polling
+│   ├── weather_forecast_task.cpp # OpenWeatherMap forecast
+│   ├── temp_sensor_task.cpp      # Sensor polling + RuntimeStore publishing
+│   ├── custom_message_task.cpp   # Scheduled messages + placeholder expansion
+│   ├── night_mode_task.cpp       # Auto-dim on schedule
+│   ├── ota_task.cpp              # ArduinoOTA (gated on ota_password)
+│   ├── logger.cpp                # Serial + syslog + deque backend
+│   └── graphic_utils.cpp         # Display rendering helpers
+├── data/
+│   └── config.txt                # Default config (uploaded to LittleFS with uploadfs)
+└── platformio.ini                # Build config — 4 target boards
 ```
 
-### Adding a New Feature
+### C++ compatibility
 
-**Example: integrate a real temperature sensor**
+The `esp32dev` toolchain (GCC 8.4.0) compiles in **C++14**. Avoid C++17-only aliases:
 
-1. **Implement the `TempSensor` interface** in a new header file (e.g., `include/bme680_sensor.hpp`):
-   ```cpp
-   #include <temp_sensor.hpp>
+| Use | Not |
+|-----|-----|
+| `std::enable_if<…>::type` | `enable_if_t` |
+| `std::is_same<…>::value` | `is_same_v` |
 
-   class BME680Sensor : public TempSensor {
-   public:
-       bool begin() override { /* init I2C */ }
-       bool read() override { /* poll sensor */ }
-       float temperature() const override { return temp_c_; }
-       bool hasPressure() const override { return true; }
-       float pressure() const override { return pressure_hpa_; }
-       // ... humidity if available
-
-   private:
-       float temp_c_, pressure_hpa_;
-   };
-   ```
-
-2. **Swap in `main.cpp`:**
-   ```cpp
-   #include <bme680_sensor.hpp>
-
-   // In setup():
-   TempSensor* tempSensor = new BME680Sensor();
-   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
-   ```
-
-3. **The sensor will automatically:**
-   - Publish `temp_c`, `temp_hpa`, etc. to RuntimeStore every 30 seconds (configurable)
-   - Make values available in custom messages as `{temp_c}` / `{temp_hpa}`
-   - Appear in `/status` → "⚡ Runtime values" section
-   - Log each reading to `/log` with tag `TMP`
-
-### C++ Standard Notes
-
-The esp32dev toolchain (GCC 8.4.0) defaults to **C++14 mode**. Avoid C++17-only features:
-- ❌ Use `std::enable_if<>::type` instead of `enable_if_t`
-- ❌ Use `std::is_same<>::value` instead of `is_same_v`
-
-The ESP32-C3 custom framework uses C++17, so these work there but break on esp32dev.
+The ESP32-C3 custom framework build uses C++17, so these work there but break on `esp32dev`.
 
 ### Branches
 
-- `main` — stable, tested firmware
-- `experimental` — today's WIP, frequent rebuilds
+- `main` — stable releases
+- `experimental` — current WIP
 
 ## Troubleshooting
 
-**Device not appearing on network?**
-- Ensure it has power and is within WiFi range
-- Check captive portal (scan for `infoclock32` or configured hostname AP)
-- Monitor Serial output at 1 Mbaud for boot messages
+**Device not on the network** — check Serial output at 1 Mbaud; look for the IP address printed at boot. If the AP `infoclock32-setup` appears, WiFi credentials are missing or wrong.
 
-**Web UI not loading?**
-- Verify IP address on status page or router
-- Try clearing browser cache
-- Check `/log` for HTTP errors
+**Web UI not loading** — verify IP, try `http://<hostname>.local/`; check `/log` for HTTP errors.
 
-**Messages not scrolling?**
-- Verify display is not in night mode (check `/status`)
-- Check `/log` for `DISP` entries (confirms message was processed)
-- Ensure brightness > 0 (set via `/actions` card on home page)
+**Display blank** — check night mode schedule on `/status`; verify brightness > 0 in `/actions`.
 
-**MQTT not connecting?**
-- Verify broker is reachable and credentials are correct (`/edit` config)
-- Check `/log` for `MQT` tag entries
-- Monitor broker logs for auth failures
+**MQTT not connecting** — check `MQT` tag in `/log`; verify broker reachability and credentials in `/edit`.
 
-## License
-
-MIT (or your preferred license)
-
-## Author
-
-Made with ☕ for ESP32 projects everywhere.
+**OTA not working** — `ota_password` must be non-empty; first flash is always wired.

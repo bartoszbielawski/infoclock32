@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <logger.hpp>
+#include <reboot_utils.hpp>
 #include <web_ui.hpp>
 
 void handle_update_get()
@@ -84,7 +85,6 @@ void handle_update_post()
 
     if (ok)
     {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-        ESP.restart();
+        reboot_with_message();
     }
 }

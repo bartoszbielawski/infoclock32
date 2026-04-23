@@ -67,14 +67,12 @@ void custom_message_task(void* /*parameter*/)
             logPrintf("MSG", "%s", display.c_str());
 
             if (auto d = rmd.acquire())
-                scrollMessage(display, d, 50);
+                scrollMessage(display, d, 25);
             else
             {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 continue;
-            }
-
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            }            
         }
 
         vTaskDelay((cycle_s * 1000) / portTICK_PERIOD_MS);

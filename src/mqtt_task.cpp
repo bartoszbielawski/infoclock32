@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <reboot_utils.hpp>
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <task_registry.hpp>
@@ -224,8 +225,7 @@ void mqtt_task(void *parameter)
         // Reboot takes priority over everything else
         if (pendingReboot)
         {
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            ESP.restart();
+            reboot_with_message();
         }
 
         // Apply brightness / power changes

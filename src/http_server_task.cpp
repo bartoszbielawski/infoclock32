@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <reboot_utils.hpp>
 #include <WiFi.h>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
@@ -199,6 +200,22 @@ void handle_status()
 
 // ── /log ──────────────────────────────────────────────────────────────────────
 
+// HTML-escape a String and append to an Arduino String.
+static String htmlEscape(const String& s)
+{
+    String out;
+    out.reserve(s.length() + 16);
+    for (unsigned i = 0; i < s.length(); ++i) {
+        char c = s[i];
+        if      (c == '&') out += F("&amp;");
+        else if (c == '<') out += F("&lt;");
+        else if (c == '>') out += F("&gt;");
+        else if (c == '"') out += F("&quot;");
+        else               out += c;
+    }
+    return out;
+}
+
 void handle_log()
 {
     if (!is_authenticated()) return;
@@ -229,7 +246,7 @@ void handle_log()
             server.sendContent_P(PSTR("</td><td><span class='tag tag-info'>"));
             server.sendContent(line.substring(tagOpen + 1, tagClose).c_str());
             server.sendContent_P(PSTR("</span></td><td class='mono'>"));
-            server.sendContent(line.substring(tagClose + 2).c_str());
+            server.sendContent(htmlEscape(line.substring(tagClose + 2)).c_str());
             server.sendContent_P(PSTR("</td></tr>\n"));
         }
         else
@@ -254,9 +271,9 @@ void handle_log()
             "if(!d.entries||!d.entries.length)return;"
             "d.entries.forEach(function(e){"
               "var tr=document.createElement('tr');"
-              "tr.innerHTML=\"<td class='mono' style='white-space:nowrap'>\"+e.ts+"
-                "\"</td><td><span class='tag tag-info'>\"+e.tag+"
-                "\"</span></td><td class='mono'>\"+e.msg+\"</td>\";"
+              "var t=tr.insertCell();t.className='mono';t.style.whiteSpace='nowrap';t.textContent=e.ts;"
+              "var g=tr.insertCell();var sp=document.createElement('span');sp.className='tag tag-info';sp.textContent=e.tag;g.appendChild(sp);"
+              "var m=tr.insertCell();m.className='mono';m.textContent=e.msg;"
               "tb.insertBefore(tr,tb.firstChild);"
             "});"
             "while(tb.rows.length>40)tb.lastElementChild.remove();"
@@ -269,22 +286,49 @@ void handle_log()
 // ── /log/entries ──────────────────────────────────────────────────────────────
 
 // Append a JSON-escaped version of 's' into buf[cap], advancing pos.
+// Valid UTF-8 multi-byte sequences are passed through unchanged (legal in JSON/UTF-8).
+// Lone high bytes that are not valid UTF-8 lead bytes are escaped as \u00XX.
 // Stops writing (but keeps pos accurate) if buffer is nearly full.
 static void jsonAppendEscaped(char* buf, size_t cap, size_t& pos, const String& s)
 {
-    for (unsigned i = 0; i < s.length(); ++i) {
-        // Reserve space for longest escape sequence (\uXXXX = 6 chars) + null terminator
+    unsigned i = 0;
+    while (i < s.length()) {
         if (pos + 7 >= cap) return;
-        char c = s[i];
-        if      (c == '"')  { buf[pos++] = '\\'; buf[pos++] = '"';  }
-        else if (c == '\\') { buf[pos++] = '\\'; buf[pos++] = '\\'; }
-        else if (c == '\n') { buf[pos++] = '\\'; buf[pos++] = 'n';  }
-        else if (c == '\r') { buf[pos++] = '\\'; buf[pos++] = 'r';  }
-        else if (c == '\t') { buf[pos++] = '\\'; buf[pos++] = 't';  }
-        else if ((unsigned char)c < 0x20) {
-            pos += snprintf(buf + pos, cap - pos, "\\u%04x", (unsigned char)c);
+        unsigned char c = (unsigned char)s[i];
+
+        if (c < 0x80) {
+            // ASCII
+            if      (c == '"')  { buf[pos++] = '\\'; buf[pos++] = '"';  }
+            else if (c == '\\') { buf[pos++] = '\\'; buf[pos++] = '\\'; }
+            else if (c == '\n') { buf[pos++] = '\\'; buf[pos++] = 'n';  }
+            else if (c == '\r') { buf[pos++] = '\\'; buf[pos++] = 'r';  }
+            else if (c == '\t') { buf[pos++] = '\\'; buf[pos++] = 't';  }
+            else if (c < 0x20)  { pos += snprintf(buf + pos, cap - pos, "\\u%04x", c); }
+            else                  buf[pos++] = (char)c;
+            ++i;
+        } else {
+            // Determine expected UTF-8 sequence length from lead byte
+            int seqLen = 0;
+            if      ((c & 0xE0) == 0xC0) seqLen = 2;
+            else if ((c & 0xF0) == 0xE0) seqLen = 3;
+            else if ((c & 0xF8) == 0xF0) seqLen = 4;
+
+            // Validate all continuation bytes
+            bool valid = (seqLen >= 2);
+            for (int j = 1; j < seqLen && valid; ++j) {
+                if (i + j >= s.length() || ((unsigned char)s[i + j] & 0xC0) != 0x80)
+                    valid = false;
+            }
+
+            if (valid && pos + seqLen < cap) {
+                for (int j = 0; j < seqLen; ++j) buf[pos++] = s[i + j];
+                i += seqLen;
+            } else {
+                // Invalid or truncated sequence — escape the lone byte
+                pos += snprintf(buf + pos, cap - pos, "\\u%04x", c);
+                ++i;
+            }
         }
-        else                  buf[pos++] = c;
     }
 }
 
@@ -421,7 +465,7 @@ void handle_reboot()
     sendPageFoot();
 
     vTaskDelay(200 / portTICK_PERIOD_MS);
-    ESP.restart();
+    reboot_with_message();
 }
 
 // ── /api/status ───────────────────────────────────────────────────────────────

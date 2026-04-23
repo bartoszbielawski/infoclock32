@@ -17,19 +17,19 @@ static void run_random_effect(LMDS& matrix) {
     int effect = (int)(esp_random() % kNumEffects);
     logPrintf("SCR", "wipe effect %d", effect);
     switch (effect) {
-        case  0: wipeDisplayLeftToRight(matrix,  15); break;
-        case  1: scrollOutDisplayRight(matrix,   15); break;
-        case  2: scrollOutDisplayLeft(matrix,    15); break;
-        case  3: wipeTopToBottom(matrix,         30); break;
-        case  4: wipeCurtain(matrix,             30); break;
-        case  5: wipeVenetianBlinds(matrix,      30); break;
-        case  6: wipeStaticNoise(matrix,          4); break;
-        case  7: scrollOutDisplayUp(matrix,      30); break;
-        case  8: scrollOutDisplayDown(matrix,    30); break;
+        case  0: wipeDisplayLeftToRight(matrix,  10); break;
+        case  1: scrollOutDisplayRight(matrix,   10); break;
+        case  2: scrollOutDisplayLeft(matrix,    10); break;
+        case  3: wipeTopToBottom(matrix,         15); break;
+        case  4: wipeCurtain(matrix,             15); break;
+        case  5: wipeVenetianBlinds(matrix,      15); break;
+        case  6: wipeStaticNoise(matrix,          3); break;
+        case  7: scrollOutDisplayUp(matrix,      15); break;
+        case  8: scrollOutDisplayDown(matrix,    15); break;
         case  9: wipeSpiralInward(matrix,         1); break;
         case 10: wipeDiagonal(matrix,             5); break;
-        case 11: wipeSplitToCenter(matrix,       10); break;
-        case 12: wipeColumnsFromCenter(matrix,   10); break;
+        case 11: wipeSplitToCenter(matrix,        8); break;
+        case 12: wipeColumnsFromCenter(matrix,    5); break;
     }
 }
 

@@ -158,7 +158,7 @@ void lhc_status_task(void *parameter)
             if (auto display = rmd.acquire())
                 scrollMessage(modeAndEnergyMessage, display, 20);
 
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
 
         if (not page1Message.empty())
             if (auto display = rmd.acquire())
@@ -167,6 +167,6 @@ void lhc_status_task(void *parameter)
                 scrollMessage(page1Message, display, 20);
             }
 
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
 }

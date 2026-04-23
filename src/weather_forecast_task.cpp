@@ -90,8 +90,10 @@ static std::string readWeatherFromOWM()
     // create result string with the following format:
     // Name: temp ^C (forecast temperature ^C, forecast description))
 
-    // format string stored in flash (PROGMEM) to save RAM
-    static const char WEATHER_FMT[] PROGMEM = "%s: %.1f\xF7" "C (%.1f\xF7" "C, %s)";
+    // \xF7 is the degree symbol in the LED matrix font.
+    // Use UTF-8 \xC2\xB0 (°) in the log string so /log renders correctly in browsers.
+    static const char WEATHER_FMT_DISP[] PROGMEM = "%s: %.1f\xF7" "C (%.1f\xF7" "C, %s)";
+    static const char WEATHER_FMT_LOG[]  PROGMEM = "%s: %.1f\xC2\xB0" "C (%.1f\xC2\xB0" "C, %s)";
 
     float currentTemp  = parse_value(currentWeather["/root/main/temp"],         NAN);
     float forecastTemp = parse_value(forecastWeather["/root/list/2/main/temp"], NAN);
@@ -109,13 +111,14 @@ static std::string readWeatherFromOWM()
         return std::string();
     }
 
+    char logInfo[256];
+    snprintf_P(logInfo, sizeof(logInfo), WEATHER_FMT_LOG,
+        cityName.c_str(), currentTemp, forecastTemp, description.c_str());
+    logPrintf("WTH", "%s", logInfo);
+
     char weatherInfo[256];
-    snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT,
-        cityName.c_str(),
-        currentTemp,
-        forecastTemp,
-        description.c_str()
-    );
+    snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT_DISP,
+        cityName.c_str(), currentTemp, forecastTemp, description.c_str());
 
     return weatherInfo;
 }
@@ -151,16 +154,12 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        logPrintf("WTH", "%s", messageToBeDisplayed.c_str());
-
         if (auto display = rmd.acquire())
         {
-            scrollMessage(messageToBeDisplayed, display, 30);
-            vTaskDelay(20000 / portTICK_PERIOD_MS);
+            scrollMessage(messageToBeDisplayed, display, 20);            
         }
-        else
-        {
-            vTaskDelay(60000 / portTICK_PERIOD_MS);
-        } // wait 20 s before requesting display again
+        
+        vTaskDelay(60000 / portTICK_PERIOD_MS);
+        
     }
 }
