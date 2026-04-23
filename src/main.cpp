@@ -39,79 +39,65 @@ void displayClock(void *parameter)
 {
   registerTask("Clock", 4096);
   auto& rmd = ResourceManager<LMDS>::getInstance();
-  auto& matrix = rmd.getResourceRef();
 
   while (true)
   {
-    // Try to lock display resource
-    if (not rmd.make_access_request())
+    if (auto display = rmd.acquire())
     {
-      Serial.println("ClockDisplay: Failed to get access to display");
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
-      continue;
-    }
+      // Show HH:MM:SS for 3 seconds (updated once per second)
+      for (int i = 0; i < 3; i++)
+      {
+        display->clear();
 
-    // Show HH:MM:SS for 3 seconds (updated once per second)
-    for (int i = 0; i < 3; i++)
-    {
-      matrix.clear();
+        time_t now = time(nullptr);
+        struct tm *timeinfo = localtime(&now);
 
-      time_t now = time(nullptr);
-      struct tm *timeinfo = localtime(&now);
+        if (i == 0)
+          logPrintf("DISP", "clock %02d:%02d:%02d",
+                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
-      if (i == 0)
-        logPrintf("DISP", "clock %02d:%02d:%02d",
-                  timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        int16_t x1, y1;
+        uint16_t width, height;
+        display->getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
+        display->setCursor((display->getSegments() * 8 - width) / 2, 0);
+        display->printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        display->display();
 
-      // Center fixed-width time string
-      int16_t x1, y1;
-      uint16_t width, height;
-      matrix.getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
-      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
-      matrix.printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-      //matrix.displayToSerial(Serial);
-      matrix.display();
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+      }
 
-      vTaskDelay(1000 / portTICK_PERIOD_MS);      
-    }
+      // Show day name and date for 2 seconds
+      {
+        time_t now = time(nullptr);
+        struct tm *timeinfo = localtime(&now);
 
-    // Show day name and date for 2 seconds
-    {
-      time_t now = time(nullptr);
-      struct tm *timeinfo = localtime(&now);
+        static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+        static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
+        static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
 
-      static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
-      static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
-      static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
+        std::string lang = dataStore.get_value("language", "en");
+        const char* const* dayNames = kDayNamesEn;
+        if (lang == "fr") dayNames = kDayNamesFr;
+        else if (lang == "pl") dayNames = kDayNamesPl;
+        const char* dayName = dayNames[timeinfo->tm_wday];
 
-      std::string lang = dataStore.get_value("language", "en");
-      const char* const* dayNames = kDayNamesEn;
-      if (lang == "fr") dayNames = kDayNamesFr;
-      else if (lang == "pl") dayNames = kDayNamesPl;
-      const char* dayName = dayNames[timeinfo->tm_wday];
+        char dateStr[16];
+        snprintf(dateStr, sizeof(dateStr), "%s %02d/%02d",
+                 dayName, timeinfo->tm_mday, timeinfo->tm_mon + 1);
 
-      char dateStr[16];
-      snprintf(dateStr, sizeof(dateStr), "%s %02d/%02d",
-               dayName, timeinfo->tm_mday, timeinfo->tm_mon + 1);
+        logPrintf("DISP", "date %s", dateStr);
 
-      logPrintf("DISP", "date %s", dateStr);
-      
-      // Show date centered for 2 seconds
-      int16_t x1, y1;
-      uint16_t width, height;
-      matrix.clear();
-      matrix.getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
-      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
-      matrix.print(dateStr);
-      //matrix.displayToSerial(Serial);
-      matrix.display();
-      vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
+        int16_t x1, y1;
+        uint16_t width, height;
+        display->clear();
+        display->getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
+        display->setCursor((display->getSegments() * 8 - width) / 2, 0);
+        display->print(dateStr);
+        display->display();
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+      }
+    } // display released here
 
-    // Release display so other tasks can draw
-    rmd.release_access();
-
-    // Idle before trying to acquire display again
     vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
@@ -185,24 +171,16 @@ void setup() {
   brightness = max(0, min(15, brightness));
   rmd.getResourceRef().setIntensity((uint8_t)brightness);
 
-  auto& matrix = rmd.getResourceRef();
-
-  if (not rmd.make_access_request())
+  if (auto display = rmd.acquire())
   {
-      Serial.println("Setup: Failed to get access to display");
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
-  }
-  else
-  {
-    scrollMessage(APP_VERSION, matrix, 30);
+    scrollMessage(APP_VERSION, display, 30);
     if (wifi_is_ap_mode()) {
       std::string apMsg = "WiFi setup: connect to "
                           + dataStore.get_value("hostname", "infoclock32")
                           + "-setup  then browse 192.168.4.1/edit";
-      scrollMessage(apMsg, matrix, 40);
+      scrollMessage(apMsg, display, 40);
     }
     vTaskDelay(10000 / portTICK_PERIOD_MS);
-    rmd.release_access();
   }
 
   // Always-on local display task

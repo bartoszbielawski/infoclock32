@@ -63,10 +63,9 @@ void night_mode_task(void* parameter)
                 : ds.get_value("brightness",        7);
             level = max(0, min(15, level));
 
-            if (rmd.make_access_request())
+            if (auto display = rmd.acquire())
             {
-                rmd.getResourceRef().setIntensity((uint8_t)level);
-                rmd.release_access();
+                display->setIntensity((uint8_t)level);
                 logPrintf("NGT", "night mode %s → brightness %d",
                           is_night ? "on" : "off", level);
             }

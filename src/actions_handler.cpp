@@ -37,10 +37,9 @@ void handle_push()
     }
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    if (rmd.make_access_request())
+    if (auto display = rmd.acquire())
     {
-        scrollMessage(std::string(msg.c_str()), rmd.getResourceRef(), speed);
-        rmd.release_access();
+        scrollMessage(std::string(msg.c_str()), display, speed);
         logPrintf("WEB", "push via /push: %.48s", msg.c_str());
         server.send(200, "application/json", "{\"ok\":true}");
     }
@@ -69,10 +68,9 @@ void handle_actions()
             String msg = server.arg("message");
             if (!msg.isEmpty())
             {
-                if (rmd.make_access_request())
+                if (auto display = rmd.acquire())
                 {
-                    scrollMessage(std::string(msg.c_str()), rmd.getResourceRef(), 50);
-                    rmd.release_access();
+                    scrollMessage(std::string(msg.c_str()), display, 50);
                     result = "&#10003; Message displayed.";
                     logPrintf("WEB", "push message via /actions");
                 }
@@ -84,10 +82,9 @@ void handle_actions()
             int level = server.arg("level").toInt();
             if (level >= 0 && level <= 15)
             {
-                if (rmd.make_access_request())
+                if (auto display = rmd.acquire())
                 {
-                    rmd.getResourceRef().setIntensity((uint8_t)level);
-                    rmd.release_access();
+                    display->setIntensity((uint8_t)level);
                     DataStore::getInstance().set_value("brightness", std::to_string(level));
                     DataStore::getInstance().save_to_file("/config.txt");
                     result = "&#10003; Brightness set to " + String(level) + ".";
@@ -153,13 +150,10 @@ void handle_actions()
         }
         else if (action == "reset_display")
         {
-            if (rmd.make_access_request())
+            if (auto display = rmd.acquire())
             {
-                auto& matrix = rmd.getResourceRef();
-                matrix.begin();
-                int level = DataStore::getInstance().get_value<int>("brightness", 7);
-                matrix.setIntensity((uint8_t)level);
-                rmd.release_access();
+                display->begin();
+                display->setIntensity((uint8_t)DataStore::getInstance().get_value<int>("brightness", 7));
                 result = "&#10003; Display reset.";
                 logPrintf("WEB", "display reset via /actions");
             }

@@ -127,7 +127,6 @@ void open_weather_map_task(void *parameter)
     time_t last_weather_update = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    auto& matrix = rmd.getResourceRef();
 
     while (true)
     {
@@ -154,17 +153,14 @@ void open_weather_map_task(void *parameter)
 
         logPrintf("WTH", "%s", messageToBeDisplayed.c_str());
 
-        if (not rmd.make_access_request())
+        if (auto display = rmd.acquire())
         {
-            logPrintf("WTH", "Failed to get access to display");
-            vTaskDelay(60000 / portTICK_PERIOD_MS);
-            continue;
+            scrollMessage(messageToBeDisplayed, display, 30);
+            vTaskDelay(20000 / portTICK_PERIOD_MS);
         }
-
-
-        scrollMessage(messageToBeDisplayed, matrix, 30);
-        rmd.release_access();
-
-        vTaskDelay(20000 / portTICK_PERIOD_MS); // wait 20 s before requesting display again
+        else
+        {
+            vTaskDelay(60000 / portTICK_PERIOD_MS);
+        } // wait 20 s before requesting display again
     }
 }

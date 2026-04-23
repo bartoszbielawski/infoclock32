@@ -79,27 +79,22 @@ void temp_sensor_task(void* parameter)
             continue;
         }
 
-        if (!rmd.make_access_request())
-        {
-            logPrintf("TMP", "failed to get display access");
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        auto& matrix = rmd.getResourceRef();
-        //generate temperature message
         char buffer[16];
-        snprintf(buffer, sizeof(buffer), "%.1f\xF7" "C", temp);        
-        scrollMessage(buffer, matrix, 25);
-
-        //generate pressure message if supported
-        if (sensor->hasPressure())
+        if (auto display = rmd.acquire())
         {
-            snprintf(buffer, sizeof(buffer), "%.0f hPa", pressure);
-            scrollMessage(buffer, matrix, 25);
-        }
-        rmd.release_access();
+            snprintf(buffer, sizeof(buffer), "%.1f\xF7" "C", temp);
+            scrollMessage(buffer, display, 25);
 
-        vTaskDelay(20000 / portTICK_PERIOD_MS);
+            if (sensor->hasPressure())
+            {
+                snprintf(buffer, sizeof(buffer), "%.0f hPa", pressure);
+                scrollMessage(buffer, display, 25);
+            }
+            vTaskDelay(20000 / portTICK_PERIOD_MS);
+        }
+        else
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
     }
 }

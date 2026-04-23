@@ -179,16 +179,14 @@ static void applyPendingHardware(ResourceManager<LMDS> &rmd)
     if (pendingBrightness < 0)
         return;
 
-    if (!rmd.make_access_request())
-        return;
+    auto display = rmd.acquire();
+    if (!display) return;
 
-    rmd.getResourceRef().setIntensity((uint8_t)pendingBrightness);
+    display->setIntensity((uint8_t)pendingBrightness);
     DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
     DataStore::getInstance().save_to_file("/config.txt");
     logPrintf("MQT", "brightness set to %d", pendingBrightness);
     pendingBrightness = -1;
-
-    rmd.release_access();
 }
 
 void mqtt_task(void *parameter)
@@ -196,8 +194,7 @@ void mqtt_task(void *parameter)
     registerTask("MQTT", 8192);
     pushQueue = xQueueCreate(4, sizeof(char *));
 
-    auto &rmd    = ResourceManager<LMDS>::getInstance();
-    auto &matrix = rmd.getResourceRef();
+    auto &rmd = ResourceManager<LMDS>::getInstance();
 
     time_t lastHeartbeat = 0;
 
@@ -238,11 +235,8 @@ void mqtt_task(void *parameter)
         char *pushMsg = nullptr;
         while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
         {
-            if (rmd.make_access_request())
-            {
-                scrollMessage(std::string(pushMsg), matrix, 40);
-                rmd.release_access();
-            }
+            if (auto display = rmd.acquire())
+                scrollMessage(std::string(pushMsg), display, 40);
             free(pushMsg);
             pumpLoop(50);
         }
@@ -250,11 +244,8 @@ void mqtt_task(void *parameter)
         // Display looped message
         if (!loopedMessage.empty())
         {
-            if (rmd.make_access_request())
-            {
-                scrollMessage(loopedMessage, matrix, 50);
-                rmd.release_access();
-            }
+            if (auto display = rmd.acquire())
+                scrollMessage(loopedMessage, display, 50);
         }
 
         // Periodic heartbeat every 60 seconds

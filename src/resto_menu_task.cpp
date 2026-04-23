@@ -174,8 +174,7 @@ void resto_menu_task(void* pvParameters) {
     registerTask("RestoMenu", 8192);
     (void)pvParameters;
 
-    auto& rmd    = ResourceManager<LMDS>::getInstance();
-    auto& matrix = rmd.getResourceRef();
+    auto& rmd = ResourceManager<LMDS>::getInstance();
 
     std::vector<std::string> cachedMenus; // one entry per configured restaurant
     std::string cachedDate;
@@ -228,13 +227,13 @@ void resto_menu_task(void* pvParameters) {
         }
 
         for (const auto& menu : cachedMenus) {
-            if (!rmd.make_access_request()) {
-                logPrintf(TAG, "display busy");
+            if (auto display = rmd.acquire())
+                scrollMessage(menu, display, kScrollSpeedMs);
+            else
+            {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 continue;
             }
-            scrollMessage(menu, matrix, kScrollSpeedMs);
-            rmd.release_access();
             
             //this delay is to avoid scrolling multiple menus back-to-back without giving a chance for other tasks to show their messages in between; adjust as needed
             vTaskDelay(120 * 1000 / portTICK_PERIOD_MS);

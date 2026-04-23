@@ -66,15 +66,13 @@ void custom_message_task(void* /*parameter*/)
             std::string display = build_display(m);
             logPrintf("MSG", "%s", display.c_str());
 
-            if (!rmd.make_access_request())
+            if (auto d = rmd.acquire())
+                scrollMessage(display, d, 50);
+            else
             {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 continue;
             }
-
-            auto& matrix = rmd.getResourceRef();
-            scrollMessage(display, matrix, 50);
-            rmd.release_access();
 
             vTaskDelay(5000 / portTICK_PERIOD_MS);
         }

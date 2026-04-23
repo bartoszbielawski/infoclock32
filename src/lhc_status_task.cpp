@@ -88,7 +88,6 @@ void lhc_status_task(void *parameter)
     time_t last_update = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    auto& matrix = rmd.getResourceRef();
 
     while (true)
     {
@@ -155,32 +154,19 @@ void lhc_status_task(void *parameter)
             }
         }   //end of update block
 
-        if (not rmd.make_access_request())
-        {
-            logPrintf("LHC", "Failed to get access to display");
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
-
         if (not modeAndEnergyMessage.empty())
-        {
-            scrollMessage(modeAndEnergyMessage, matrix, 20);
-        }
-        rmd.release_access();
+            if (auto display = rmd.acquire())
+                scrollMessage(modeAndEnergyMessage, display, 20);
 
         vTaskDelay(5000 / portTICK_PERIOD_MS);
-        if (not rmd.make_access_request())
-        {
-            logPrintf("LHC", "Failed to get access to display");
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
+
         if (not page1Message.empty())
-        {
-            logPrintf("LHC", "Page1: %s", page1Message.c_str());
-            scrollMessage(page1Message, matrix, 20);
-        }
-        rmd.release_access();
+            if (auto display = rmd.acquire())
+            {
+                logPrintf("LHC", "Page1: %s", page1Message.c_str());
+                scrollMessage(page1Message, display, 20);
+            }
+
         vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
 }

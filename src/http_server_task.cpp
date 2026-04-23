@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <resource_manager.hpp>
+#include <LMDS.hpp>
 #include <LittleFS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -114,7 +116,13 @@ static void sendTasksSection()
     int n = reg.count();
     if (n == 0) return;
 
-    server.sendContent_P(PSTR("<tr><th colspan='2'>&#129529; Tasks</th></tr>"));
+    char dropBuf[64];
+    snprintf(dropBuf, sizeof(dropBuf), "%lu",
+             (unsigned long)ResourceManager<LMDS>::getInstance().getDropCount());
+    server.sendContent_P(PSTR("<tr><th colspan='2'>&#129529; Tasks</th></tr>"
+                               "<tr><td class='label'>Display drops</td><td>"));
+    server.sendContent(dropBuf);
+    server.sendContent_P(PSTR("</td></tr>\n"));
 
     char buf[128];
     for (int i = 0; i < n; ++i) {
