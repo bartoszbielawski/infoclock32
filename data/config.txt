@@ -1,0 +1,91 @@
+# infoclock32 default configuration
+# Lines starting with # are comments and are ignored.
+# Format: key=value (no spaces around =)
+
+# ── Network ───────────────────────────────────────────────────────────────────
+wifi_ssid=
+wifi_password=
+# Device hostname used for DHCP, mDNS (.local) and the AP setup portal name
+hostname=infoclock32
+
+# ── Display ───────────────────────────────────────────────────────────────────
+# MAX7219 intensity: 0 (dimmest) – 15 (brightest)
+brightness=7
+
+# POSIX TZ string — controls clock display and time-based features
+# Examples:
+#   UTC0
+#   CET-1CEST,M3.5.0,M10.5.0/3          (Central Europe)
+#   GMT0BST,M3.5.0/1,M10.5.0            (UK)
+#   EST5EDT,M3.2.0,M11.1.0              (US Eastern)
+timezone=UTC0
+
+# Display language for date/weather labels: en or fr
+language=en
+
+# ── Night mode ────────────────────────────────────────────────────────────────
+# Dim the display between these times (HH:MM, 24-hour). Leave blank to disable.
+night_start=23:00
+night_end=07:00
+# Brightness during night hours (0–15)
+night_brightness=1
+
+# ── Web UI ────────────────────────────────────────────────────────────────────
+# HTTP basic auth password for protected routes (/log, /edit, /actions, /reboot)
+# Any username is accepted. Leave blank to disable auth entirely.
+web_password=
+
+# ── Weather (OpenWeatherMap) ──────────────────────────────────────────────────
+# Set enable_weather=0 to disable the weather task entirely
+enable_weather=1
+ow_api_key=
+ow_city_id=
+
+# ── LHC beam status (CERN) ───────────────────────────────────────────────────
+enable_lhc=1
+
+# ── Restaurant menu (CERN Novae) ─────────────────────────────────────────────
+enable_resto=0
+# Comma-separated Novae restaurant codes to display
+novae_codes=CER103
+# Comma-separated restaurant numbers, e.g. "2,3"
+resto_restaurants=3
+# Hours between which the menu is fetched and displayed (24-hour)
+resto_start_hour=9
+resto_end_hour=14
+
+# ── MQTT ─────────────────────────────────────────────────────────────────────
+enable_mqtt=0
+mqtt_server=
+# Client ID is also used as the MQTT topic prefix: {mqtt_client_id}/push etc.
+mqtt_client_id=infoclock32
+mqtt_user=
+mqtt_password=
+
+# ── Syslog ───────────────────────────────────────────────────────────────────
+# UDP syslog destination IP (port 514). Leave blank to disable.
+syslog_server=
+
+# ── Temperature sensor ───────────────────────────────────────────────────────
+# Poll interval in seconds
+temp_interval=30
+
+# ── Custom messages ───────────────────────────────────────────────────────────
+# How often to cycle through messages (seconds)
+msg_interval=60
+#
+# Define named message slots: message_<name>_text is required; the rest are optional.
+# start/end restrict display to a time window (HH:MM, 24-hour).
+# countdown shows "Xd HH:MM" until the target date (YYYY-MM-DD HH:MM).
+#
+# Example — always-on message:
+#   message_hello_text=Hello world!
+#
+# Example — time-windowed message:
+#   message_lunch_text=Lunch time!
+#   message_lunch_start=12:00
+#   message_lunch_end=13:00
+#
+# Example — countdown:
+#   message_newyear_text=New Year in
+#   message_newyear_countdown=2026-01-01 00:00
