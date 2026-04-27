@@ -149,11 +149,15 @@ void setup() {
   // Configure SNTP time sources (UTC base; timezone handled separately)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  // Configure SPI bus with explicit pins before constructing the LED matrix driver
-  SPI.begin(MATRIX_SCK_PIN, /*miso=*/-1, MATRIX_MOSI_PIN);
+  // Configure SPI bus with explicit pins before constructing the LED matrix driver.
+  // Pin defaults come from pins.hpp; override via config keys spi_sck/spi_mosi/spi_cs.
+  int spiSck  = dataStore.get_value<int>("spi_sck",  MATRIX_SCK_PIN);
+  int spiMosi = dataStore.get_value<int>("spi_mosi", MATRIX_MOSI_PIN);
+  int spiCs   = dataStore.get_value<int>("spi_cs",   MATRIX_CS_PIN);
+  SPI.begin(spiSck, /*miso=*/-1, spiMosi);
 
   // Create and register LED matrix resource
-  auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, MATRIX_CS_PIN);
+  auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, spiCs);
   lmds->begin();
   ResourceManager<LMDS>::getInstance().initialize(lmds);
   ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
@@ -217,7 +221,10 @@ void setup() {
   xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
 
   // Sensor/message/night mode tasks
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);  // needed by all I2C sensors
+  // I2C pin defaults from pins.hpp; override via config keys i2c_sda/i2c_scl.
+  int i2cSda = dataStore.get_value<int>("i2c_sda", I2C_SDA_PIN);
+  int i2cScl = dataStore.get_value<int>("i2c_scl", I2C_SCL_PIN);
+  Wire.begin(i2cSda, i2cScl);
   TempSensor* tempSensor = createTempSensor();  // sensor type from temp_sensor config key
   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);

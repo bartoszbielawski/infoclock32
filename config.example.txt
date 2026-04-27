@@ -61,6 +61,22 @@ mqtt_client_id=infoclock32
 mqtt_user=
 mqtt_password=
 
+# ── Pin overrides ────────────────────────────────────────────────────────────
+# Override the compile-time pin defaults from pins.hpp. Useful when wiring
+# differs from the board definition without requiring a recompile.
+# Changes take effect on the next reboot.
+#
+# SPI (MAX7219 LED matrix)
+#spi_sck=4
+#spi_mosi=6
+#spi_cs=7
+#
+# I2C (temperature/pressure sensors)
+#i2c_sda=1
+#i2c_scl=0
+#
+# 1-Wire (DS18B20) — see ds18b20_pin under Temperature sensor below
+
 # ── Temperature sensor ────────────────────────────────────────────────────────
 # Sensor type. Supported values:
 #   bme280   — BME280 via I2C (temp + humidity + pressure)
