@@ -135,6 +135,7 @@ void sendPageNav(const char* active)
         {"/edit",     "Config"},
         {"/actions",  "Actions"},
         {"/messages", "Messages"},
+        {"/wifi",     "WiFi"},
         {"/update",   "Update"},
     };
     server.sendContent_P(PSTR("<nav>"));

@@ -89,11 +89,54 @@ public:
 
     void save_to_file(const std::string& filename)
     {
-        File file = LittleFS.open(filename.c_str(), "w");
-        if (!file) return;
+        // Read existing lines so comments and blank lines are preserved.
+        std::vector<std::string> lines;
+        File rf = LittleFS.open(filename.c_str(), "r");
+        if (rf) {
+            while (rf.available()) {
+                String s = rf.readStringUntil('\n');
+                while (s.length() > 0 &&
+                       (s[s.length()-1] == '\r' || s[s.length()-1] == '\n'))
+                    s.remove(s.length()-1);
+                lines.push_back(std::string(s.c_str()));
+            }
+            rf.close();
+        }
+
+        // Track which keys still need to be appended after the existing lines.
+        std::map<std::string, bool> emitted;
         for (const auto& kv : data)
-            file.printf("%s=%s\n", kv.first.c_str(), kv.second.c_str());
-        file.close();
+            emitted[kv.first] = false;
+
+        File wf = LittleFS.open(filename.c_str(), "w");
+        if (!wf) return;
+
+        for (const auto& line : lines) {
+            // Preserve blank lines and comments verbatim.
+            if (line.empty() || line[0] == '#') {
+                wf.printf("%s\n", line.c_str());
+                continue;
+            }
+            auto eq = line.find('=');
+            if (eq == std::string::npos) {
+                wf.printf("%s\n", line.c_str());
+                continue;
+            }
+            std::string key = line.substr(0, eq);
+            auto it = data.find(key);
+            if (it != data.end()) {
+                wf.printf("%s=%s\n", key.c_str(), it->second.c_str());
+                emitted[key] = true;
+            }
+            // Key removed from DataStore — omit the line.
+        }
+
+        // Append any keys that were not present in the original file.
+        for (const auto& kv : data)
+            if (!emitted[kv.first])
+                wf.printf("%s=%s\n", kv.first.c_str(), kv.second.c_str());
+
+        wf.close();
     }
 
     // Typed overload: delegates to parse_value(). Supported: int, long, float.

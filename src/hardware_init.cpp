@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <DNSServer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <data_store.hpp>
@@ -65,7 +66,7 @@ void hardware_init()
         }
         s_ap_mode = false;
     } else {
-        // Fallback: AP+STA so the user can configure via /edit at 192.168.4.1
+        // Fallback: AP+STA so the user can configure via /wifi at 192.168.4.1
         // while the station side keeps retrying in the background.
         std::string apName = hostname + "-setup";
         WiFi.mode(WIFI_AP_STA);
@@ -73,8 +74,22 @@ void hardware_init()
         if (!ssid.empty())
             WiFi.begin(ssid.c_str(), password.c_str());  // re-arm background retry
         Serial.printf("hardware_init: WiFi failed — AP '%s' started, "
-                      "browse http://192.168.4.1/edit\n", apName.c_str());
+                      "browse http://192.168.4.1/wifi\n", apName.c_str());
         s_ap_mode = true;
+
+        // Pre-scan so the /wifi page has results ready immediately.
+        WiFi.scanNetworks(/*async=*/true);
+
+        // DNS server: redirect every domain to 192.168.4.1 (captive portal).
+        static DNSServer s_dns;
+        s_dns.start(53, "*", IPAddress(192, 168, 4, 1));
+        xTaskCreate([](void* arg) {
+            auto* dns = static_cast<DNSServer*>(arg);
+            while (true) {
+                dns->processNextRequest();
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+        }, "DNS", 1024, &s_dns, 1, nullptr);
 
         // Spawn monitor: starts mDNS and clears ap_mode flag when STA connects.
         xTaskCreate(wifi_reconnect_task, "WiFiReconnect", 2048, nullptr, 1, nullptr);
