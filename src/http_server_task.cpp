@@ -400,22 +400,21 @@ void handle_file_edit()
 
     if (server.method() == HTTP_GET)
     {
-        File file = LittleFS.open(FILENAME, "r");
-        if (!file) { server.send(500, "text/plain", "Failed to open file"); return; }
-
         sendPageHead("Config editor");
         sendPageNav("/edit");
         server.sendContent_P(PSTR("<h2>Config editor <small style='font-weight:400;color:#94a3b8'>"
                                    "/config.txt</small></h2>"
                                    "<form method='POST' action='/edit'>"
                                    "<textarea name='content' rows='22' spellcheck='false'>"));
-        char buf[256];
-        while (file.available())
-        {
-            int n = file.readBytes(buf, sizeof(buf));
-            if (n > 0) server.sendContent(buf, n);
+        File file = LittleFS.open(FILENAME, "r");
+        if (file) {
+            char buf[256];
+            while (file.available()) {
+                int n = file.readBytes(buf, sizeof(buf));
+                if (n > 0) server.sendContent(buf, n);
+            }
+            file.close();
         }
-        file.close();
         server.sendContent_P(PSTR("</textarea>"
                                    "<div class='actions'>"
                                    "<button class='btn btn-primary' type='submit'>&#128190; Save &amp; reload</button>"
