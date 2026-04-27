@@ -90,9 +90,14 @@ public:
         }
         if (key == "uptime")
         {
-            unsigned long ms = millis();
-            snprintf(buf, sizeof(buf), "%luh%02lum",
-                     ms / 3600000UL, (ms / 60000UL) % 60UL);
+            unsigned long ms   = millis();
+            unsigned long days = ms / 86400000UL;
+            unsigned long hrs  = (ms / 3600000UL) % 24UL;
+            unsigned long mins = (ms / 60000UL)   % 60UL;
+            if (days > 0)
+                snprintf(buf, sizeof(buf), "%lud%luh%02lum", days, hrs, mins);
+            else
+                snprintf(buf, sizeof(buf), "%luh%02lum", hrs, mins);
             return buf;
         }
 
