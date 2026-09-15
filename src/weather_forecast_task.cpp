@@ -10,6 +10,8 @@
 
 #include <data_store.hpp>
 #include <parse_utils.hpp>
+#include <runtime_store.hpp>
+#include <weather_icons.hpp>
 #include <WiFi.h>
 #include <http_utils.hpp>
 #include <graphic_utils.hpp>
@@ -40,7 +42,9 @@ static std::map<std::string, std::string> parseJsonWithPredicate(const String &j
 }
 
 static const std::set<std::string> weatherKeys = {
-    "/root/main/temp"
+    "/root/main/temp",
+    "/root/weather/0/id",
+    "/root/weather/0/icon"
 };
 
 // OWM forecast returns 3-hour slots; index 2 = ~6 hours ahead from the current slot.
@@ -50,7 +54,10 @@ static const std::set<std::string> forecastKeys = {
     "/root/city/name"
 };
 
-static std::string readWeatherFromOWM()
+// Returns the display message, or an empty string on failure.
+// iconIndex (out): index into kWeatherIcons for the current condition,
+// or -1 if the condition could not be parsed.
+static std::string readWeatherFromOWM(int& iconIndex)
 {
     auto& ds    = DataStore::getInstance();
     auto apiKey = ds.get_value("ow_api_key", "");
@@ -111,6 +118,17 @@ static std::string readWeatherFromOWM()
         return std::string();
     }
 
+    // Current condition drives the display icon; OWM's icon field carries
+    // a d/n suffix distinguishing day from night.
+    int conditionId = parse_value(currentWeather["/root/weather/0/id"], -1);
+    std::string iconField = currentWeather["/root/weather/0/icon"];
+    bool night = !iconField.empty() && iconField.back() == 'n';
+    iconIndex = (conditionId > 0) ? weatherIconIndex(conditionId, night) : -1;
+
+    // Publish for {placeholders} in custom messages and MQTT /request
+    RuntimeStore::getInstance().set("weather_id", std::to_string(conditionId));
+    RuntimeStore::getInstance().set("weather_desc", description);
+
     char logInfo[256];
     snprintf_P(logInfo, sizeof(logInfo), WEATHER_FMT_LOG,
         cityName.c_str(), currentTemp, forecastTemp, description.c_str());
@@ -127,6 +145,7 @@ void open_weather_map_task(void *parameter)
 {
     registerTask("Weather", 8192);
     std::string messageToBeDisplayed;
+    int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
     time_t last_weather_update = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
@@ -140,12 +159,12 @@ void open_weather_map_task(void *parameter)
 
         if (difftime(time(nullptr), last_weather_update) > 30*60) // update weather every 30 minutes
         {
-            auto newWeather = readWeatherFromOWM();
+            auto newWeather = readWeatherFromOWM(iconIndex);
             if (not newWeather.empty())
             {
                 messageToBeDisplayed = newWeather;
                 last_weather_update = time(nullptr);
-            }               
+            }
         }
 
         if (messageToBeDisplayed.empty())
@@ -156,10 +175,11 @@ void open_weather_map_task(void *parameter)
 
         if (auto display = rmd.acquire())
         {
-            scrollMessage(messageToBeDisplayed, display, 20);            
+            const uint8_t* icon = (iconIndex >= 0) ? kWeatherIcons[iconIndex] : nullptr;
+            scrollMessage(icon, kWeatherIconWidth, messageToBeDisplayed, display, 20);
         }
-        
+
         vTaskDelay(60000 / portTICK_PERIOD_MS);
-        
+
     }
 }

@@ -5,10 +5,16 @@
 
 #include <Adafruit_GFX.h>
 #include <LMDS.hpp>
+#include <stdint.h>
 
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset = 0);
 
 void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1);
+
+// Variant that draws an icon bitmap to the left of the message:
+// iconWidth bytes, one per column, bit 0 = top row (see weather_icons.hpp).
+// Pass nullptr to omit the icon.
+void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed = 100, int step = 1);
 
 
 void wipeDisplayLeftToRight(LMDS& display, int speed = 50);

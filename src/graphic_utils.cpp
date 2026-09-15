@@ -24,44 +24,74 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
 }
 
 
-void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+// Common scroll path: center the canvas if it fits, otherwise scroll it across.
+static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps)
 {
-  //message = substituteGlyphs(message);
-  auto msgLength = message.size();
-  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
-
-  logPrintf("DISP", "scrolling '%s'", message.c_str());
-
-  //center shorter messages
-  if (msgLength * FONT_WIDTH <= (size_t)display.width())
+  if (canvas.width() <= display.width())
   {
     logPrintf("DISP", "message fits on display, centering without scrolling");
-    GFXcanvas1 canvas(msgLength * FONT_WIDTH, 8);
-    canvas.print(message.c_str());
     display.clear();
-    int offset = (display.width() - (int)(msgLength * FONT_WIDTH)) / 2;
+    int offset = (display.width() - canvas.width()) / 2;
     copyCanvasToDisplay(canvas, 0, display, offset);
     display.display();
     vTaskDelay(100 * speed / portTICK_PERIOD_MS);
     return;
   }
 
-  GFXcanvas1 canvas(msgLength * FONT_WIDTH, 8);
-  canvas.print(message.c_str());
-
   vTaskDelay(10 * speed / portTICK_PERIOD_MS);
 
-  size_t last = canvas.width() - display.width() + steps;
+  int last = canvas.width() - display.width() + steps;
   for (int i = 0; i <= last; i += steps)
-  {    
+  {
     copyCanvasToDisplay(canvas, i, display, 0);
     display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
     if (i == 0) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
-    if (i == last) vTaskDelay(50 * speed / portTICK_PERIOD_MS);    
+    if (i == last) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
   }
-  
+
   vTaskDelay(10 * speed / portTICK_PERIOD_MS);
+}
+
+// Draw an icon bitmap into the canvas at the given x offset
+// (one byte per column, bit 0 = top row).
+static void drawIcon(GFXcanvas1& canvas, const uint8_t* icon, int iconWidth, int xOffset)
+{
+  for (int x = 0; x < iconWidth; x++)
+  {
+    uint8_t col = icon[x];
+    for (int y = 0; y < 8; y++)
+      canvas.drawPixel(x + xOffset, y, (col >> y) & 1);
+  }
+}
+
+void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+{
+  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+
+  logPrintf("DISP", "scrolling '%s'", message.c_str());
+
+  GFXcanvas1 canvas(message.size() * FONT_WIDTH, 8);
+  canvas.print(message.c_str());
+
+  scrollCanvas(canvas, display, speed, steps);
+}
+
+void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps)
+{
+  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+  static const int ICON_GAP = 1;   //space between icon and text
+
+  int iconArea = icon ? iconWidth + ICON_GAP : 0;
+  logPrintf("DISP", "scrolling '%s' %s icon", message.c_str(), icon ? "with" : "without");
+
+  GFXcanvas1 canvas(message.size() * FONT_WIDTH + iconArea, 8);
+  if (icon)
+    drawIcon(canvas, icon, iconWidth, 0);
+  canvas.setCursor(iconArea, 0);
+  canvas.print(message.c_str());
+
+  scrollCanvas(canvas, display, speed, steps);
 }
 
 void wipeDisplayLeftToRight(LMDS& display, int speed)
