@@ -3,8 +3,10 @@
 # Format: key=value (no spaces around =)
 
 # ── Network ───────────────────────────────────────────────────────────────────
+# WiFiManager: config values tried first, then portal-saved credentials.
 wifi_ssid=
 wifi_password=
+#wifi_portal_timeout_s=180
 # Device hostname used for DHCP, mDNS (.local) and the AP setup portal name
 hostname=infoclock32
 
@@ -111,17 +113,18 @@ temp_interval=30
 msg_interval=60
 #
 # Define named message slots: message_<name>_text is required; the rest are optional.
-# start/end restrict display to a time window (HH:MM, 24-hour).
-# countdown shows "Xd HH:MM" until the target date (YYYY-MM-DD HH:MM).
+# start/end restrict display to a date window (YYYY-MM-DD, both bounds inclusive).
+# countdown shows "Xd" / "today!" based on the target date (YYYY-MM-DD, local midnight).
+# It hides automatically from the day after the target unless end is set later.
 #
 # Example — always-on message:
 #   message_hello_text=Hello world!
 #
-# Example — time-windowed message:
+# Example — date-windowed message:
 #   message_lunch_text=Lunch time!
-#   message_lunch_start=12:00
-#   message_lunch_end=13:00
+#   message_lunch_start=2026-09-01
+#   message_lunch_end=2026-09-30
 #
 # Example — countdown:
 #   message_newyear_text=New Year in
-#   message_newyear_countdown=2026-01-01 00:00
+#   message_newyear_countdown=2027-01-01

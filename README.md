@@ -78,7 +78,7 @@ The first flash must always be wired.
 
 On a freshly flashed device LittleFS is empty — all settings use defaults until the user saves via `/edit` or MQTT `/config`.
 
-If `wifi_ssid` is not configured the device starts a WiFi setup AP named `<hostname>-setup` (default: `infoclock32-setup`). Connect to it and browse to `192.168.4.1/edit` to set credentials, then reboot.
+Connection is handled by [WiFiManager](https://github.com/tzapu/WiFiManager). If `wifi_ssid` is not configured (or connecting fails), the device opens a captive-portal AP named `<hostname>-setup` (default: `infoclock32-setup`) at `192.168.4.1` for `wifi_portal_timeout_s` seconds (default 180), then boots offline — a background monitor keeps retrying and reconnects whenever the network returns. Reboot the device to reopen the setup portal. You can also change credentials without the portal via the `/wifi` web page (writes `wifi_ssid`/`wifi_password` to config, then reboot).
 
 ### Web UI
 
@@ -105,6 +105,7 @@ Key config keys:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `wifi_ssid` / `wifi_password` | — | WiFi credentials |
+| `wifi_portal_timeout_s` | `180` | seconds the setup portal stays open at boot (30–600) |
 | `hostname` | `infoclock32` | DHCP name, mDNS `.local`, AP portal name |
 | `brightness` | `7` | Display intensity 0–15 |
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
@@ -148,17 +149,17 @@ Define named message slots in config:
 # Always-on message
 message_hello_text=Hello world!
 
-# Time-windowed message
+# Date-windowed message
 message_lunch_text=Lunch time!
-message_lunch_start=12:00
-message_lunch_end=13:00
+message_lunch_start=2026-09-01
+message_lunch_end=2026-09-30
 
-# Countdown
+# Countdown — shows "Conference in: 45d", "today!" on the day, then hides
 message_event_text=Conference in
-message_event_countdown=2026-09-01 09:00
+message_event_countdown=2026-09-01
 ```
 
-Messages cycle every `msg_interval` seconds. Placeholders like `{temp_c}` are expanded from RuntimeStore and DataStore at display time.
+Messages cycle every `msg_interval` seconds. Day counts are calendar days (local midnight to midnight). A countdown auto-hides from the day after its target unless `message_<name>_end` keeps it visible for count-ups. Placeholders like `{temp_c}` are expanded from RuntimeStore and DataStore at display time.
 
 Push a one-off message via the `/` dashboard, MQTT, or `/actions`.
 

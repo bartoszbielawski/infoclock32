@@ -4,11 +4,15 @@
 # All keys are optional unless marked (required).
 
 # ── WiFi ──────────────────────────────────────────────────────────────────────
-# (required) Network credentials.
-# On first boot (empty flash) the device starts an AP named <hostname>-setup
-# for captive-portal configuration. These keys can also be set there.
+# (required) Network credentials. Connection is managed by WiFiManager:
+# these values are tried first, then credentials saved in the setup portal.
+# If no connection can be made at boot, an AP named <hostname>-setup opens
+# (captive portal at 192.168.4.1) for wifi_portal_timeout_s seconds; a
+# background monitor keeps retrying and re-joining afterwards. Reboot to
+# reopen the portal.
 wifi_ssid=MyNetwork
 wifi_password=secret
+#wifi_portal_timeout_s=180
 
 # ── Device identity ───────────────────────────────────────────────────────────
 # Hostname used for DHCP, mDNS (<hostname>.local), and the setup AP name.
@@ -115,6 +119,7 @@ msg_interval=60
 #   message_<name>_countdown — YYYY-MM-DD — appends " in X days" or "X days ago"
 #
 # {} in the text is replaced by the countdown number.
+# A countdown hides itself from the day after its target unless _end is set later.
 # Example: always-on greeting
 message_1_text=Hello, world!
 #
