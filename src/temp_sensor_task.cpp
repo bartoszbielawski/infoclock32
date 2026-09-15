@@ -8,6 +8,8 @@
 #include <runtime_store.hpp>
 #include <logger.hpp>
 #include <temp_sensor.hpp>
+#include <pressure_history.hpp>
+#include <weather_icons.hpp>
 #include <string>
 
 // Default display update interval in seconds
@@ -16,6 +18,19 @@ static constexpr int DEFAULT_INTERVAL_S = 300;
 // Config keys
 static const char CFG_INTERVAL[] = "temp_interval";
 static const char CFG_TEMP_OFFSET[] = "temp_offset";
+
+// Pressure trend arrow glyph for the pressure readout
+static const uint8_t* trendIconFor(TrendKind kind)
+{
+    switch (kind)
+    {
+        case TREND_RISING_FAST:  return kWeatherIcons[WI_ARROW_UP_FAST];
+        case TREND_RISING:       return kWeatherIcons[WI_ARROW_UP];
+        case TREND_FALLING:      return kWeatherIcons[WI_ARROW_DOWN];
+        case TREND_FALLING_FAST: return kWeatherIcons[WI_ARROW_DOWN_FAST];
+        default:                 return kWeatherIcons[WI_ARROW_STEADY];
+    }
+}
 
 void temp_sensor_task(void* parameter)
 {
@@ -38,6 +53,11 @@ void temp_sensor_task(void* parameter)
     float pressure = 0.0f;
     float humidity = 0.0f;
 
+    // Pressure trend (valid only when the sensor provides pressure)
+    bool haveTrend = false;
+    TrendKind trendKind = TREND_STEADY;
+    float trendRate = 0.0f;
+
     bool read_success = false;
 
     while (true)
@@ -58,10 +78,19 @@ void temp_sensor_task(void* parameter)
                 auto& rs = RuntimeStore::getInstance();
                 temp = sensor->temperature() + temp_offset;
                 rs.set("temp_c", temp, "%.1f\xC2\xB0" "C");
-                if (sensor->hasPressure())  
+                if (sensor->hasPressure())
                 {
                     pressure = sensor->pressure();
                     rs.set("temp_hpa", pressure, "%.0f");
+
+                    // Feed the trend history and refresh the trend placeholders
+                    PressureHistoryStore::getInstance().add(time(nullptr), pressure);
+                    haveTrend = PressureHistoryStore::getInstance().trend(time(nullptr), trendKind, trendRate);
+                    if (haveTrend)
+                    {
+                        rs.set("pressure_trend", pressureTrendName(trendKind));
+                        rs.set("pressure_rate", trendRate, "%+.2f");
+                    }
                 }
                 
                 if (sensor->hasHumidity())
@@ -87,10 +116,10 @@ void temp_sensor_task(void* parameter)
 
             if (sensor->hasPressure())
             {
-                //vTaskDelay(1000 / portTICK_PERIOD_MS);
                 snprintf(buffer, sizeof(buffer), "%.0f hPa", pressure);
-                scrollMessage(buffer, display, 20);
-            }            
+                const uint8_t* trendIcon = haveTrend ? trendIconFor(trendKind) : nullptr;
+                scrollMessage(trendIcon, kWeatherIconWidth, buffer, display, 20);
+            }
         }
         
         vTaskDelay(30000 / portTICK_PERIOD_MS);
