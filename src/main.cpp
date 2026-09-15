@@ -35,6 +35,20 @@ void game_of_life_task(void *parameter);
 // Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
 
+// Day-name table for the configured language (en/fr/pl), see "language" config key
+static const char* localizedDayName(int wday)
+{
+  static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+  static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
+  static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
+
+  std::string lang = dataStore.get_value("language", "en");
+  const char* const* dayNames = kDayNamesEn;
+  if (lang == "fr") dayNames = kDayNamesFr;
+  else if (lang == "pl") dayNames = kDayNamesPl;
+  return dayNames[wday];
+}
+
 // Main clock display task.
 // It periodically takes display ownership, shows time, day, and date, then releases ownership.
 void displayClock(void *parameter)
@@ -73,15 +87,7 @@ void displayClock(void *parameter)
         time_t now = time(nullptr);
         struct tm *timeinfo = localtime(&now);
 
-        static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
-        static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
-        static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
-
-        std::string lang = dataStore.get_value("language", "en");
-        const char* const* dayNames = kDayNamesEn;
-        if (lang == "fr") dayNames = kDayNamesFr;
-        else if (lang == "pl") dayNames = kDayNamesPl;
-        const char* dayName = dayNames[timeinfo->tm_wday];
+        const char* dayName = localizedDayName(timeinfo->tm_wday);
 
         char dateStr[16];
         snprintf(dateStr, sizeof(dateStr), "%s %02d/%02d",
@@ -263,9 +269,25 @@ void setup() {
   else
     logPrintf("SYS", "LifeTask disabled (enable_life=0)");
 
-
-  
-  //by this time we should have received the correct time from NTP, so we can scroll the date to verify that timezone is applied correctly
+  // Boot date check: by now NTP should have synced (WiFi came up seconds ago).
+  // Wait for a valid local time (up to 10 s), then scroll the current day,
+  // date, and time so the timezone config can be verified at a glance.
+  {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10000))
+    {
+      char bootDate[24];
+      snprintf(bootDate, sizeof(bootDate), "%s %02d/%02d %02d:%02d",
+               localizedDayName(timeinfo.tm_wday),
+               timeinfo.tm_mday, timeinfo.tm_mon + 1,
+               timeinfo.tm_hour, timeinfo.tm_min);
+      logPrintf("SYS", "boot date check: %s", bootDate);
+      if (auto display = rmd.acquire())
+        scrollMessage(bootDate, display, 30);
+    }
+    else
+      logPrintf("SYS", "time not synced after 10 s — boot date check skipped");
+  }
 }
 
 // loopTask is a real FreeRTOS task so vTaskDelay yields properly here.

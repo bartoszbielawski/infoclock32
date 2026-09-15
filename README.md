@@ -26,7 +26,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Feature | Config key(s) |
 |---------|--------------|
 | Clock + date display | `language` (`en`/`fr`/`pl`), `timezone` |
-| Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` |
+| Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
@@ -143,6 +143,8 @@ Set `temp_sensor` in config to one of the supported drivers:
 | `stub` (default) | None | — | — |
 
 Sensor readings are published to RuntimeStore (`temp_c`, `temp_hpa`, `temp_rh`) and visible on the `/status` page. Use them in custom messages as `{temp_c}` placeholders.
+
+Sensors with pressure also get a **barometric trend**: the pressure readout on the display is prefixed with a trend arrow glyph (single/double up or down arrows, or → for steady), and RuntimeStore publishes `pressure_trend` (`rising fast`/`rising`/`steady`/`falling`/`falling fast`) and `pressure_rate` (hPa/hour). The trend is a least-squares slope over recent readings — it needs about 30 minutes of samples after boot before the arrow appears.
 
 To add a new sensor, implement the `TempSensor` interface in a new header and add an entry to `createTempSensor()` in `include/temp_sensor_factory.hpp`.
 
