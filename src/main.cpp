@@ -192,7 +192,7 @@ void setup() {
     if (wifi_is_ap_mode()) {
       std::string apMsg = "WiFi setup: connect to "
                           + dataStore.get_value("hostname", "infoclock32")
-                          + "-setup  then browse 192.168.4.1/edit";
+                          + "-setup  then browse 192.168.4.1";
       scrollMessage(apMsg, display, 40);
     }
     vTaskDelay(10000 / portTICK_PERIOD_MS);

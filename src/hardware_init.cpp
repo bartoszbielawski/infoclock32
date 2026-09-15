@@ -1,97 +1,99 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <ESPmDNS.h>
-#include <DNSServer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <string>
 #include <data_store.hpp>
 #include <logger.hpp>
 
-static bool s_ap_mode = false;
+static volatile bool s_ap_mode = false;   // true while not connected to any AP
+static std::string s_hostname = "infoclock32";
+
 bool wifi_is_ap_mode() { return s_ap_mode; }
 
-// Background task: waits for the STA side to connect (happens automatically
-// once the router is reachable), then starts mDNS and exits.
-// Only created when we enter AP+STA fallback mode.
-static void wifi_reconnect_task(void* /*pv*/)
+static void start_mdns()
 {
-    while (WiFi.status() != WL_CONNECTED)
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    if (MDNS.begin(s_hostname.c_str()))
+        logPrintf("WIFI", "mDNS started — http://%s.local", s_hostname.c_str());
+    MDNS.addService("http", "tcp", 80);
+}
 
-    s_ap_mode = false;
-    logPrintf("SYS", "WiFi reconnected, IP=%s", WiFi.localIP().toString().c_str());
+// Persistent watchdog. Survives the WiFiManager portal closing: whenever the
+// STA link drops (or boot ended offline), re-arms the connection with the last
+// credentials WiFi.begin()/WiFiManager used and keeps retrying every 30 s.
+static void wifi_monitor_task(void* /*pv*/)
+{
+    bool wasConnected = false;
+    for (;;)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            if (!wasConnected)
+            {
+                wasConnected = true;
+                s_ap_mode = false;
+                logPrintf("WIFI", "connected, IP=%s",
+                          WiFi.localIP().toString().c_str());
+                start_mdns();
+            }
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            continue;
+        }
 
-    std::string hostname = DataStore::getInstance().get_value("hostname", "infoclock32");
-    if (MDNS.begin(hostname.c_str())) {
-        MDNS.addService("http", "tcp", 80);
-        logPrintf("SYS", "mDNS started — http://%s.local", hostname.c_str());
+        if (wasConnected)
+            logPrintf("WIFI", "link lost — retrying every 30 s");
+        wasConnected = false;
+        s_ap_mode = true;
+        WiFi.reconnect();   // no-op if the device never had credentials
+        vTaskDelay(30000 / portTICK_PERIOD_MS);
     }
-
-    vTaskDelete(nullptr);
 }
 
 void hardware_init()
 {
-    // Serial is already initialised by setup() before this call.
     Serial.println("hardware_init: start");
 
     auto& ds = DataStore::getInstance();
-    std::string hostname = ds.get_value("hostname",     "infoclock32");
-    std::string ssid     = ds.get_value("wifi_ssid",    "");
-    std::string password = ds.get_value("wifi_password","");
+    s_hostname = ds.get_value("hostname", "infoclock32");
+    std::string ssid     = ds.get_value("wifi_ssid", "");
+    std::string password = ds.get_value("wifi_password", "");
 
-    // Apply hostname before WiFi connects so DHCP reflects the configured value.
-    WiFi.setHostname(hostname.c_str());
+    int portal_timeout_s = max(30, min(600,
+        ds.get_value<int>("wifi_portal_timeout_s", 180)));
 
-    if (!ssid.empty()) {
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(ssid.c_str(), password.c_str());
-        Serial.println("hardware_init: connecting to WiFi...");
+    WiFi.setHostname(s_hostname.c_str());
 
-        // Wait up to 15 s (30 × 500 ms)
-        int retries = 30;
-        while (WiFi.status() != WL_CONNECTED && retries-- > 0)
-            delay(500);
-    }
+    // Standard WiFiManager provisioning (2.0.x): autoConnect() uses the
+    // NVS-stored station credentials, and opens a captive portal
+    // ("<hostname>-setup" @ 192.168.4.1) when they fail or are absent.
+    // The portal gives up after wifi_portal_timeout_s so the clock still
+    // boots offline; rebooting reopens it.
+    static WiFiManager wm;
+    wm.setHostname(s_hostname.c_str());
+    wm.setConfigPortalTimeout(portal_timeout_s);
+    wm.setBreakAfterConfig(true);
 
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("hardware_init: WiFi connected, IP=%s\n",
-                      WiFi.localIP().toString().c_str());
-        if (MDNS.begin(hostname.c_str())) {
-            MDNS.addService("http", "tcp", 80);
-            Serial.printf("hardware_init: mDNS started — http://%s.local\n",
-                          hostname.c_str());
-        } else {
-            Serial.println("hardware_init: mDNS start failed");
-        }
+    if (!ssid.empty())
+        WiFi.begin(ssid.c_str(), password.c_str());  // config.txt wins: seeds WM's credential store
+
+    std::string apName = s_hostname + "-setup";
+    bool connected = wm.autoConnect(apName.c_str());
+
+    if (connected)
+    {
         s_ap_mode = false;
-    } else {
-        // Fallback: AP+STA so the user can configure via /wifi at 192.168.4.1
-        // while the station side keeps retrying in the background.
-        std::string apName = hostname + "-setup";
-        WiFi.mode(WIFI_AP_STA);
-        WiFi.softAP(apName.c_str());
-        if (!ssid.empty())
-            WiFi.begin(ssid.c_str(), password.c_str());  // re-arm background retry
-        Serial.printf("hardware_init: WiFi failed — AP '%s' started, "
-                      "browse http://192.168.4.1/wifi\n", apName.c_str());
-        s_ap_mode = true;
-
-        // Pre-scan so the /wifi page has results ready immediately.
-        WiFi.scanNetworks(/*async=*/true);
-
-        // DNS server: redirect every domain to 192.168.4.1 (captive portal).
-        static DNSServer s_dns;
-        s_dns.start(53, "*", IPAddress(192, 168, 4, 1));
-        xTaskCreate([](void* arg) {
-            auto* dns = static_cast<DNSServer*>(arg);
-            while (true) {
-                dns->processNextRequest();
-                vTaskDelay(10 / portTICK_PERIOD_MS);
-            }
-        }, "DNS", 1024, &s_dns, 1, nullptr);
-
-        // Spawn monitor: starts mDNS and clears ap_mode flag when STA connects.
-        xTaskCreate(wifi_reconnect_task, "WiFiReconnect", 2048, nullptr, 1, nullptr);
+        logPrintf("WIFI", "connected, IP=%s",
+                  WiFi.localIP().toString().c_str());
+        start_mdns();
     }
+    else
+    {
+        s_ap_mode = true;
+        logPrintf("WIFI", "offline — reboot to reopen setup portal at %s / 192.168.4.1",
+                  apName.c_str());
+    }
+
+    xTaskCreate(wifi_monitor_task, "WiFiMonitor", 4096, nullptr, 1, nullptr);
 }
