@@ -6,3 +6,4 @@ platformio.local.ini
 .vscode/ipch
 .claude/settings.local.json
 CLAUDE.md
+tests/host/custom_message_check

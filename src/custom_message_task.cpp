@@ -22,13 +22,9 @@ static std::vector<CustomMessage> load_messages()
     auto keys = ds.get_keys_with_prefix("message_");
     for (const auto& key : keys)
     {
-        // Must end with "_text"
-        const std::string suffix = "_text";
-        if (key.size() < 8 + 1 + suffix.size()) continue;
-        if (key.substr(key.size() - suffix.size()) != suffix) continue;
+        std::string name;
+        if (!parse_message_key(key, name)) continue;
 
-        // Extract slot name: between "message_" (8) and "_text" (5)
-        std::string name = key.substr(8, key.size() - 13);
         std::string text = ds.get_value(key, "");
         if (text.empty()) continue;
 
@@ -52,18 +48,19 @@ void custom_message_task(void* /*parameter*/)
         auto messages = load_messages();
         time_t now    = time(nullptr);
 
-        int cycle_s = DEFAULT_CYCLE_S;
-        int v = DataStore::getInstance().get_value<int>("msg_interval", DEFAULT_CYCLE_S);
-        v = max(10, min(3600, v));       
+        int cycle_s = max(10, min(3600,
+            DataStore::getInstance().get_value<int>("msg_interval", DEFAULT_CYCLE_S)));
 
         for (const auto& m : messages)
         {
             // start is inclusive (>= midnight of start day)
             if (m.start >= 0 && now < m.start) continue;
-            // end is inclusive — show through end of the end day
-            if (m.end   >= 0 && now >= m.end + 86400) continue;
+            // end is inclusive — show through end of the end day (DST-aware)
+            if (m.end   >= 0 && now >= day_end(m.end)) continue;
+            // countdowns auto-hide from the day after the target unless end overrides
+            if (is_expired(m, now)) continue;
 
-            std::string display = build_display(m);
+            std::string display = build_display(m, now);
             logPrintf("MSG", "%s", display.c_str());
 
             if (auto d = rmd.acquire())

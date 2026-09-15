@@ -2,6 +2,8 @@
 
 #include <string>
 #include <ctime>
+#include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <data_store.hpp>
@@ -32,6 +34,54 @@ inline time_t parse_date(const std::string& s)
     t.tm_isdst = -1;
     time_t result = mktime(&t);
     return (result == (time_t)-1) ? -1 : result;
+}
+
+// Signed calendar-day difference between today (local) and the target midnight.
+// 0 = the target day itself, >0 = days remaining, <0 = days since the target passed.
+// Midnight-to-midnight with rounding keeps DST 23/25-hour days off-by-one-free.
+// localtime_r is used because other FreeRTOS tasks call localtime() too.
+inline int countdown_days(time_t target, time_t now)
+{
+    struct tm lt;
+    localtime_r(&now, &lt);
+    lt.tm_hour  = 0;
+    lt.tm_min   = 0;
+    lt.tm_sec   = 0;
+    lt.tm_isdst = -1;
+    time_t today_mid = mktime(&lt);
+    return (int)lround(difftime(target, today_mid) / 86400.0);
+}
+
+// Start of the day after `midnight` (i.e. end of its day), DST-aware:
+// adding tm_mday instead of 86400 seconds handles 23/25-hour switch days.
+// Note: in zones where local midnight itself doesn't exist on a switch day,
+// mktime() normalizes and lround() absorbs the skew.
+inline time_t day_end(time_t midnight)
+{
+    struct tm lt;
+    localtime_r(&midnight, &lt);
+    lt.tm_mday  += 1;
+    lt.tm_isdst = -1;
+    return mktime(&lt);
+}
+
+// A countdown slot hides itself from the day after its target,
+// unless an explicit end date keeps it alive.
+inline bool is_expired(const CustomMessage& m, time_t now)
+{
+    return m.countdown >= 0 && m.end < 0 && countdown_days(m.countdown, now) < 0;
+}
+
+// Match "message_<name>_text" keys; on success `name` holds the slot name.
+inline bool parse_message_key(const std::string& key, std::string& name)
+{
+    static const std::string prefix = "message_";
+    static const std::string suffix = "_text";
+    if (key.size() < prefix.size() + 1 + suffix.size()) return false;
+    if (key.compare(0, prefix.size(), prefix) != 0) return false;
+    if (key.compare(key.size() - suffix.size(), suffix.size(), suffix) != 0) return false;
+    name = key.substr(prefix.size(), key.size() - prefix.size() - suffix.size());
+    return !name.empty();
 }
 
 // Expand {key} and {} placeholders.
@@ -76,17 +126,17 @@ inline std::string expand_placeholders(const std::string& text, int days, bool h
     return result;
 }
 
-// Build the final display string for a message.
-inline std::string build_display(const CustomMessage& m)
+// Build the final display string for a message. `now` defaults to the wall
+// clock; callers that also apply visibility windows should pass their own
+// reading so a midnight rollover can't desync the day count from the filters.
+inline std::string build_display(const CustomMessage& m, time_t now = time(nullptr))
 {
     bool has_countdown = (m.countdown >= 0);
     int  days          = 0;
 
     if (has_countdown)
     {
-        time_t now  = time(nullptr);
-        long diff_s = (long)difftime(m.countdown, now);
-        days = (int)(diff_s / 86400);
+        days = countdown_days(m.countdown, now);
     }
 
     std::string result = expand_placeholders(m.text, days, has_countdown);

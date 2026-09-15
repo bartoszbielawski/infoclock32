@@ -37,10 +37,8 @@ static std::vector<std::string> get_slot_names(DataStore& ds)
     std::vector<std::string> names;
     auto keys = ds.get_keys_with_prefix("message_");
     for (const auto& key : keys) {
-        const std::string suffix = "_text";
-        if (key.size() < 8 + 1 + suffix.size()) continue;
-        if (key.substr(key.size() - suffix.size()) != suffix) continue;
-        std::string name = key.substr(8, key.size() - 13);
+        std::string name;
+        if (!parse_message_key(key, name)) continue;
         if (!ds.get_value(key, "").empty())
             names.push_back(name);
     }
@@ -202,6 +200,7 @@ void handle_messages()
                                    "<th title='Hide after'>End</th>"
                                    "<th title='Countdown target'>Countdown</th></tr>\n"));
 
+        const time_t preview_now = time(nullptr);
         for (int i = 0; i < (int)slotNames.size(); i++)
         {
             const std::string& name = slotNames[i];
@@ -219,7 +218,9 @@ void handle_messages()
             m.start     = parse_date(start.c_str());
             m.end       = parse_date(end.c_str());
             m.countdown = parse_date(cntdn.c_str());
-            String preview = htmlEsc(build_display(m).c_str());
+            bool expired = is_expired(m, preview_now);
+            String preview = expired ? String("<i style='color:#94a3b8'>expired</i>")
+                                     : htmlEsc(build_display(m, preview_now).c_str());
 
             server.sendContent_P(PSTR("<tr><td class='sn'>"));
             server.sendContent(htmlEsc(name.c_str()).c_str());
