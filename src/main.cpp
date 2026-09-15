@@ -29,6 +29,8 @@ void open_weather_map_task(void *parameter);
 void lhc_status_task(void *parameter);
 void mqtt_task(void *parameter);
 void web_server_task(void *parameter);
+void sun_times_task(void *parameter);
+void game_of_life_task(void *parameter);
 
 // Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
@@ -241,6 +243,25 @@ void setup() {
     xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "RestoMenuTask disabled (enable_resto=0)");
+
+  // Sunrise/sunset widget (needs sun_lat/sun_lon; times are pure math)
+  if (dataStore.get_value<int>("enable_sun", 1))
+  {
+    float sunLat = dataStore.get_value<float>("sun_lat", NAN);
+    float sunLon = dataStore.get_value<float>("sun_lon", NAN);
+    if (isfinite(sunLat) && isfinite(sunLon))
+      xTaskCreate(sun_times_task, "SunTimesTask", 4096, nullptr, 1, nullptr);
+    else
+      logPrintf("SYS", "SunTimesTask not started (sun_lat/sun_lon not set)");
+  }
+  else
+    logPrintf("SYS", "SunTimesTask disabled (enable_sun=0)");
+
+  // Game of Life idle animation bursts
+  if (dataStore.get_value<int>("enable_life", 1))
+    xTaskCreate(game_of_life_task, "LifeTask", 4096, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "LifeTask disabled (enable_life=0)");
 
 
   

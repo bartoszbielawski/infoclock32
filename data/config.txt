@@ -108,6 +108,17 @@ temp_interval=30
 #temp_sensor=ds18b20
 #ds18b20_pin=4      ; GPIO pin connected to the data line (default GPIO4)
 
+# ── Sun widget & Game of Life ─────────────────────────────────────────────────
+# Sunrise/sunset line (offline solar math; needs a position, blank = disabled)
+#enable_sun=1
+#sun_lat=48.8566
+#sun_lon=2.3522
+#sun_interval_min=30
+# Conway's Game of Life bursts between clock cycles (quiet at night_start/night_end)
+#enable_life=1
+#life_interval_s=300
+#life_burst_s=15
+
 # ── Custom messages ───────────────────────────────────────────────────────────
 # How often to cycle through messages (seconds)
 msg_interval=60

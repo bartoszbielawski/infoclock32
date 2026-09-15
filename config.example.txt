@@ -105,6 +105,21 @@ bme280_addr=118
 # How often to poll the sensor (seconds). Default: 30
 temp_interval=30
 
+# ── Sun widget & Game of Life ─────────────────────────────────────────────────
+# Sunrise/sunset widget — pure offline solar math, only needs a position.
+# Task is not started while sun_lat/sun_lon are blank.
+enable_sun=1
+sun_lat=48.8566
+sun_lon=2.3522
+# How often to scroll the sun line (minutes, 5–720)
+#sun_interval_min=30
+
+# Conway's Game of Life idle animation — short bursts between clock cycles,
+# skipped during the night window.
+enable_life=1
+#life_interval_s=300
+#life_burst_s=15
+
 # ── Custom messages ───────────────────────────────────────────────────────────
 # Up to 8 independent message slots (name can be any string, e.g. 1..8).
 # A slot is active when its _text key exists and today falls within [start, end].

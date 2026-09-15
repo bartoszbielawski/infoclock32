@@ -7,23 +7,7 @@
 #include <LMDS.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
-
-// Parse "HH:MM" → minutes since midnight, or -1 on failure.
-static int parse_hhmm(const std::string& s)
-{
-    int h, m;
-    if (sscanf(s.c_str(), "%d:%d", &h, &m) != 2) return -1;
-    if (h < 0 || h > 23 || m < 0 || m > 59)      return -1;
-    return h * 60 + m;
-}
-
-static bool in_night_window(int now_min, int start_min, int end_min)
-{
-    if (start_min < end_min)
-        return now_min >= start_min && now_min < end_min;
-    else // window wraps midnight
-        return now_min >= start_min || now_min < end_min;
-}
+#include <night_utils.hpp>
 
 void night_mode_task(void* parameter)
 {

@@ -33,6 +33,8 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Night mode (auto-dim/blank) | `night_start`, `night_end`, `night_brightness` |
 | MQTT integration | `enable_mqtt`, `mqtt_server`, `mqtt_client_id`, … |
 | Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes` |
+| Sunrise/sunset widget (offline math) | `enable_sun`, `sun_lat`, `sun_lon`, `sun_interval_min` |
+| Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s` |
 | OTA firmware update (wireless) | `ota_password` (disabled if unset) |
 | HTTP firmware upload | Web UI → `/update` |
 | Web configuration editor | Web UI → `/edit` |
@@ -121,7 +123,10 @@ Key config keys:
 | `temp_sensor` | `stub` | Sensor driver (see below) |
 | `temp_interval` | `30` | Sensor poll interval (seconds) |
 | `msg_interval` | `60` | Custom message cycle interval (seconds) |
-| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` | `1` | Enable/disable individual tasks |
+| `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |
+| `sun_interval_min` | `30` | How often the sun line scrolls (minutes) |
+| `life_interval_s` / `life_burst_s` | `300` / `15` | Game of Life: pause between bursts / burst length (seconds) |
+| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` / `enable_life` | `1` | Enable/disable individual tasks |
 
 ## Temperature sensor
 

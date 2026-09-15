@@ -7,3 +7,5 @@ platformio.local.ini
 .claude/settings.local.json
 CLAUDE.md
 tests/host/custom_message_check
+tests/host/sun_times_check
+tests/host/life_step_check
