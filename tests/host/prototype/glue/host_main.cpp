@@ -27,6 +27,17 @@
 
 static const int HOST_CS_PIN = 7;
 
+static void boot_banner_task(void*)
+{
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+    if (auto display = rmd.acquire())
+    {
+        scrollMessage("infoclock32 host prototype", display, 30);
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    }
+    vTaskDelete(nullptr);
+}
+
 static void printUsage()
 {
     fprintf(stderr,
@@ -71,6 +82,13 @@ int main(int argc, char** argv)
     int brightness = DataStore::getInstance().get_value<int>("brightness", 7);
     brightness = max(0, min(15, brightness));
     lmds->setIntensity((uint8_t)brightness);
+
+    // Device-faithful boot: show a banner before the tasks start contending
+    // for the display (main.cpp does the same on hardware). Must run in a
+    // real task — the ResourceManager handshake only works from task threads
+    // (on the device, setup() itself runs in loopTask).
+    xTaskCreate(boot_banner_task, "BootBanner", 4096, nullptr, 1, nullptr);
+    vTaskDelay(11000 / portTICK_PERIOD_MS);   // banner scroll + settle delay
 
     logPrintf("SYS", "host prototype starting%s", offline ? " (offline)" : "");
 

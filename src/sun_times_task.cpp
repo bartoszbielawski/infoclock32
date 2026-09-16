@@ -76,7 +76,9 @@ void sun_times_task(void* /*parameter*/)
 
         if (haveLine)
         {
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(20000)))
+            // Block (not timeout-acquire): a timed-out request would linger
+            // in the manager queue as a dead entry and poison the handshake.
+            if (auto display = rmd.acquire())
                 scrollMessage(line, display, 30);
             else
                 logPrintf("SUN", "display busy, skipping cycle");

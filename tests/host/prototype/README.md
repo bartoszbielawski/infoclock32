@@ -22,6 +22,9 @@ Flags:
 | `--hang <Task>` | stop that task's heartbeats 20 s after boot (watchdog demo) |
 | `--fs <dir>` | filesystem root for `/config.txt` (default `./fs`) |
 
+Output streams: display frames go to **stdout**, log lines to **stderr** —
+e.g. `./prototype 2>/dev/null` shows only the display.
+
 Set `INFOCLOCK_ROOT` to build against a firmware tree outside the repo.
 
 ## The watchdog demo

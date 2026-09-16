@@ -60,14 +60,14 @@ static std::mutex serialMutex;
 size_t SerialClass::write(uint8_t c)
 {
     std::lock_guard<std::mutex> lock(serialMutex);
-    fputc(c, stdout);
+    fputc(c, stderr);   // logs go to stderr; display frames own stdout
     return 1;
 }
 
 size_t SerialClass::write(const uint8_t* buffer, size_t size)
 {
     std::lock_guard<std::mutex> lock(serialMutex);
-    fwrite(buffer, 1, size, stdout);
+    fwrite(buffer, 1, size, stderr);
     return size;
 }
 

@@ -42,8 +42,10 @@ void rendererLoop()
             std::string frame = snapshot();
             if (frame != last)
             {
-                // one locked write per frame so log lines don't split the picture
-                Serial.write((const uint8_t*)frame.data(), frame.size());
+                // one locked write per frame so log lines don't split the
+                // picture; frames go to stdout, logs (Serial) to stderr
+                fwrite(frame.data(), 1, frame.size(), stdout);
+                fflush(stdout);
                 last = std::move(frame);
             }
         }

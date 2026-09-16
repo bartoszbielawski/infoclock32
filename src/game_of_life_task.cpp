@@ -82,8 +82,10 @@ void game_of_life_task(void* /*parameter*/)
         {
             // The burst holds the display for up to burst_s — extend every
             // task waiting on the display (they cannot beat while blocked).
+            // Block (not timeout-acquire): a timed-out request would linger
+            // in the manager queue as a dead entry and poison the handshake.
             task_grace_all(burst_s * 1000 + 10000);
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(10000)))
+            if (auto display = rmd.acquire())
             {
                 logPrintf("LIFE", "burst start: %d s on %dx8", burst_s, width);
                 run_burst(*display, cur.data(), nxt.data(), width, burst_s * 1000);
