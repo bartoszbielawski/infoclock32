@@ -177,11 +177,21 @@ static void pumpLoop(int ms)
 // Apply any pending hardware commands that require display access.
 static void applyPendingHardware(ResourceManager<LMDS> &rmd)
 {
+    static bool busyLogged = false;
+
     if (pendingBrightness < 0)
         return;
 
-    auto display = rmd.acquire();
-    if (!display) return;
+    auto display = rmd.acquire(pdMS_TO_TICKS(500));
+    if (!display)
+    {
+        // Keep pendingBrightness set — retried on the next loop iteration.
+        if (!busyLogged)
+            logPrintf("MQT", "display busy, brightness change deferred");
+        busyLogged = true;
+        return;
+    }
+    busyLogged = false;
 
     display->setIntensity((uint8_t)pendingBrightness);
     DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
@@ -236,16 +246,33 @@ void mqtt_task(void *parameter)
         char *pushMsg = nullptr;
         while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
         {
-            if (auto display = rmd.acquire())
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(10000), true))
+            {
                 scrollMessage(std::string(pushMsg), display, 40);
-            free(pushMsg);
-            pumpLoop(50);
+                free(pushMsg);
+                pumpLoop(50);
+            }
+            else if (xQueueSend(pushQueue, &pushMsg, 0) == pdTRUE)
+            {
+                // Display busy — put the message back and retry after the
+                // next pump cycle instead of blocking or losing it.
+                logPrintf("MQT", "display busy, push re-queued");
+                break;
+            }
+            else
+            {
+                logPrintf("MQT", "push queue full, message dropped");
+                free(pushMsg);
+                pumpLoop(50);
+            }
         }
 
         // Display looped message
         if (!loopedMessage.empty())
         {
-            if (auto display = rmd.acquire())
+            // Skips this cycle when the display is busy; the looped message
+            // is shown again on the next iteration anyway.
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(1000)))
                 scrollMessage(loopedMessage, display, 50);
         }
 

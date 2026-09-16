@@ -6,6 +6,7 @@
 typedef int32_t      BaseType_t;
 typedef uint32_t     UBaseType_t;
 typedef uint32_t     TickType_t;
+typedef uint32_t     StackType_t;
 typedef unsigned int uint32_t_hack_unused;
 
 #define pdTRUE    1

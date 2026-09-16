@@ -194,8 +194,8 @@ void setup() {
   else
     logPrintf("SYS", "SunTimesTask disabled (enable_sun=0)");
 
-  // Game of Life idle animation bursts
-  if (dataStore.get_value<int>("enable_life", 1))
+  // Game of Life idle animation bursts (off by default — enable explicitly)
+  if (dataStore.get_value<int>("enable_life", 0))
     xTaskCreate(game_of_life_task, "LifeTask", 4096, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "LifeTask disabled (enable_life=0)");

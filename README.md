@@ -126,7 +126,8 @@ Key config keys:
 | `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |
 | `sun_interval_min` | `30` | How often the sun line scrolls (minutes) |
 | `life_interval_s` / `life_burst_s` | `300` / `15` | Game of Life: pause between bursts / burst length (seconds) |
-| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` / `enable_life` | `1` | Enable/disable individual tasks |
+| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
+| `enable_life` | `0` | Game of Life idle animation (off by default) |
 
 ## Temperature sensor
 
@@ -174,6 +175,10 @@ Push a one-off message via the `/` dashboard, MQTT, or `/actions`.
 
 - **Boot**: scrolls firmware version and reset reason (e.g. `v1.2.3 | rst: power on`)
 - **Reboot**: scrolls `Rebooting` before the CPU restarts, regardless of trigger (web UI, MQTT, OTA)
+
+## Display scheduling
+
+Content tasks compete for the display through the `ResourceManager` request queue; the clock and user-initiated push messages (web `/push`, `/actions`, MQTT) queue on a **priority lane** and are always served ahead of queued sensor/status updates, so the clock can never be starved. Web and MQTT interactive paths acquire the display with short timeouts and report "display busy" instead of blocking; MQTT push messages that arrive while the display is busy are re-queued and retried.
 
 ## Watchdog
 

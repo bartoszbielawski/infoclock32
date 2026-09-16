@@ -115,7 +115,7 @@ temp_interval=30
 #sun_lon=2.3522
 #sun_interval_min=30
 # Conway's Game of Life bursts between clock cycles (quiet at night_start/night_end)
-#enable_life=1
+#enable_life=0
 #life_interval_s=300
 #life_burst_s=15
 

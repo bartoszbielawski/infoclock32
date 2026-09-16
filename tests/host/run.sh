@@ -18,3 +18,14 @@ c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 ./weather_icons_check
 ./pressure_trend_check
 ./wdt_check
+
+# ── ResourceManager handshake stress (host prototype shim) ───────────────────
+echo "── resource manager stress ──"
+if ( cd prototype && ./build.sh rm_stress > /dev/null 2>&1 && ./rm_stress > rm_stress.log 2>&1 ); then
+    grep -E "\[rm_stress\]|all resource manager stress|forcing handover" prototype/rm_stress.log
+else
+    echo "resource manager stress FAILED — last log lines:"
+    tail -30 prototype/rm_stress.log 2>/dev/null
+    exit 1
+fi
+rm -f prototype/rm_stress.log

@@ -27,6 +27,10 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
 // Common scroll path: center the canvas if it fits, otherwise scroll it across.
 static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps)
 {
+  // Keeps the manager's force-handover timer fed while this task holds the
+  // display — see ResourceManager::renewHold().
+  auto& rmd = ResourceManager<LMDS>::getInstance();
+
   if (canvas.width() <= display.width())
   {
     logPrintf("DISP", "message fits on display, centering without scrolling");
@@ -34,7 +38,12 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
     int offset = (display.width() - canvas.width()) / 2;
     copyCanvasToDisplay(canvas, 0, display, offset);
     display.display();
-    vTaskDelay(100 * speed / portTICK_PERIOD_MS);
+    // 100*speed can exceed the force-handover window — renew while showing.
+    for (int shown = 0; shown < 100 * speed; shown += 5000)
+    {
+      rmd.renewHold();
+      vTaskDelay(std::min(5000, 100 * speed - shown) / portTICK_PERIOD_MS);
+    }
     return;
   }
 
@@ -45,6 +54,7 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   {
     copyCanvasToDisplay(canvas, i, display, 0);
     display.display();
+    rmd.renewHold();
     vTaskDelay(speed / portTICK_PERIOD_MS);
     if (i == 0) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
     if (i == last) vTaskDelay(50 * speed / portTICK_PERIOD_MS);

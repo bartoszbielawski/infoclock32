@@ -111,6 +111,12 @@ UBaseType_t uxTaskGetNumberOfTasks()
     return n;
 }
 
+UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t)
+{
+    // No real stacks on the host — report a healthy constant for the status page.
+    return 2048;
+}
+
 // ── task notifications ───────────────────────────────────────────────────────
 
 uint32_t ulTaskNotifyTake(BaseType_t clearCountOnExit, TickType_t ticks)

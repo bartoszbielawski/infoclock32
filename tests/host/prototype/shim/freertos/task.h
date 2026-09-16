@@ -13,6 +13,7 @@ void vTaskDelete(TaskHandle_t task);
 TaskHandle_t xTaskGetCurrentTaskHandle();
 const char* pcTaskGetName(TaskHandle_t task);
 UBaseType_t uxTaskGetNumberOfTasks();
+UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t task);
 
 // Task notifications (the ResourceManager grant/release handshake).
 uint32_t ulTaskNotifyTake(BaseType_t clearCountOnExit, TickType_t ticks);

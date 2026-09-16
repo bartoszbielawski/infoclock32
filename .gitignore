@@ -16,3 +16,5 @@ tests/host/wdt_check
 # host prototype build artifact
 tests/host/prototype/prototype
 tests/host/prototype/prototype.dSYM
+tests/host/prototype/rm_stress
+tests/host/prototype/rm_stress.dSYM/

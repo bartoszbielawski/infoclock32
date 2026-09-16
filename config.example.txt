@@ -116,7 +116,7 @@ sun_lon=2.3522
 
 # Conway's Game of Life idle animation — short bursts between clock cycles,
 # skipped during the night window.
-enable_life=1
+enable_life=0
 #life_interval_s=300
 #life_burst_s=15
 

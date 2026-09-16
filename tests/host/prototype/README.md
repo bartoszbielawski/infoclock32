@@ -8,9 +8,40 @@ arbitration behaviour — not for hardware timing.
 ## Build & run
 
 ```bash
-./build.sh
-./prototype --offline --static   # deterministic canned API responses
-./prototype                      # online: real HTTP (curl) + real MQTT to localhost:1883
+./build.sh [prototype|rm_stress]   # default: both
+./prototype --offline --static     # deterministic canned API responses
+./prototype                        # online: real HTTP (curl) + real MQTT to localhost:1883
+```
+
+`rm_stress` is a standalone stress test for the `ResourceManager` display
+handshake (no display, no fs): an abandoned-request regression phase (a
+timed-out requester whose request is still queued must not stall the manager)
+plus randomized contention (6 threads, mixed blocking/timed/priority acquires)
+asserting mutual exclusion and termination. `tests/host/run.sh` builds and
+runs it; per-event traces go to stderr.
+
+## Web UI on the host
+
+The prototype serves the real web UI (real `web_server_task`, handlers, and
+auth) via a minimal `WebServer` shim over BSD sockets:
+
+- Port **8080** (binding 80 needs root on the host); override with
+  `INFOCLOCK_HTTP_PORT`. The URL is printed at startup.
+- Auth uses `web_password` from the config root (`--fs`) — HTTP Basic, same
+  as the device. `/push` stays unauthenticated by design.
+- `/update` is a host stub (there is no flash to write to); everything else
+  (`/`, `/status`, `/actions`, `/messages`, `/edit`, `/wifi`, `/log`,
+  `/api/*`, `/push`) is real firmware code.
+- Requests serialize through the single WebServerTask exactly like on the
+  device: a push that scrolls for 20 s delays later requests — display access
+  failures surface as HTTP 503 / "Display busy" instead of hangs.
+
+Quick checks:
+
+```bash
+curl "localhost:8080/push?msg=hello"            # scrolls on the display
+curl -o /dev/null -w '%{http_code}\n' localhost:8080/api/status   # 401/200
+curl -u admin:secret localhost:8080/api/status  # 200 when web_password=secret
 ```
 
 Flags:

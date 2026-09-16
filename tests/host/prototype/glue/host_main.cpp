@@ -113,7 +113,10 @@ int main(int argc, char** argv)
     else
         logPrintf("SYS", "SunTimesTask not started (sun_lat/sun_lon not set)");
 
-    xTaskCreate(game_of_life_task, "LifeTask", 4096, nullptr, 1, nullptr);
+    // Match the device: LifeTask is gated on enable_life in main.cpp.
+    if (DataStore::getInstance().get_value<int>("enable_life", 0))
+        xTaskCreate(game_of_life_task, "LifeTask", 4096, nullptr, 1, nullptr);
+    xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
     start_watchdog_task();
 
     if (hangName)

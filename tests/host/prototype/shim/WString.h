@@ -37,6 +37,7 @@ public:
     void reserve(unsigned n) { buf_.reserve(n); }
 
     char operator[](unsigned i) const { return i < buf_.size() ? buf_[i] : '\0'; }
+    char& operator[](unsigned i) { return buf_[i]; }
 
     const char* begin() const { return buf_.data(); }
     const char* end() const { return buf_.data() + buf_.size(); }

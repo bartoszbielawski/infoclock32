@@ -37,7 +37,11 @@ void handle_push()
     }
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    if (auto display = rmd.acquire())
+    // Bounded priority wait: fail with "display busy" instead of blocking the
+    // single web-server task forever. The clock holds the display ~7 s of
+    // every ~9 s cycle, so the wait must span one full fast-lane cycle —
+    // shorter timeouts make dashboard pushes fail most of the time.
+    if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
     {
         scrollMessage(std::string(msg.c_str()), display, speed);
         logPrintf("WEB", "push via /push: %.48s", msg.c_str());
@@ -68,7 +72,7 @@ void handle_actions()
             String msg = server.arg("message");
             if (!msg.isEmpty())
             {
-                if (auto display = rmd.acquire())
+                if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
                 {
                     scrollMessage(std::string(msg.c_str()), display, 50);
                     result = "&#10003; Message displayed.";
@@ -82,7 +86,7 @@ void handle_actions()
             int level = server.arg("level").toInt();
             if (level >= 0 && level <= 15)
             {
-                if (auto display = rmd.acquire())
+                if (auto display = rmd.acquire(pdMS_TO_TICKS(500)))
                 {
                     display->setIntensity((uint8_t)level);
                     DataStore::getInstance().set_value("brightness", std::to_string(level));
@@ -150,7 +154,7 @@ void handle_actions()
         }
         else if (action == "reset_display")
         {
-            if (auto display = rmd.acquire())
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(500)))
             {
                 display->begin();
                 display->setIntensity((uint8_t)DataStore::getInstance().get_value<int>("brightness", 7));

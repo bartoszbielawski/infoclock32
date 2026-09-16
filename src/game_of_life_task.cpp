@@ -39,6 +39,7 @@ static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
             for (int x = 0; x < width; x++)
                 display.setPixel(x, y, cur[y * width + x] != 0);
         display.display();
+        ResourceManager<LMDS>::getInstance().renewHold();
 
         int pop = life_step(cur, nxt, width);
         bool stagnant = (std::memcmp(cur, nxt, size) == 0);

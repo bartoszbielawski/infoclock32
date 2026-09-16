@@ -31,8 +31,15 @@ void displayClock(void *parameter)
   while (true)
   {
     task_heartbeat();
-    if (auto display = rmd.acquire())
+    // Cover the wait for the display: the priority lane guarantees a grant
+    // after at most one hold, but a hold can still last up to the manager's
+    // 30 s force-handover bound (Life bursts broadcast their own grace).
+    task_heartbeat_grace(90000);
+    if (auto display = rmd.acquire(portMAX_DELAY, true))
     {
+      // Fresh watchdog window for the hold itself (time + date + wipe hook).
+      task_heartbeat();
+      task_heartbeat_grace(30000);
       // Show HH:MM:SS for 3 seconds (updated once per second)
       for (int i = 0; i < 5; i++)
       {
