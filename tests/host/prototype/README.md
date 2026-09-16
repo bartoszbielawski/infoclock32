@@ -50,9 +50,9 @@ fs/      runtime config (like LittleFS /config.txt)
 - **Tasks**: `xTaskCreate` → `std::thread`, `vTaskDelay` → sleep, queues/
   semaphores/notifications → mutex + condvar. `--hang` works by parking the
   named task inside `vTaskDelay` after 20 s of uptime.
-- **Display**: the SPI shim forwards every 16-bit transfer to a MAX7219 frame
-  decoder; CS edges (GPIO shim) latch rows into a framebuffer that renders to
-  the terminal (~4 fps, exactly the LEDMatrixDriver pixel layout).
+- **Display**: the renderer polls the LMDS framebuffer directly (`getPixel`,
+  the same ground truth as the driver's `displayToSerial`) at ~4 fps from a
+  background thread. No SPI decoding — wire-order assumptions removed.
 - **Storage**: LittleFS maps onto `fs/` — the real `DataStore` code loads and
   saves `/config.txt` unchanged.
 - **Network**: HTTPClient shim shells out to `curl` (so https works); MQTT

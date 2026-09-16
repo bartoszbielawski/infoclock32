@@ -1,15 +1,16 @@
 #pragma once
-// MAX7219 frame decoder + terminal renderer for the host prototype.
+// Terminal renderer for the host prototype.
 //
-// The SPI shim forwards every 16-bit transfer here; the GPIO shim reports CS
-// edges. A latch (CS rising) applies the captured words to the framebuffer —
-// mirroring LEDMatrixDriver::_displayRow: word j in send order belongs to
-// controller j, register 1..8 = row. When the last row (register 8) latches,
-// the framebuffer is complete and gets rendered (throttled to ~4 fps).
+// Reads the LMDS framebuffer directly (getPixel — the same ground truth as
+// the driver's displayToSerial) from a background thread at ~4 fps. No SPI
+// decoding involved: the framebuffer is live state, not double-buffered, so
+// polling always shows the latest content.
+
+class LMDS;
 
 namespace host_display
 {
-// Register hooks on the global SPI shim and GPIO shim.
-// ansi: clear-screen live view; plain: static text frames.
-void init(int segments, int csPin, bool ansi);
+// Start the renderer thread. ansi: clear-screen live view; static: plain
+// text frames, printed only when the content changes.
+void init(LMDS* display, bool ansi);
 }

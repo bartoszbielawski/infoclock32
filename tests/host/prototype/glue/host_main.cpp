@@ -59,11 +59,11 @@ int main(int argc, char** argv)
     logger_init();
     apply_timezone();
 
-    host_display::init(8, HOST_CS_PIN, !staticText);
     if (offline) host_set_http_transport(host_http_canned);
 
     auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, HOST_CS_PIN);
     lmds->begin();
+    host_display::init(lmds, !staticText);
     auto& rmd = ResourceManager<LMDS>::getInstance();
     rmd.initialize(lmds);
     rmd.setPreReleaseHook(wipe_on_release);
