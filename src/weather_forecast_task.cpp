@@ -143,7 +143,7 @@ static std::string readWeatherFromOWM(int& iconIndex)
 
 void open_weather_map_task(void *parameter)
 {
-    registerTask("Weather", 8192);
+    registerTask("Weather", 8192, 120000);
     std::string messageToBeDisplayed;
     int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
     time_t last_weather_update = 0;
@@ -152,6 +152,7 @@ void open_weather_map_task(void *parameter)
 
     while (true)
     {
+        task_heartbeat();
         if (WiFi.status() != WL_CONNECTED) {
             vTaskDelay(30000 / portTICK_PERIOD_MS);
             continue;

@@ -81,7 +81,7 @@ void removeHTMLTags(String& str)
 
 void lhc_status_task(void *parameter)
 {
-    registerTask("LHC", 8192);
+    registerTask("LHC", 8192, 60000);
     std::string modeAndEnergyMessage;
     std::string page1Message;
 
@@ -91,6 +91,7 @@ void lhc_status_task(void *parameter)
 
     while (true)
     {
+        task_heartbeat();
         if (WiFi.status() != WL_CONNECTED) {
             vTaskDelay(30000 / portTICK_PERIOD_MS);
             continue;
@@ -103,6 +104,7 @@ void lhc_status_task(void *parameter)
             if (response != 200)
             {
                 logPrintf("LHC", "HTTP GET failed, response: %d", response);
+                task_heartbeat_grace(320000);                // planned 5-minute cooldown below
                 vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // wait a minute before
                 continue;
             }      

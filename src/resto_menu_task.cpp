@@ -171,7 +171,7 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
 // ── task ─────────────────────────────────────────────────────────────────────
 
 void resto_menu_task(void* pvParameters) {
-    registerTask("RestoMenu", 8192);
+    registerTask("RestoMenu", 8192, 60000);
     (void)pvParameters;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
@@ -181,6 +181,7 @@ void resto_menu_task(void* pvParameters) {
     time_t lastFetch = 0;
 
     while (true) {
+        task_heartbeat();
         // ── config ────────────────────────────────────────────────────────
         auto& ds = DataStore::getInstance();
         int startHour = ds.get_value<int>("resto_start_hour", kDefaultStartHour);
@@ -214,6 +215,8 @@ void resto_menu_task(void* pvParameters) {
             lastFetch   = time(nullptr);
             cachedMenus.clear();
             std::string lang = ds.get_value("language", "en");
+            // each fetch can take up to ~15 s (HTTP timeout + TLS handshake)
+            task_heartbeat_grace((codes.size() + 1) * 15000);
             for (int code : codes) {
                 std::string menu = fetchMenu(code, fetchDate, lang);
                 if (!menu.empty()) cachedMenus.push_back(menu);
@@ -236,6 +239,7 @@ void resto_menu_task(void* pvParameters) {
             }
             
             //this delay is to avoid scrolling multiple menus back-to-back without giving a chance for other tasks to show their messages in between; adjust as needed
+            task_heartbeat_grace(130000);
             vTaskDelay(120 * 1000 / portTICK_PERIOD_MS);
         }
     }

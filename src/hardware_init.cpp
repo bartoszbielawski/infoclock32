@@ -7,6 +7,7 @@
 #include <string>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <task_registry.hpp>
 
 static volatile bool s_ap_mode = false;   // true while not connected to any AP
 static std::string s_hostname = "infoclock32";
@@ -25,9 +26,11 @@ static void start_mdns()
 // credentials WiFi.begin()/WiFiManager used and keeps retrying every 30 s.
 static void wifi_monitor_task(void* /*pv*/)
 {
+    registerTask("WiFiMonitor", 4096, 90000);
     bool wasConnected = false;
     for (;;)
     {
+        task_heartbeat();
         if (WiFi.status() == WL_CONNECTED)
         {
             if (!wasConnected)

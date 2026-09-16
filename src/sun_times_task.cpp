@@ -21,7 +21,7 @@ static constexpr int DEFAULT_INTERVAL_MIN = 30;
 // local date (or the configured position) changes.
 void sun_times_task(void* /*parameter*/)
 {
-    registerTask("SunTimes", 4096);
+    registerTask("SunTimes", 4096, 120000);
     auto& rmd = ResourceManager<LMDS>::getInstance();
     auto& ds = DataStore::getInstance();
 
@@ -35,6 +35,7 @@ void sun_times_task(void* /*parameter*/)
 
     while (true)
     {
+        task_heartbeat();
         double lat = ds.get_value<float>("sun_lat", NAN);
         double lon = ds.get_value<float>("sun_lon", NAN);
 
@@ -82,6 +83,7 @@ void sun_times_task(void* /*parameter*/)
         }
 
         // Sleep in 1-minute ticks so config changes take effect promptly.
+        task_heartbeat_grace(interval_min * 60000 + 25000);  // + display wait and scroll
         for (int m = 0; m < interval_min; m++)
             vTaskDelay(60000 / portTICK_PERIOD_MS);
     }

@@ -175,6 +175,12 @@ Push a one-off message via the `/` dashboard, MQTT, or `/actions`.
 - **Boot**: scrolls firmware version and reset reason (e.g. `v1.2.3 | rst: power on`)
 - **Reboot**: scrolls `Rebooting` before the CPU restarts, regardless of trigger (web UI, MQTT, OTA)
 
+## Watchdog
+
+An always-on watchdog supervisor restarts the device if a task stops making progress. Each task heartbeats the supervisor once per loop iteration (registered with a per-task timeout in `TaskRegistry`); the supervisor itself is watched by the hardware task watchdog. Enforcement is **warn-once**: the first stale check for a task logs a `WDT` warning, the second consecutive one reboots the device. Tasks announce planned long waits (poll intervals, failure cooldowns) via grace extensions so normal operation never trips it, and the Game of Life burst broadcasts grace while it holds the display.
+
+After a watchdog reboot the boot banner shows the culprit (e.g. `v1.2.3 | rst: wdt (MQTT)`), the event is logged (`SYS` tag), and `wdt_culprit` is published to RuntimeStore — queryable via `/status` and MQTT `…/request`.
+
 ## MQTT integration
 
 Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All topics are prefixed with the client ID.
@@ -204,7 +210,7 @@ All events are written to three destinations simultaneously:
 2. **UDP syslog** — port 514 (set `syslog_server` to enable)
 3. **In-memory ring buffer** — last 40 entries, visible at `/log`
 
-Log tags: `SYS`, `DISP`, `TMP`, `LHC`, `WTH`, `MSG`, `MQT`, `HTTP`, `WEB`, `OTA`, `RES`
+Log tags: `SYS`, `DISP`, `TMP`, `LHC`, `WTH`, `MSG`, `MQT`, `HTTP`, `WEB`, `OTA`, `RES`, `WDT`
 
 ## Development
 

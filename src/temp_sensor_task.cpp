@@ -34,7 +34,7 @@ static const uint8_t* trendIconFor(TrendKind kind)
 
 void temp_sensor_task(void* parameter)
 {
-    registerTask("TempSensor", 4096);
+    registerTask("TempSensor", 4096, 60000);
     TempSensor* sensor = static_cast<TempSensor*>(parameter);
 
     logPrintf("TMP", "starting with sensor '%s'", sensor->name());
@@ -42,6 +42,7 @@ void temp_sensor_task(void* parameter)
     if (!sensor->begin())
     {
         logPrintf("TMP", "sensor '%s' failed to initialize, task exiting", sensor->name());
+        task_mark_exited();   // stop watchdog supervision before deleting the task
         vTaskDelete(nullptr);
         return;
     }
@@ -62,6 +63,7 @@ void temp_sensor_task(void* parameter)
 
     while (true)
     {
+        task_heartbeat();
         int interval_s = DataStore::getInstance().get_value(CFG_INTERVAL, DEFAULT_INTERVAL_S);
         if (interval_s < 5) interval_s = DEFAULT_INTERVAL_S;
 

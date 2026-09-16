@@ -8,7 +8,7 @@
 
 void ota_task(void*)
 {
-    registerTask("OTA", 4096);
+    registerTask("OTA", 4096, 30000);
     while (WiFi.status() != WL_CONNECTED)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 
@@ -35,6 +35,7 @@ void ota_task(void*)
 
     while (true)
     {
+        task_heartbeat();
         ArduinoOTA.handle();
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }

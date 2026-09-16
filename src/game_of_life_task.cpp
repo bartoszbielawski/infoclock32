@@ -56,7 +56,7 @@ static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
 // quiet during the configured night window.
 void game_of_life_task(void* /*parameter*/)
 {
-    registerTask("Life", 4096);
+    registerTask("Life", 4096, 60000);
     auto& rmd = ResourceManager<LMDS>::getInstance();
     auto& ds = DataStore::getInstance();
 
@@ -67,6 +67,7 @@ void game_of_life_task(void* /*parameter*/)
 
     while (true)
     {
+        task_heartbeat();
         int interval_s = max(30, min(3600, ds.get_value<int>("life_interval_s", DEFAULT_INTERVAL_S)));
         int burst_s    = max(5,  min(120, ds.get_value<int>("life_burst_s",    DEFAULT_BURST_S)));
 
@@ -79,6 +80,9 @@ void game_of_life_task(void* /*parameter*/)
 
         if (!is_night_now(ds, time(nullptr)))
         {
+            // The burst holds the display for up to burst_s — extend every
+            // task waiting on the display (they cannot beat while blocked).
+            task_grace_all(burst_s * 1000 + 10000);
             if (auto display = rmd.acquire(pdMS_TO_TICKS(10000)))
             {
                 logPrintf("LIFE", "burst start: %d s on %dx8", burst_s, width);
@@ -87,6 +91,7 @@ void game_of_life_task(void* /*parameter*/)
             // no log on contention: display queue is expected to be busy
         }
 
+        task_heartbeat_grace((interval_s + burst_s) * 1000 + 10000);
         for (int s = 0; s < interval_s; s += 5)
             vTaskDelay(5000 / portTICK_PERIOD_MS);
     }

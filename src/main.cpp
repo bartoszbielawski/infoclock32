@@ -11,8 +11,10 @@
 
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <runtime_store.hpp>
 #include <timezone_utils.hpp>
 #include <version.hpp>
+#include <watchdog_task.h>
 #include <Wire.h>
 #include <temp_sensor.hpp>
 #include <temp_sensor_factory.hpp>
@@ -53,11 +55,12 @@ static const char* localizedDayName(int wday)
 // It periodically takes display ownership, shows time, day, and date, then releases ownership.
 void displayClock(void *parameter)
 {
-  registerTask("Clock", 4096);
+  registerTask("Clock", 4096, 60000);
   auto& rmd = ResourceManager<LMDS>::getInstance();
 
   while (true)
   {
+    task_heartbeat();
     if (auto display = rmd.acquire())
     {
       // Show HH:MM:SS for 3 seconds (updated once per second)
@@ -174,6 +177,14 @@ void setup() {
   logger_init();
   logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
 
+  // Watchdog culprit from the previous restart (RTC memory, consumed on read).
+  char wdtCulprit[24] = "";
+  if (wdt_take_culprit(wdtCulprit, sizeof(wdtCulprit)))
+  {
+    RuntimeStore::getInstance().set("wdt_culprit", std::string(wdtCulprit));
+    logPrintf("SYS", "watchdog reboot — hung task: %s", wdtCulprit);
+  }
+
   // Apply timezone loaded from config
   apply_timezone();
 
@@ -195,7 +206,10 @@ void setup() {
     int reasonIdx = (int)reason < (int)(sizeof(resetReasonStr)/sizeof(resetReasonStr[0]))
                     ? (int)reason : 0;
     char bootMsg[64];
-    snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
+    if (wdtCulprit[0])
+      snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: wdt (%s)", wdtCulprit);
+    else
+      snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
     scrollMessage(bootMsg, display, 30);
     if (wifi_is_ap_mode()) {
       std::string apMsg = "WiFi setup: connect to "
@@ -288,6 +302,12 @@ void setup() {
     else
       logPrintf("SYS", "time not synced after 10 s — boot date check skipped");
   }
+
+  // Watchdog goes last: the supervisor starts enforcing once every task is
+  // registered, and enableLoopWDT() only takes effect when loop() begins
+  // feeding it (the wrapper doesn't feed during setup()).
+  enableLoopWDT();
+  start_watchdog_task();
 }
 
 // loopTask is a real FreeRTOS task so vTaskDelay yields properly here.

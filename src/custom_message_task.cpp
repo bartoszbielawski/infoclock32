@@ -40,17 +40,19 @@ static std::vector<CustomMessage> load_messages()
 
 void custom_message_task(void* /*parameter*/)
 {
-    registerTask("CustomMsg", 4096);
+    registerTask("CustomMsg", 4096, 90000);
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     while (true)
     {
+        task_heartbeat();
         auto messages = load_messages();
         time_t now    = time(nullptr);
 
         int cycle_s = max(10, min(3600,
             DataStore::getInstance().get_value<int>("msg_interval", DEFAULT_CYCLE_S)));
 
+        task_heartbeat_grace(messages.size() * 12000 + 12000);  // each scroll ~7 s
         for (const auto& m : messages)
         {
             // start is inclusive (>= midnight of start day)
@@ -72,6 +74,7 @@ void custom_message_task(void* /*parameter*/)
             }            
         }
 
+        task_heartbeat_grace(cycle_s * 1000 + 12000);
         vTaskDelay((cycle_s * 1000) / portTICK_PERIOD_MS);
     }
 }

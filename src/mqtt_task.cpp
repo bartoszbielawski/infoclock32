@@ -192,7 +192,7 @@ static void applyPendingHardware(ResourceManager<LMDS> &rmd)
 
 void mqtt_task(void *parameter)
 {
-    registerTask("MQTT", 8192);
+    registerTask("MQTT", 8192, 90000);
     pushQueue = xQueueCreate(4, sizeof(char *));
 
     auto &rmd = ResourceManager<LMDS>::getInstance();
@@ -204,6 +204,7 @@ void mqtt_task(void *parameter)
 
     while (true)
     {
+        task_heartbeat();
         if (WiFi.status() != WL_CONNECTED)
         {
             vTaskDelay(5000 / portTICK_PERIOD_MS);

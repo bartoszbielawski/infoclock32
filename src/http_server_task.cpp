@@ -532,7 +532,7 @@ void handle_api_runtime()
 
 void web_server_task(void* pvParameters)
 {
-    registerTask("WebServer", 10240);
+    registerTask("WebServer", 10240, 180000);
     server.on("/push",               handle_push);
     server.on("/",          handle_home);
     server.on("/style.css", HTTP_GET, handle_style_css);
@@ -553,6 +553,7 @@ void web_server_task(void* pvParameters)
 
     while (true)
     {
+        task_heartbeat();
         server.handleClient();
         vTaskDelay(2 / portTICK_PERIOD_MS);
     }
