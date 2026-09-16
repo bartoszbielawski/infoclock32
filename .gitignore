@@ -12,3 +12,7 @@ tests/host/life_step_check
 tests/host/weather_icons_check
 tests/host/pressure_trend_check
 tests/host/wdt_check
+
+# host prototype build artifact
+tests/host/prototype/prototype
+tests/host/prototype/prototype.dSYM

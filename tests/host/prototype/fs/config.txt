@@ -1,0 +1,32 @@
+# Sample runtime config for the host prototype (like /config.txt on device).
+hostname=infoclock32-proto
+timezone=UTC0
+language=en
+brightness=7
+
+# widgets
+enable_weather=1
+ow_api_key=prototype-demo-key
+ow_city_id=2643743
+enable_lhc=1
+enable_sun=1
+sun_lat=52.23
+sun_lon=21.01
+sun_interval_min=30
+enable_life=1
+life_interval_s=60
+life_burst_s=8
+temp_sensor=stub
+temp_interval=30
+msg_interval=60
+
+# scrolling message
+message_hello_text=Host prototype says hello!
+
+# night mode off by default on the host
+night_start=
+night_end=
+
+# online mode: real MQTT against a local broker
+mqtt_server=localhost
+mqtt_client_id=infoclock32-proto
