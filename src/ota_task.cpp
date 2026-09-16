@@ -8,7 +8,9 @@
 
 void ota_task(void*)
 {
-    registerTask("OTA", 4096, 30000);
+    // generous: esp_ota_begin erases the full app partition in one blocking
+    // call, and flash write + network stalls can eat tens of seconds
+    registerTask("OTA", 4096, 120000);
     while (WiFi.status() != WL_CONNECTED)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 

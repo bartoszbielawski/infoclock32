@@ -81,7 +81,9 @@ void removeHTMLTags(String& str)
 
 void lhc_status_task(void *parameter)
 {
-    registerTask("LHC", 8192, 60000);
+    // 60 s+ of work between beats is normal (30 s poll gate + GET + two
+    // scroll phases with delays), plus display contention can stack on top
+    registerTask("LHC", 8192, 120000);
     std::string modeAndEnergyMessage;
     std::string page1Message;
 
