@@ -43,6 +43,8 @@ public:
     bool begin(bool = false);
     File open(const char* path, const char* mode = "r");
     bool exists(const char* path) const;
+    bool remove(const char* path);
+    bool rename(const char* from, const char* to);
     void setRoot(const std::string& root) { root_ = root; }
     const std::string& root() const { return root_; }
 

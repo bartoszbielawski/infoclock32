@@ -111,8 +111,13 @@ void temp_sensor_task(void* parameter)
         }
 
         char buffer[16];
+        // Blocking acquire: cover the worst-case wait + scroll holds, then
+        // re-anchor the watchdog window once granted (clock-task pattern).
+        task_heartbeat_grace(90000);
         if (auto display = rmd.acquire())
         {
+            task_heartbeat();
+            task_heartbeat_grace(30000);
             snprintf(buffer, sizeof(buffer), "%.1f\xF7" "C", temp);
             scrollMessage(buffer, display, 20);
 

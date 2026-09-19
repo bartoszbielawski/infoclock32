@@ -127,6 +127,31 @@ static void sendTasksSection()
     server.sendContent(dropBuf);
     server.sendContent_P(PSTR("</td></tr>\n"));
 
+    // Display scheduling diagnostics (refreshed on page reload only)
+    {
+        auto& rmd = ResourceManager<LMDS>::getInstance();
+        const char* holderName = rmd.getCurrentHolder();
+        char dispBuf[96], fhBuf[64];
+        snprintf(dispBuf, sizeof(dispBuf), "%s &middot; fast %u / normal %u",
+                 holderName ? holderName : "idle",
+                 (unsigned)rmd.getQueueDepth(true),
+                 (unsigned)rmd.getQueueDepth(false));
+        server.sendContent_P(PSTR("<tr><td class='label'>Display holder</td><td>"));
+        server.sendContent(dispBuf);
+        server.sendContent_P(PSTR("</td></tr>\n"));
+
+        uint32_t fhCount = rmd.getForceHandoverCount();
+        if (fhCount)
+            snprintf(fhBuf, sizeof(fhBuf), "%lu &middot; last %lus ago",
+                     (unsigned long)fhCount,
+                     (unsigned long)((millis() - rmd.getLastForceHandoverMs()) / 1000));
+        else
+            snprintf(fhBuf, sizeof(fhBuf), "0");
+        server.sendContent_P(PSTR("<tr><td class='label'>Force handovers</td><td>"));
+        server.sendContent(fhBuf);
+        server.sendContent_P(PSTR("</td></tr>\n"));
+    }
+
     char buf[128];
     for (int i = 0; i < n; ++i) {
         const RegisteredTask& t = reg.get(i);
@@ -484,17 +509,30 @@ void handle_api_status()
     std::string mqttServer = DataStore::getInstance().get_value("mqtt_server", "");
     bool mqttConnected = !mqttServer.empty() && mqtt_is_connected();
 
-    char json[512];
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+    const char* holderName = rmd.getCurrentHolder();
+    uint32_t lastFh = rmd.getLastForceHandoverMs();
+    uint32_t fhAgeS = lastFh ? (millis() - lastFh) / 1000 : 0;
+
+    char json[768];
     snprintf(json, sizeof(json),
         "{\"uptime\":\"%s\",\"heap\":\"%s\",\"rssi\":\"%s\","
         "\"ip\":\"%s\",\"hostname\":\"%s\",\"ssid\":\"%s\","
-        "\"mqtt\":%s,\"firmware\":\"" APP_VERSION "\",\"chip\":\"%s\"}",
+        "\"mqtt\":%s,\"firmware\":\"" APP_VERSION "\",\"chip\":\"%s\","
+        "\"display\":{\"holder\":\"%s\",\"fastq\":%u,\"normq\":%u,"
+        "\"drops\":%lu,\"force\":%lu,\"force_age_s\":%lu}}",
         uptime, heap, rssi,
         WiFi.localIP().toString().c_str(),
         WiFi.getHostname(),
         WiFi.SSID().c_str(),
         mqttConnected ? "true" : "false",
-        ESP.getChipModel());
+        ESP.getChipModel(),
+        holderName ? holderName : "",
+        (unsigned)rmd.getQueueDepth(true),
+        (unsigned)rmd.getQueueDepth(false),
+        (unsigned long)rmd.getDropCount(),
+        (unsigned long)rmd.getForceHandoverCount(),
+        (unsigned long)fhAgeS);
 
     server.send(200, "application/json", json);
 }

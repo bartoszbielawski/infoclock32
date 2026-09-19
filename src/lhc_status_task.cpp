@@ -107,7 +107,7 @@ void lhc_status_task(void *parameter)
             {
                 logPrintf("LHC", "HTTP GET failed, response: %d", response);
                 task_heartbeat_grace(320000);                // planned 5-minute cooldown below
-                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // wait a minute before
+                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // 5-minute cooldown before retrying
                 continue;
             }      
             
@@ -159,17 +159,31 @@ void lhc_status_task(void *parameter)
         }   //end of update block
 
         if (not modeAndEnergyMessage.empty())
+        {
+            // Blocking acquires: cover the worst-case wait + scroll hold, then
+            // re-anchor the watchdog window once granted (clock-task pattern).
+            task_heartbeat_grace(90000);
             if (auto display = rmd.acquire())
+            {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
                 scrollMessage(modeAndEnergyMessage, display, 20);
+            }
+        }
 
         vTaskDelay(10000 / portTICK_PERIOD_MS);
 
         if (not page1Message.empty())
+        {
+            task_heartbeat_grace(90000);
             if (auto display = rmd.acquire())
             {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
                 logPrintf("LHC", "Page1: %s", page1Message.c_str());
                 scrollMessage(page1Message, display, 20);
             }
+        }
 
         vTaskDelay(20000 / portTICK_PERIOD_MS);
     }

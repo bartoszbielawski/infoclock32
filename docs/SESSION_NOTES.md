@@ -121,8 +121,8 @@ Interactive paths (web/MQTT) are the exception: short timeouts, see below.
 ### Stores
 
 - `DataStore` (data_store.hpp): singleton `std::map<string,string>` backed by
-  `/config.txt` on LittleFS; `save_to_file()` preserves comments. **NOT mutex-protected**
-  (known race — web/MQTT/tasks mutate concurrently).
+  `/config.txt` on LittleFS; `save_to_file()` preserves comments, writes via
+  temp file + rename, and is mutex-protected (see improvement #8).
 - `RuntimeStore` (runtime_store.hpp): mutex-protected volatile KV — sensor values,
   display placeholders (`{temp_c}` etc.), `wdt_culprit`, `pressure_trend`.
 - `DeviceStore` (device_store.hpp): WiFi/system info for MQTT `…/request`.
@@ -197,13 +197,18 @@ enable_*, intervals, sensor type, SPI/I2C pins, mqtt_*, web_password, …).
 2. ✅ **Priority lane** — clock + user pushes on `fast_queue`; coalescing is inherent
    (blocking acquire ⇒ a task never has two queued requests).
 3. ✅ **Clock watchdog grace** around acquire/hold (beat re-anchors the window).
-4. ⬜ **Bound hold times at the source** (was #3):
-   - Add a preemption checkpoint to `scrollMessage`/`scrollCanvas` (graphic_utils.cpp):
-     every N columns, check a "yield requested" flag set by the manager when a
-     priority-lane request is waiting; long scrolls then break early.
-   - Cap Life burst duration and/or yield mid-burst on the same flag.
-   - Make the pre-release wipe (screen_wipe_task.cpp) skip when the fast queue is
-     non-empty instead of extending every hold; expose queue depth via a getter.
+4. ✅ **Bound hold times at the source** (was #3):
+   - `ResourceManager::yieldRequested()` = fast lane non-empty. `scrollCanvas`
+     checks it every frame but only after 8 s of hold (`kMinHoldBeforeYieldMs`):
+     short messages (the common 6-8 s case) complete untouched, long holds get
+     cut and release immediately (trailing pause skipped).
+   - Life burst ends on `yieldRequested()` per generation (80 ms cadence, no
+     minimum — filler content can cut anywhere).
+   - Pre-release wipe skips entirely when the fast lane is non-empty. Also the
+     documented-but-missing `wipe_interval` throttle is now implemented
+     (minutes, default 10, 0 disables) — previously the wipe ran on EVERY
+     release, contradicting its own header comment.
+   - Queue depth getter: `getQueueDepth(fastLane)` (added with #7).
 5. ✅ **Handshake rework** (was #4): `current_task`/`drop_count_` now atomic; the
    dead `abandoned` flag and the fragile 50 ms retract dance are gone, replaced by
    a gen-tagged pending registry (pre-grant skip + atomic claim) and a give-up
@@ -216,15 +221,22 @@ enable_*, intervals, sensor type, SPI/I2C pins, mqtt_*, web_password, …).
    `tests/host/run.sh`.
 6. ⬜ **Anti-starvation for the normal lane**: clock+push bursts can delay sensor
    content; if it ever matters, alternate one fast : one normal grant in the manager.
-7. ⬜ **Observability**: expose current holder, fast/normal queue depths, and last
-   force-handover on `/status` for debugging contention.
+7. ✅ **Observability**: ResourceManager gained `getCurrentHolder()`,
+   `getQueueDepth(fastLane)`, `getForceHandoverCount()`, `getLastForceHandoverMs()`;
+   force handovers bump atomics at the steal site. Surfaced as rows on `/status`
+   (holder + lane depths, force-handover count/age) and a `display` object on
+   `/api/status` (holder, fastq, normq, drops, force, force_age_s). Shim gained
+   `uxQueueMessagesWaiting`.
 
 ### Thread safety & persistence
 
-8. ⬜ **DataStore locking** — plain `std::map` mutated from WebServerTask, MQTT
-   callback, and display tasks; add a mutex (or portMUX critical sections) around
-   `get_value`/`set_value`/`save_to_file`, and make `save_to_file` write to a temp
-   file + rename so a power cut can't truncate `/config.txt`.
+8. ✅ **DataStore locking** — `data_mutex_` guards every map access
+   (`get_value` both overloads, `set_value`, `remove_value`, `has_key`,
+   `clear`, `get_keys_with_prefix`, `load_from_file`). `save_to_file`
+   snapshots the map under the lock, then does FS I/O under a separate
+   `save_mutex_` (serializes saves; readers never block on flash). Writes go
+   to `/config.txt.tmp` + rename-over-target (remove as fallback) so a power
+   cut can't truncate `/config.txt`. Host FS shim gained `remove`/`rename`.
 9. ⬜ **Persist MQTT `/config`** — currently memory-only and silently lost on reboot;
    debounce saves (LittleFS wear) or mark which keys persist.
 10. ⬜ **HTTP client timeouts** — surface connect/read timeouts in `HttpUtils::httpGet`
@@ -232,17 +244,18 @@ enable_*, intervals, sensor type, SPI/I2C pins, mqtt_*, web_password, …).
 
 ### Task hygiene
 
-11. ⬜ **Grace-before-acquire audit** — clock is fixed; verify weather/lhc/resto/
-    temp_sensor/custom_message cover their blocking `acquire()` waits with
-    `task_heartbeat_grace` (or rely on `task_grace_all` broadcasts).
-12. ⬜ **NightModeTask** acquires the whole display just for `setIntensity()` — add a
-    manager method that applies a brightness change on grant (no hold), or use a
-    short timeout and retry.
-13. ⬜ Minor: `graphic_utils.cpp` defines a vestigial global
-    `ResourceManager<LMDS> displayManager` (second, unused instance — verify with
-    grep, then remove); lhc_status_task.cpp ~L109 "wait a minute" comment over a
-    300 s sleep; single-task WebServerTask means one slow route still stalls the UI
-    (keep new handlers non-blocking).
+11. ✅ **Grace-before-acquire audit** — clock was already fixed; weather, LHC (both
+    acquires), resto, temp_sensor now follow the clock pattern: 90 s grace before
+    the blocking acquire, beat + 30 s grace once granted. custom_message was
+    already covered (grace sized to its message loop).
+12. ✅ **NightModeTask** uses a 500 ms acquire + retry (like MQTT brightness);
+    `last_was_night` latches only on success so a busy display defers to the next
+    60 s cycle instead of blocking for a full display hold.
+13. ✅ Minor: vestigial `ResourceManager<LMDS> displayManager` removed from
+    graphic_utils.cpp (grep-verified unused); lhc_status_task "wait a minute"
+    comment now says 5-minute cooldown (matches the 300 s delay). Remaining:
+    single-task WebServerTask means one slow route still stalls the UI (keep new
+    handlers non-blocking).
 
 ### Security
 
@@ -287,6 +300,16 @@ enable_*, intervals, sensor type, SPI/I2C pins, mqtt_*, web_password, …).
   per frame, Life burst per generation) + manager steals only after 30 s without
   progress — a fixed 30 s timer was caught stealing a legitimate 30 s
   scroll+wipe hold mid-draw.
+- **Scheduling follow-ups (#7/#11/#12/#13)**: display diagnostics on `/status` +
+  `/api/status` (holder, lane depths, drops, force handovers); grace-before-acquire
+  applied to weather/LHC/resto/temp (custom_message already covered); NightMode
+  brightness via 500 ms acquire + retry; vestigial `displayManager` global removed.
+- **Hold-time bounding (#4)**: `yieldRequested()` (fast lane non-empty); scrolls
+  preempt after 8 s minimum hold, Life bursts preempt immediately, pre-release
+  wipe skips on pending fast-lane requests; documented `wipe_interval` throttle
+  actually implemented now (was documented but missing — wipe ran every release).
+- **DataStore thread safety (#8)**: mutex-guarded map, save serialized via
+  `save_mutex_`, temp-file + atomic rename write path.
 - Verified: `pio run -e esp32dev` SUCCESS; `./tests/host/run.sh` all pass (incl.
   stress); prototype curl suite — /api/status 401/401/200 auth matrix, /push 200 +
   display rendering, 503 while busy, /actions, /messages, /edit, /wifi, /update

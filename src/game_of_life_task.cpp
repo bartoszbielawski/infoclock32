@@ -41,6 +41,15 @@ static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
         display.display();
         ResourceManager<LMDS>::getInstance().renewHold();
 
+        // Filler content: a waiting priority-lane request (clock, user push)
+        // ends the burst immediately — the animation can cut off anywhere.
+        if (ResourceManager<LMDS>::getInstance().yieldRequested())
+        {
+            logPrintf("LIFE", "burst preempted after %lu ms",
+                      (unsigned long)(millis() - start));
+            break;
+        }
+
         int pop = life_step(cur, nxt, width);
         bool stagnant = (std::memcmp(cur, nxt, size) == 0);
         std::memcpy(cur, nxt, size);

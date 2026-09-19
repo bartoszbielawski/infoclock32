@@ -174,8 +174,13 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
+        // Blocking acquire: cover the worst-case wait + scroll hold, then
+        // re-anchor the watchdog window once granted (clock-task pattern).
+        task_heartbeat_grace(90000);
         if (auto display = rmd.acquire())
         {
+            task_heartbeat();
+            task_heartbeat_grace(30000);
             const uint8_t* icon = (iconIndex >= 0) ? kWeatherIcons[iconIndex] : nullptr;
             scrollMessage(icon, kWeatherIconWidth, messageToBeDisplayed, display, 20);
         }

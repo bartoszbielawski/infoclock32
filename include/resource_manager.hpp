@@ -121,6 +121,8 @@ public:
                     released = true;
                 else if ((uint32_t)millis() - mgr->last_progress_ms_.load() > kForceHandoverMs)
                 {
+                    mgr->force_handovers_++;
+                    mgr->last_force_handover_ms_ = (uint32_t)millis();
                     logPrintf("RES", "%s: display holder did not release — forcing handover",
                               pcTaskGetName(mgr->current_task.load()));
                     break;
@@ -136,6 +138,16 @@ public:
     ResourceGuard<R> acquire(TickType_t timeout = portMAX_DELAY, bool priority = false)
     {
         return ResourceGuard<R>(*this, timeout, priority);
+    }
+
+    // True when a priority-lane request (clock, user push) is waiting. Long
+    // holds (scrolls, Life bursts) poll this periodically and cut themselves
+    // short, so a fast-lane requester is granted at the next release instead
+    // of waiting out the rest of the hold. Short holds are not required to
+    // check (see graphic_utils.cpp for the hold-time policy).
+    bool yieldRequested() const
+    {
+        return fast_queue && uxQueueMessagesWaiting(fast_queue) > 0;
     }
 
     // A caller blocks here until granted or timed out, so it can never have
@@ -210,6 +222,26 @@ public:
     R& getResourceRef() { return *resource; }
 
     uint32_t getDropCount() const { return drop_count_.load(); }
+
+    // ── diagnostics (safe to call from any task) ────────────────────────────
+    // Name of the task currently holding the display, or nullptr when idle.
+    const char* getCurrentHolder() const
+    {
+        TaskHandle_t t = current_task.load();
+        return t ? pcTaskGetName(t) : nullptr;
+    }
+
+    // Requests waiting in the normal lane (fastLane == false) or priority lane.
+    UBaseType_t getQueueDepth(bool fastLane) const
+    {
+        QueueHandle_t q = fastLane ? fast_queue : request_queue;
+        return q ? uxQueueMessagesWaiting(q) : 0;
+    }
+
+    // Force handovers: total count and millis() timestamp of the last one
+    // (0 = never happened). The age has to be computed by the caller.
+    uint32_t getForceHandoverCount() const   { return force_handovers_.load(); }
+    uint32_t getLastForceHandoverMs() const  { return last_force_handover_ms_.load(); }
 
 private:
     // Lifecycle of one acquire attempt, tracked in a small registry so the
@@ -323,6 +355,8 @@ private:
     void                      (*pre_release_hook)(R&);
     std::atomic<uint32_t>     drop_count_;
     std::atomic<uint32_t>     last_progress_ms_{0};   // last renewHold()/grant
+    std::atomic<uint32_t>     force_handovers_{0};
+    std::atomic<uint32_t>     last_force_handover_ms_{0};
     PendingRequest            pending_[kMaxPending] = {};
     portMUX_TYPE              pend_mux_ = portMUX_INITIALIZER_UNLOCKED;
     uint32_t                  gen_counter_;   // guarded by pend_mux_

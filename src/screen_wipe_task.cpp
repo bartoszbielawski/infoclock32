@@ -36,6 +36,22 @@ static void run_random_effect(LMDS& matrix) {
 // Called by ResourceManager<LMDS>::release_access() before the resource is
 // handed to the next task.  The caller still owns the display at this point.
 void wipe_on_release(LMDS& matrix) {
+    // A priority-lane request (clock, user push) is waiting: hand the display
+    // over immediately — the wipe is decoration, the request is content.
+    if (ResourceManager<LMDS>::getInstance().yieldRequested())
+        return;
+
+    // Throttle: the effect plays at most once per wipe_interval minutes
+    // (config key, default 10, 0 disables entirely).
+    static unsigned long lastWipeMs = 0;
+    int intervalMin = max(0, DataStore::getInstance().get_value<int>("wipe_interval", 10));
+    if (intervalMin == 0)
+        return;
+    unsigned long now = millis();
+    if (lastWipeMs != 0 && now - lastWipeMs < (unsigned long)intervalMin * 60UL * 1000UL)
+        return;
+    lastWipeMs = now;
+
     run_random_effect(matrix);
     vTaskDelay(100/ portTICK_PERIOD_MS);
 }

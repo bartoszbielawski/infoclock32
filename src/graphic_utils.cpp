@@ -5,8 +5,6 @@
 #include <logger.hpp>
 #include <memory>
 
-ResourceManager<LMDS> displayManager;
-
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset)
 {
   int w = std::min(canvas.width(), display.width());
@@ -31,6 +29,13 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   // display — see ResourceManager::renewHold().
   auto& rmd = ResourceManager<LMDS>::getInstance();
 
+  // A scroll may only be preempted once it has run this long: short messages
+  // (the common case, 6-8 s) complete untouched, while pathological holds
+  // (long menus, long custom messages) get cut so a waiting fast-lane request
+  // (clock, user push) is granted instead of waiting out the whole scroll.
+  static constexpr unsigned long kMinHoldBeforeYieldMs = 8000;
+  unsigned long holdStart = millis();
+
   if (canvas.width() <= display.width())
   {
     logPrintf("DISP", "message fits on display, centering without scrolling");
@@ -39,6 +44,8 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
     copyCanvasToDisplay(canvas, 0, display, offset);
     display.display();
     // 100*speed can exceed the force-handover window — renew while showing.
+    // The centered show is capped at 2.5 s (100 * max speed 25), so it stays
+    // below the preemption threshold by construction.
     for (int shown = 0; shown < 100 * speed; shown += 5000)
     {
       rmd.renewHold();
@@ -52,6 +59,14 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   int last = canvas.width() - display.width() + steps;
   for (int i = 0; i <= last; i += steps)
   {
+    // Preemption checkpoint (every frame): the trailing pause is skipped so
+    // the release happens right away.
+    if (rmd.yieldRequested() && millis() - holdStart > kMinHoldBeforeYieldMs)
+    {
+      logPrintf("DISP", "scroll preempted after %lu ms",
+                (unsigned long)(millis() - holdStart));
+      return;
+    }
     copyCanvasToDisplay(canvas, i, display, 0);
     display.display();
     rmd.renewHold();

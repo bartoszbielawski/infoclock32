@@ -211,6 +211,14 @@ BaseType_t xQueueReceive(QueueHandle_t queue, void* out, TickType_t ticks)
     return pdTRUE;
 }
 
+UBaseType_t uxQueueMessagesWaiting(QueueHandle_t queue)
+{
+    HostQueue* q = (HostQueue*)queue;
+    if (!q) return 0;
+    std::lock_guard<std::mutex> lock(q->mutex);
+    return (UBaseType_t)q->items.size();
+}
+
 // ── semaphores ───────────────────────────────────────────────────────────────
 
 SemaphoreHandle_t xSemaphoreCreateMutex() { return (SemaphoreHandle_t)new std::timed_mutex(); }

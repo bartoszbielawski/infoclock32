@@ -229,9 +229,17 @@ void resto_menu_task(void* pvParameters) {
             continue;
         }
 
-        for (const auto& menu : cachedMenus) {
+        for (const auto& menu : cachedMenus)
+        {
+            // Blocking acquire: cover the worst-case wait + scroll hold, then
+            // re-anchor the watchdog window once granted (clock-task pattern).
+            task_heartbeat_grace(90000);
             if (auto display = rmd.acquire())
+            {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
                 scrollMessage(menu, display, kScrollSpeedMs);
+            }
             else
             {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);

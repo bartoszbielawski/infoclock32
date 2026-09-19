@@ -30,6 +30,16 @@ bool FS::exists(const char* path) const
     return stat(resolvePath(path).c_str(), &st) == 0;
 }
 
+bool FS::remove(const char* path)
+{
+    return ::remove(resolvePath(path).c_str()) == 0;
+}
+
+bool FS::rename(const char* from, const char* to)
+{
+    return std::rename(resolvePath(from).c_str(), resolvePath(to).c_str()) == 0;
+}
+
 File FS::open(const char* path, const char* mode)
 {
     return File(resolvePath(path), mode);
