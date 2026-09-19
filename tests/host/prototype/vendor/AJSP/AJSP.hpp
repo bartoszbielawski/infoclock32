@@ -59,6 +59,9 @@ namespace AJSP
 				IC_OBJECT_VALUE_EXPECTED,
 				IC_OBJECT_KEY_OR_END_EXPECTED,
 				IC_OBJECT_SEPARATOR_OR_END_EXPECTED,
+				INVALID_KEYWORD,
+				INVALID_NUMBER,
+				INVALID_UNICODE,
 				INVALID_INTERNAL_STATE = 0x80
 			};
 #ifdef USE_PC
@@ -71,7 +74,9 @@ namespace AJSP
 				ARRAY,
 				STRING,
 				KEY,
-				RAW,
+				BOOLEAN,
+				NULL_VALUE,
+				NUMBER,
 			};
 			Result getLastResult() const {return result;}
 
@@ -92,6 +97,22 @@ namespace AJSP
 				STRING_START = 0x30,	//for strings and keys
 				STRING_BODY,
 				STRING_ESCAPE,
+				STRING_UNICODE,				//collecting 4 hex digits of \uXXXX
+				STRING_SURROGATE_BACKSLASH,	//high surrogate seen, '\' expected
+				STRING_SURROGATE_U,			//'u' expected
+				STRING_SURROGATE_DIGITS,	//low surrogate \uDC00-\uDFFF expected
+
+				KEYWORD_START = 0x40,	//for bools and nulls, matching char by char
+
+				NUMBER_START = 0x50,	//for numbers
+				NUMBER_INT_FIRST,		//digit expected (after a sign)
+				NUMBER_LEAD_ZERO,		//integer part is '0' - no more digits allowed
+				NUMBER_INT,
+				NUMBER_FRAC_FIRST,		//digit expected right after '.'
+				NUMBER_FRAC,
+				NUMBER_EXP_SIGN,		//optional sign expected after e/E
+				NUMBER_EXP_FIRST,		//digit expected after optional exponent sign
+				NUMBER_EXP,
 
 				INVALID = 0xFF
 			};
@@ -102,6 +123,9 @@ namespace AJSP
 					Entity entity;
 					State state;
 					uint16_t counter = 0;
+					const char* keyword = nullptr;
+					uint16_t unicode = 0;	//\uXXXX accumulator
+					uint16_t surrogate = 0;	//high half of a surrogate pair
 			};
 
 			bool 		skipWhitespace(char c) const;
@@ -110,9 +134,10 @@ namespace AJSP
 			bool		parseString(char c);
 			bool		parseObject(char c);
 			bool		parseArray(char c);
-			bool		parseRaw(char c);
+			bool		parseKeyword(char c);
+			bool		parseNumber(char c);
 
-			bool 		checkRawChar(char c);
+			bool		finishNumber();
 
 			Listener* 	listener = nullptr;
 
