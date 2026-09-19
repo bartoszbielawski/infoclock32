@@ -31,10 +31,13 @@ LEDMatrixDriver::LEDMatrixDriver(SPIClass& spi, SPISettings spiSettings, uint8_t
 
 	// initialize SPI only if it's the default one,
 	// otherwise it's the user's responsibility to initialize it
+	// (eg. with custom pins: spi.begin(sck, miso, mosi))
 	if (&spi == &SPI)
 		spi.begin();
-	
-	// TODO: check for other platforms (ESP32...?)
+
+	// ESP8266 only: make sure hardware CS is not driven automatically,
+	// as SS is managed manually here. Other platforms (ESP32, AVR, ...)
+	// do not have a similar call - the SS pin is always driven manually.
 	#ifdef ESP8266
 	spi.setHwCs(false);
 	#endif

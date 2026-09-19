@@ -49,11 +49,12 @@ class LEDMatrixDriver
 		//with N segments and ssPin as SS,
 		//flags describe segment orientation (optional)
 		//an already allocated buffer can be provided as well (optional)
-		LEDMatrixDriver(uint8_t N, uint8_t ssPin, uint8_t flags = 0, uint8_t* frameBuffer = nullptr);	
-		
-		//use this constructor if you want to specify which SPI to use and its settings
-		//the default settings are: 500000 Hz, MSBFIRST, SPI_MODE0
-		//other parameters are the same as in the previous constructor
+		LEDMatrixDriver(uint8_t N, uint8_t ssPin, uint8_t flags = 0, uint8_t* frameBuffer = nullptr);
+
+		//use this constructor if you want to specify which SPI bus to use and its settings,
+		//eg. for shared buses, custom pins or a different clock (default settings: 5 MHz, MSBFIRST, SPI_MODE0)
+		//the bus will NOT be initialized by the driver - call spi.begin(...) first,
+		//with custom pins if your platform supports it (eg. ESP32: spi.begin(sck, miso, mosi))
 		LEDMatrixDriver(SPIClass& spi, SPISettings spiSettings, uint8_t N, uint8_t ssPin, uint8_t flags = 0, uint8_t* fb = nullptr);
 
 		#ifdef USE_ADAFRUIT_GFX
