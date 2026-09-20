@@ -42,16 +42,21 @@ STRESS_SRC="shim/arduino_shim.cpp shim/freertos_shim.cpp shim/littlefs_shim.cpp 
 
 TARGET="${1:-all}"   # prototype | rm_stress | all
 
+# Build one target, reporting success only when the compiler actually succeeded.
+build() {
+    out="$1"; shift
+    if c++ $CXXFLAGS "$@" -o "$out"; then
+        echo "built ./$out"
+    else
+        echo "FAILED to build ./$out" >&2
+        exit 1
+    fi
+}
+
 case "$TARGET" in
-  prototype)
-    c++ $CXXFLAGS $SRC -o prototype
-    echo "built ./prototype" ;;
-  rm_stress)
-    c++ $CXXFLAGS $STRESS_SRC -o rm_stress
-    echo "built ./rm_stress" ;;
+  prototype) build prototype $SRC ;;
+  rm_stress) build rm_stress $STRESS_SRC ;;
   *)
-    c++ $CXXFLAGS $SRC -o prototype
-    echo "built ./prototype"
-    c++ $CXXFLAGS $STRESS_SRC -o rm_stress
-    echo "built ./rm_stress" ;;
+    build prototype $SRC
+    build rm_stress $STRESS_SRC ;;
 esac

@@ -8,6 +8,7 @@
 #ifndef PATHCONSTRUCTOR_H_
 #define PATHCONSTRUCTOR_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

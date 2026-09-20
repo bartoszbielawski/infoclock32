@@ -108,7 +108,7 @@ int main(int argc, char** argv)
 
     float sunLat = DataStore::getInstance().get_value<float>("sun_lat", NAN);
     float sunLon = DataStore::getInstance().get_value<float>("sun_lon", NAN);
-    if (isfinite(sunLat) && isfinite(sunLon))
+    if (std::isfinite(sunLat) && std::isfinite(sunLon))
         xTaskCreate(sun_times_task, "SunTimesTask", 4096, nullptr, 1, nullptr);
     else
         logPrintf("SYS", "SunTimesTask not started (sun_lat/sun_lon not set)");

@@ -9,6 +9,7 @@
 #ifndef AJSP_HPP_
 #define AJSP_HPP_
 
+#include <cstdint>
 #include <string>
 #include <stack>
 #include <utility>
