@@ -4,6 +4,7 @@
 #include <data_store.hpp>
 #include <version.hpp>
 #include <web_ui.hpp>
+#include <uptime_utils.hpp>
 
 // ── Server instance ───────────────────────────────────────────────────────────
 
@@ -88,15 +89,7 @@ void getStatusFields(char* uptime, size_t uptime_sz,
                      char* heap, size_t heap_sz,
                      char* rssi, size_t rssi_sz)
 {
-    unsigned long ms   = millis();
-    unsigned long days = ms / 86400000UL;
-    unsigned long hrs  = (ms / 3600000UL) % 24UL;
-    unsigned long mins = (ms / 60000UL)   % 60UL;
-    unsigned long secs = (ms / 1000UL)    % 60UL;
-    if (days > 0)
-        snprintf(uptime, uptime_sz, "%lud %luh %lum %lus", days, hrs, mins, secs);
-    else
-        snprintf(uptime, uptime_sz, "%luh %lum %lus", hrs, mins, secs);
+    format_uptime(uptime, uptime_sz, millis());
 
     snprintf(heap, heap_sz, "%u KB  (%u B)",
              (unsigned)esp_get_free_heap_size() / 1024,

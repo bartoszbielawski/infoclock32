@@ -1,6 +1,6 @@
 #!/bin/sh
-# Host-side tests for custom_message.hpp, sun_times.hpp and life.hpp.
-# No hardware needed. Run from anywhere: ./tests/host/run.sh
+# Host-side tests for the pure headers in include/ (no hardware needed).
+# Run from anywhere: ./tests/host/run.sh
 set -e
 cd "$(dirname "$0")"
 CXXFLAGS="-std=c++17 -Wall -Wextra -Istubs -I../../include"
@@ -11,6 +11,7 @@ c++ $CXXFLAGS life_step_check.cpp     -o life_step_check
 c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
 c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
+c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 
 ./custom_message_check
 ./sun_times_check
@@ -18,6 +19,7 @@ c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 ./weather_icons_check
 ./pressure_trend_check
 ./wdt_check
+./uptime_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

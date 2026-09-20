@@ -6,6 +6,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <version.hpp>
+#include <uptime_utils.hpp>
 
 // Read-only store that provides live device parameters via the same get(key)
 // interface as RuntimeStore / DataStore.  All writes are silently ignored.
@@ -21,7 +22,7 @@
 //   channel  – WiFi channel number
 //   heap     – free heap in bytes
 //   min_heap – minimum free heap since boot
-//   uptime   – uptime as "Xh YYm"
+//   uptime   – uptime as "2d 4h 9m 31s" (day field omitted below a day)
 //   chip     – chip model string
 //   cpu_freq – CPU frequency in MHz
 //   sdk      – IDF / SDK version string
@@ -90,14 +91,7 @@ public:
         }
         if (key == "uptime")
         {
-            unsigned long ms   = millis();
-            unsigned long days = ms / 86400000UL;
-            unsigned long hrs  = (ms / 3600000UL) % 24UL;
-            unsigned long mins = (ms / 60000UL)   % 60UL;
-            if (days > 0)
-                snprintf(buf, sizeof(buf), "%lud%luh%02lum", days, hrs, mins);
-            else
-                snprintf(buf, sizeof(buf), "%luh%02lum", hrs, mins);
+            format_uptime(buf, sizeof(buf), millis());
             return buf;
         }
 

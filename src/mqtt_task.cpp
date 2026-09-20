@@ -9,6 +9,7 @@
 #include <data_store.hpp>
 #include <runtime_store.hpp>
 #include <device_store.hpp>
+#include <uptime_utils.hpp>
 #include <logger.hpp>
 
 #include <string>
@@ -28,17 +29,15 @@ static bool    pendingReboot     = false;
 
 static void publishStatus(const std::string& clientId)
 {
-    unsigned long ms  = millis();
-    unsigned long h   = ms / 3600000UL;
-    unsigned long m   = (ms % 3600000UL) / 60000UL;
-    unsigned long s   = (ms % 60000UL) / 1000UL;
+    char uptime[32];
+    format_uptime(uptime, sizeof(uptime), millis());
 
     char payload[160];
     snprintf(payload, sizeof(payload),
-             "{\"ip\":\"%s\",\"heap\":%u,\"uptime\":\"%luh%lum%lus\",\"ssid\":\"%s\"}",
+             "{\"ip\":\"%s\",\"heap\":%u,\"uptime\":\"%s\",\"ssid\":\"%s\"}",
              WiFi.localIP().toString().c_str(),
              (unsigned)esp_get_free_heap_size(),
-             h, m, s,
+             uptime,
              WiFi.SSID().c_str());
 
     std::string topic = clientId + "/status";
