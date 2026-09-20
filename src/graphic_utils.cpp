@@ -2,6 +2,7 @@
 #include <freertos/FreeRTOS.h>
 #include "graphic_utils.hpp"
 #include <resource_manager.hpp>
+#include <data_store.hpp>
 #include <logger.hpp>
 #include <memory>
 
@@ -22,19 +23,25 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
 }
 
 
+// Minimum slice every display hold gets before a waiting priority-lane
+// request can cut it short (config key `display_min_hold_s`, seconds).
+uint32_t display_min_hold_ms()
+{
+  int s = DataStore::getInstance().get_value<int>("display_min_hold_s",
+                                                  (int)(kDefaultMinHoldMs / 1000));
+  return (uint32_t)max(0, s) * 1000UL;
+}
+
 // Common scroll path: center the canvas if it fits, otherwise scroll it across.
 static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps)
 {
-  // Keeps the manager's force-handover timer fed while this task holds the
-  // display — see ResourceManager::renewHold().
+  // Feeds the manager's force-handover timer and carries the shared
+  // minimum-slice policy: short messages (the common case, 6-8 s) complete
+  // untouched, while pathological holds (long menus, long custom messages)
+  // get cut so a waiting fast-lane request (clock, user push) is granted
+  // instead of waiting out the whole scroll.
   auto& rmd = ResourceManager<LMDS>::getInstance();
-
-  // A scroll may only be preempted once it has run this long: short messages
-  // (the common case, 6-8 s) complete untouched, while pathological holds
-  // (long menus, long custom messages) get cut so a waiting fast-lane request
-  // (clock, user push) is granted instead of waiting out the whole scroll.
-  static constexpr unsigned long kMinHoldBeforeYieldMs = 8000;
-  unsigned long holdStart = millis();
+  DisplayHold<LMDS> hold(rmd, display_min_hold_ms());
 
   if (canvas.width() <= display.width())
   {
@@ -48,7 +55,7 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
     // below the preemption threshold by construction.
     for (int shown = 0; shown < 100 * speed; shown += 5000)
     {
-      rmd.renewHold();
+      hold.renew();
       vTaskDelay(std::min(5000, 100 * speed - shown) / portTICK_PERIOD_MS);
     }
     return;
@@ -61,15 +68,13 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   {
     // Preemption checkpoint (every frame): the trailing pause is skipped so
     // the release happens right away.
-    if (rmd.yieldRequested() && millis() - holdStart > kMinHoldBeforeYieldMs)
+    if (!hold.keepGoing())
     {
-      logPrintf("DISP", "scroll preempted after %lu ms",
-                (unsigned long)(millis() - holdStart));
+      logPrintf("DISP", "scroll preempted after %lu ms", (unsigned long)hold.elapsed());
       return;
     }
     copyCanvasToDisplay(canvas, i, display, 0);
     display.display();
-    rmd.renewHold();
     vTaskDelay(speed / portTICK_PERIOD_MS);
     if (i == 0) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
     if (i == last) vTaskDelay(50 * speed / portTICK_PERIOD_MS);

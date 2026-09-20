@@ -362,4 +362,45 @@ private:
     uint32_t                  gen_counter_;   // guarded by pend_mux_
 };
 
+// Default minimum slice a hold keeps once a priority-lane request is waiting.
+// The clock comes back around every few seconds, so without a floor here it
+// would cut every long hold short. Override with the `display_min_hold_s`
+// config key (and, for Life bursts, `life_min_hold_s`).
+static constexpr uint32_t kDefaultMinHoldMs = 10000;
+
+// One hold of the display, from grant to release.
+//
+// Every long hold owes the manager two things: progress while it draws (so
+// the force-handover timer does not fire on a healthy task), and a handover
+// when a priority-lane request (clock, user push) is waiting — but not
+// before it has had its minimum slice. Scrolls and Life bursts share this
+// policy; construct one per hold and drive it from the draw loop.
+template<class R>
+class DisplayHold
+{
+public:
+    explicit DisplayHold(ResourceManager<R>& rmd, uint32_t min_hold_ms = kDefaultMinHoldMs)
+        : rmd_(rmd), start_((uint32_t)millis()), min_hold_ms_(min_hold_ms) {}
+
+    // Call once per frame. Renews the progress timer and reports whether the
+    // hold may continue; false means a priority request is waiting and the
+    // minimum slice is spent — stop drawing and release.
+    bool keepGoing()
+    {
+        rmd_.renewHold();
+        return !(rmd_.yieldRequested() && elapsed() > min_hold_ms_);
+    }
+
+    // Renew without the preemption check, for a hold that cannot be cut
+    // mid-frame (a centered message already on screen).
+    void renew() { rmd_.renewHold(); }
+
+    uint32_t elapsed() const { return (uint32_t)millis() - start_; }
+
+private:
+    ResourceManager<R>& rmd_;
+    uint32_t start_;
+    uint32_t min_hold_ms_;
+};
+
 #endif // RESOURCE_MANAGER_HPP

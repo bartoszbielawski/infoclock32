@@ -12,17 +12,13 @@
 #include <LMDS.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <graphic_utils.hpp>
 #include <life.hpp>
 #include <night_utils.hpp>
 
 static constexpr int DEFAULT_INTERVAL_S = 300;
 static constexpr int DEFAULT_BURST_S    = 30;
-static constexpr int DEFAULT_MIN_HOLD_S = 10;
 static constexpr int GEN_DELAY_MS       = 80;   // ~12 generations per second
-
-// Generations a settled board stays on screen before the reseed, so the
-// oscillator that ended it is actually visible (~0.6 s at GEN_DELAY_MS).
-static constexpr int SETTLE_DWELL_GENS  = 8;
 
 static void seed_field(uint8_t* cells, size_t size)
 {
@@ -31,38 +27,32 @@ static void seed_field(uint8_t* cells, size_t size)
 }
 
 // Runs one animation burst on an already-acquired display, then returns.
-// `min_hold_ms` is the slice the burst is allowed to keep before a waiting
-// priority-lane request (clock, user push) can cut it short.
+// Ends early when the board settles (nothing left to show) or when a waiting
+// priority-lane request may cut the hold short.
 static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
-                      int width, int burst_ms, int min_hold_ms)
+                      int width, int burst_ms, uint32_t min_hold_ms)
 {
     const size_t size = (size_t)width * 8;
     LifeCycleDetector cycle;
-    int dwell = 0;              // >0: settled, counting down to the reseed
     int generation = 0;
 
     seed_field(cur, size);
     cycle.observe(cur, size);
 
-    unsigned long start = millis();
-    while ((long)(millis() - start) < burst_ms)
+    DisplayHold<LMDS> hold(ResourceManager<LMDS>::getInstance(), min_hold_ms);
+    while (hold.elapsed() < (uint32_t)burst_ms)
     {
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < width; x++)
                 display.setPixel(x, y, cur[y * width + x] != 0);
         display.display();
-        ResourceManager<LMDS>::getInstance().renewHold();
 
-        // Filler content: a waiting priority-lane request (clock, user push)
-        // ends the burst — but only once the burst has had its slice, since
-        // the clock comes back around every few seconds and would otherwise
-        // cut every burst short. The animation can cut off anywhere.
-        if (ResourceManager<LMDS>::getInstance().yieldRequested() &&
-            millis() - start > (unsigned long)min_hold_ms)
+        // Filler content: hand the display back as soon as the shared
+        // minimum-slice policy allows it. The animation can cut off anywhere.
+        if (!hold.keepGoing())
         {
-            logPrintf("LIFE", "burst preempted after %lu ms",
-                      (unsigned long)(millis() - start));
-            break;
+            logPrintf("LIFE", "burst preempted after %lu ms", (unsigned long)hold.elapsed());
+            return;
         }
 
         int pop = life_step(cur, nxt, width);
@@ -71,24 +61,14 @@ static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
 
         // A board that died back, or one that repeats a state it already
         // showed (still life, blinker, any oscillator up to the detector's
-        // window), has nothing left to show — dwell on it briefly, then
-        // drop in fresh soup so the rest of the burst stays alive.
+        // window), has nothing left to show — end the burst and let the next
+        // task have the display instead of animating a frozen pattern.
         int period = cycle.observe(cur, size);
-        if (dwell > 0)
+        if (pop < 3 || period > 0)
         {
-            if (--dwell == 0)
-            {
-                seed_field(cur, size);
-                cycle.reset();
-                cycle.observe(cur, size);
-                generation = 0;
-            }
-        }
-        else if (pop < 3 || period > 0)
-        {
-            logPrintf("LIFE", "settled after %d gens (pop %d, period %d) — reseeding",
+            logPrintf("LIFE", "settled after %d gens (pop %d, period %d) — ending burst",
                       generation, pop, period);
-            dwell = SETTLE_DWELL_GENS;
+            return;
         }
 
         vTaskDelay(GEN_DELAY_MS / portTICK_PERIOD_MS);
@@ -114,9 +94,11 @@ void game_of_life_task(void* /*parameter*/)
         task_heartbeat();
         int interval_s = max(30, min(3600, ds.get_value<int>("life_interval_s", DEFAULT_INTERVAL_S)));
         int burst_s    = max(5,  min(120, ds.get_value<int>("life_burst_s",    DEFAULT_BURST_S)));
-        // Guaranteed slice before the clock can preempt the burst; capped at
-        // burst_s, and 0 restores the old "yield to the clock immediately".
-        int min_hold_s = max(0, min(burst_s, ds.get_value<int>("life_min_hold_s", DEFAULT_MIN_HOLD_S)));
+        // Guaranteed slice before the clock can preempt the burst. Defaults to
+        // the shared display policy (display_min_hold_s); life_min_hold_s
+        // overrides it for bursts only. Capped at burst_s; 0 yields at once.
+        int shared_s   = (int)(display_min_hold_ms() / 1000);
+        int min_hold_s = max(0, min(burst_s, ds.get_value<int>("life_min_hold_s", shared_s)));
 
         int width = rmd.getResourceRef().getSegments() * 8;
         if ((size_t)width * 8 != cur.size())
@@ -137,7 +119,7 @@ void game_of_life_task(void* /*parameter*/)
                 logPrintf("LIFE", "burst start: %d s on %dx8 (min hold %d s)",
                           burst_s, width, min_hold_s);
                 run_burst(*display, cur.data(), nxt.data(), width,
-                          burst_s * 1000, min_hold_s * 1000);
+                          burst_s * 1000, (uint32_t)min_hold_s * 1000);
             }
             // no log on contention: display queue is expected to be busy
         }

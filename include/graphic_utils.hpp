@@ -7,6 +7,11 @@
 #include <LMDS.hpp>
 #include <stdint.h>
 
+// Minimum slice every display hold keeps before a waiting priority-lane
+// request (clock, user push) can cut it short — config key
+// `display_min_hold_s`, default kDefaultMinHoldMs. Feed it to a DisplayHold.
+uint32_t display_min_hold_ms();
+
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset = 0);
 
 void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1);
