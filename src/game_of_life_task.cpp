@@ -19,11 +19,34 @@
 static constexpr int DEFAULT_INTERVAL_S = 300;
 static constexpr int DEFAULT_BURST_S    = 30;
 static constexpr int GEN_DELAY_MS       = 80;   // ~12 generations per second
+static constexpr int DEFAULT_FUEL_PCT   = 18;   // random cells added to an image seed
+
+// How long the untouched screen contents stay up before the fuel is added
+// and evolution starts — long enough to read the time you just saw.
+static constexpr int SEED_REVEAL_MS     = 900;
+
+// Below this many lit pixels there is no image worth growing from (a blank
+// screen just after a wipe, say), so the burst falls back to random soup.
+static constexpr int MIN_SEED_POP       = 12;
+
+static int rnd100() { return (int)random(0, 100); }
 
 static void seed_field(uint8_t* cells, size_t size)
 {
     for (size_t i = 0; i < size; i++)
-        cells[i] = (random(0, 100) < 45) ? 1 : 0;
+        cells[i] = (rnd100() < 45) ? 1 : 0;
+}
+
+// Copies whatever is on the matrix right now into the board. The display is
+// never cleared between holds, so this is the clock, the tail of the last
+// message, or whatever the previous task left behind. Returns the population
+// so the caller can tell an image from an empty screen.
+static int snapshot_display(LMDS& display, uint8_t* cells, int width)
+{
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < width; x++)
+            cells[y * width + x] = display.getPixel(x, y) ? 1 : 0;
+    return life_population(cells, (size_t)width * 8);
 }
 
 // Why a burst stopped. Only a settled board is thrown away; the other two
@@ -41,11 +64,20 @@ struct LifeBoard
     bool                 live       = false;   // false: seed fresh soup next burst
 };
 
+// Per-burst settings, read from the config once per cycle.
+struct BurstSettings
+{
+    int      burst_ms;
+    uint32_t min_hold_ms;
+    bool     seed_from_display;
+    int      fuel_pct;
+};
+
 // Runs one animation burst on an already-acquired display, then returns.
 // Resumes `board` where the last burst left off unless it was reseeded; ends
 // early when the board settles or when the hold may be cut short.
 static BurstEnd run_burst(LMDS& display, LifeBoard& board, int width,
-                          int burst_ms, uint32_t min_hold_ms)
+                          const BurstSettings& cfg)
 {
     const size_t size = (size_t)width * 8;
     uint8_t* cur = board.cur.data();
@@ -53,15 +85,31 @@ static BurstEnd run_burst(LMDS& display, LifeBoard& board, int width,
 
     if (!board.live)
     {
-        seed_field(cur, size);
+        // Grow out of the display rather than appearing from nowhere: take
+        // what is on screen, leave it up long enough to be read, then add
+        // fuel so the thin strokes have something to react with.
+        int pop = cfg.seed_from_display ? snapshot_display(display, cur, width) : 0;
+        if (pop >= MIN_SEED_POP)
+        {
+            logPrintf("LIFE", "seeded from the display: %d cells + %d%% fuel",
+                      pop, cfg.fuel_pct);
+            vTaskDelay(SEED_REVEAL_MS / portTICK_PERIOD_MS);
+            life_add_fuel(cur, size, cfg.fuel_pct, rnd100);
+        }
+        else
+        {
+            if (cfg.seed_from_display)
+                logPrintf("LIFE", "screen too empty (%d cells) — random soup", pop);
+            seed_field(cur, size);
+        }
         board.cycle.reset();
         board.cycle.observe(cur, size);
         board.generation = 0;
         board.live = true;
     }
 
-    DisplayHold<LMDS> hold(ResourceManager<LMDS>::getInstance(), min_hold_ms);
-    while (hold.elapsed() < (uint32_t)burst_ms)
+    DisplayHold<LMDS> hold(ResourceManager<LMDS>::getInstance(), cfg.min_hold_ms);
+    while (hold.elapsed() < (uint32_t)cfg.burst_ms)
     {
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < width; x++)
@@ -148,10 +196,15 @@ void game_of_life_task(void* /*parameter*/)
                     logPrintf("LIFE", "burst start: resuming at gen %d (%d s, min hold %d s)",
                               board.generation, burst_s, min_hold_s);
                 else
-                    logPrintf("LIFE", "burst start: fresh soup, %d s on %dx8 (min hold %d s)",
+                    logPrintf("LIFE", "burst start: new board, %d s on %dx8 (min hold %d s)",
                               burst_s, width, min_hold_s);
-                run_burst(*display, board, width,
-                          burst_s * 1000, (uint32_t)min_hold_s * 1000);
+                BurstSettings cfg;
+                cfg.burst_ms          = burst_s * 1000;
+                cfg.min_hold_ms       = (uint32_t)min_hold_s * 1000;
+                cfg.seed_from_display = ds.get_value<int>("life_seed_display", 1) != 0;
+                cfg.fuel_pct          = max(0, min(50, ds.get_value<int>("life_fuel_pct",
+                                                                        DEFAULT_FUEL_PCT)));
+                run_burst(*display, board, width, cfg);
             }
             // no log on contention: display queue is expected to be busy
         }

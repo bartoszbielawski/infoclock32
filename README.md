@@ -34,7 +34,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | MQTT integration | `enable_mqtt`, `mqtt_server`, `mqtt_client_id`, … |
 | Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes` |
 | Sunrise/sunset widget (offline math) | `enable_sun`, `sun_lat`, `sun_lon`, `sun_interval_min` |
-| Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s`, `life_min_hold_s` |
+| Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s`, `life_min_hold_s`, `life_seed_display` |
 | OTA firmware update (wireless) | `ota_password` (disabled if unset) |
 | HTTP firmware upload | Web UI → `/update` |
 | Web configuration editor | Web UI → `/edit` |
@@ -128,6 +128,8 @@ Key config keys:
 | `display_min_hold_s` | `10` | Seconds a long hold (scroll, Life burst) keeps the display before the clock may preempt it (0 = yield at once) |
 | `life_interval_s` / `life_burst_s` | `300` / `30` | Game of Life: pause between bursts / burst length (seconds) |
 | `life_min_hold_s` | `display_min_hold_s` | Game of Life: per-burst override of the minimum display slice |
+| `life_seed_display` | `1` | Game of Life: seed each new board from whatever is on the matrix (clock, last message); `0` = random soup |
+| `life_fuel_pct` | `18` | Game of Life: random cells added around an image seed so thin strokes survive (0-50) |
 | `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
 | `enable_life` | `0` | Game of Life idle animation (off by default) |
 

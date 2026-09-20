@@ -100,4 +100,26 @@ inline bool life_is_settled(int pop, int period)
     return pop < 3 || period > 0;
 }
 
+inline int life_population(const uint8_t* cells, size_t size)
+{
+    int pop = 0;
+    for (size_t i = 0; i < size; i++) pop += cells[i] ? 1 : 0;
+    return pop;
+}
+
+// Sprinkles random cells over an image seed: lit cells are kept, dark cells
+// come alive with `fuel_pct` probability.
+//
+// An image taken off the display (clock digits, the tail of a message) is
+// drawn in one-pixel strokes, which B3/S23 kills almost immediately -- most
+// of those cells have fewer than two neighbours. The fuel gives the image
+// something to react with, while leaving it recognisable in generation 0.
+// `rnd100` must return a value in [0, 100).
+inline void life_add_fuel(uint8_t* cells, size_t size, int fuel_pct, int (*rnd100)())
+{
+    if (fuel_pct <= 0) return;
+    for (size_t i = 0; i < size; i++)
+        if (!cells[i] && rnd100() < fuel_pct) cells[i] = 1;
+}
+
 #endif // INFOCLOCK32_LIFE_HPP

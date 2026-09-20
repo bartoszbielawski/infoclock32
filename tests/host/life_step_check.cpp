@@ -214,6 +214,32 @@ int main()
               straight_settled, chunked_settled);
     }
 
+    // ── image seeding (life_population / life_add_fuel) ─────────────────────
+
+    // Deterministic stand-in for random(0,100): a cheap LCG.
+    struct Rnd { static int next() { static uint32_t s = 12345;
+                                     s = s * 1103515245u + 12345u;
+                                     return (int)((s >> 16) % 100u); } };
+
+    {
+        Grid g = make(W, {"......", "......", "..OOO.", "......", "......", "......", "......", "......"});
+        CHECK(life_population(g.data(), g.size()) == 3, "population counts lit cells");
+
+        Grid none = g;
+        life_add_fuel(none.data(), none.size(), 0, Rnd::next);
+        CHECK(str(none, W) == str(g, W), "0%% fuel leaves the image untouched");
+
+        Grid all = g;
+        life_add_fuel(all.data(), all.size(), 100, Rnd::next);
+        CHECK(life_population(all.data(), all.size()) == (int)all.size(), "100%% fuel fills the board");
+
+        Grid some = g;
+        life_add_fuel(some.data(), some.size(), 20, Rnd::next);
+        int pop = life_population(some.data(), some.size());
+        CHECK(some[2*W+2] && some[2*W+3] && some[2*W+4], "image cells survive the fuel");
+        CHECK(pop > 3 && pop < (int)some.size() / 2, "20%% fuel lands between the image and half the board, got %d", pop);
+    }
+
     printf(failures ? "%d test(s) FAILED\n" : "all life tests passed\n", failures);
     return failures != 0;
 }

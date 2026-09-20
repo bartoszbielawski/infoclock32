@@ -37,31 +37,9 @@ void displayClock(void *parameter)
     task_heartbeat_grace(90000);
     if (auto display = rmd.acquire(portMAX_DELAY, true))
     {
-      // Fresh watchdog window for the hold itself (time + date + wipe hook).
+      // Fresh watchdog window for the hold itself (date + time + wipe hook).
       task_heartbeat();
       task_heartbeat_grace(30000);
-      // Show HH:MM:SS for 3 seconds (updated once per second)
-      for (int i = 0; i < 5; i++)
-      {
-        display->clear();
-
-        time_t now = time(nullptr);
-        struct tm *timeinfo = localtime(&now);
-
-        if (i == 0)
-          logPrintf("DISP", "clock %02d:%02d:%02d",
-                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-
-        int16_t x1, y1;
-        uint16_t width, height;
-        display->getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
-        display->setCursor((display->getSegments() * 8 - width) / 2, 0);
-        display->printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-        display->display();
-
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-      }
-
       // Show day name and date for 2 seconds
       {
         time_t now = time(nullptr);
@@ -83,6 +61,29 @@ void displayClock(void *parameter)
         display->print(dateStr);
         display->display();
         vTaskDelay(2000 / portTICK_PERIOD_MS);
+      }
+
+      // Show HH:MM:SS last, so the clock face is what the hold leaves behind
+      // (the Life task seeds itself from the display — see life_seed_display).
+      for (int i = 0; i < 5; i++)
+      {
+        display->clear();
+
+        time_t now = time(nullptr);
+        struct tm *timeinfo = localtime(&now);
+
+        if (i == 0)
+          logPrintf("DISP", "clock %02d:%02d:%02d",
+                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
+        int16_t x1, y1;
+        uint16_t width, height;
+        display->getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
+        display->setCursor((display->getSegments() * 8 - width) / 2, 0);
+        display->printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        display->display();
+
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
       }
     } // display released here
 
