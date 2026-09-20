@@ -34,7 +34,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | MQTT integration | `enable_mqtt`, `mqtt_server`, `mqtt_client_id`, … |
 | Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes` |
 | Sunrise/sunset widget (offline math) | `enable_sun`, `sun_lat`, `sun_lon`, `sun_interval_min` |
-| Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s` |
+| Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s`, `life_min_hold_s` |
 | OTA firmware update (wireless) | `ota_password` (disabled if unset) |
 | HTTP firmware upload | Web UI → `/update` |
 | Web configuration editor | Web UI → `/edit` |
@@ -125,7 +125,8 @@ Key config keys:
 | `msg_interval` | `60` | Custom message cycle interval (seconds) |
 | `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |
 | `sun_interval_min` | `30` | How often the sun line scrolls (minutes) |
-| `life_interval_s` / `life_burst_s` | `300` / `15` | Game of Life: pause between bursts / burst length (seconds) |
+| `life_interval_s` / `life_burst_s` | `300` / `30` | Game of Life: pause between bursts / burst length (seconds) |
+| `life_min_hold_s` | `10` | Game of Life: seconds a burst runs before the clock may preempt it (0 = yield at once) |
 | `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
 | `enable_life` | `0` | Game of Life idle animation (off by default) |
 

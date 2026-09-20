@@ -38,4 +38,57 @@ inline int life_step(const uint8_t* cur, uint8_t* nxt, int width)
     return pop;
 }
 
+// Rolling "has the board stopped producing anything new?" detector.
+//
+// Comparing against the previous generation alone only catches still lifes;
+// random soup on an 8-row grid usually settles into blinkers and other short
+// oscillators instead, which look just as dead but never repeat back-to-back.
+// This keeps a ring of the last kLifeCycleWindow state hashes, so a repeat at
+// distance p means an oscillator of period p (p == 1 being a still life).
+// Patterns that travel (gliders) only repeat after crossing the full width,
+// well outside the window, so they are left running.
+static constexpr int kLifeCycleWindow = 32;
+
+class LifeCycleDetector
+{
+public:
+    void reset() { head_ = 0; count_ = 0; }
+
+    // Feeds one generation. Returns its cycle period in generations
+    // (1..kLifeCycleWindow) when this exact state was already seen inside the
+    // window, or 0 while the board is still producing new states.
+    int observe(const uint8_t* cells, size_t size)
+    {
+        uint64_t h = hash(cells, size);
+        int period = 0;
+        for (int i = 1; i <= count_; i++)
+        {
+            int idx = (head_ - i + kLifeCycleWindow) % kLifeCycleWindow;
+            if (ring_[idx] == h) { period = i; break; }
+        }
+        ring_[head_] = h;
+        head_  = (head_ + 1) % kLifeCycleWindow;
+        if (count_ < kLifeCycleWindow) count_++;
+        return period;
+    }
+
+private:
+    // FNV-1a over the cell bytes. 64 bits keeps an accidental collision (one
+    // needless reseed) far rarer than anything else that can go wrong here.
+    static uint64_t hash(const uint8_t* cells, size_t size)
+    {
+        uint64_t h = 1469598103934665603ULL;
+        for (size_t i = 0; i < size; i++)
+        {
+            h ^= cells[i];
+            h *= 1099511628211ULL;
+        }
+        return h;
+    }
+
+    uint64_t ring_[kLifeCycleWindow] = {};
+    int      head_  = 0;
+    int      count_ = 0;   // live entries, capped at the window size
+};
+
 #endif // INFOCLOCK32_LIFE_HPP

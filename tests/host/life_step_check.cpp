@@ -94,6 +94,69 @@ int main()
         CHECK(str(back, W2) == str(g, W2), "wrapped blinker period 2");
     }
 
+
+    // ── LifeCycleDetector ───────────────────────────────────────────────────
+
+    // Still life: the block repeats the previous state -> period 1.
+    {
+        Grid g = make(W, {"......", "......", "..OO..", "..OO..", "......", "......", "......", "......"});
+        LifeCycleDetector d;
+        CHECK(d.observe(g.data(), g.size()) == 0, "first state is never a repeat");
+        Grid nxt((size_t)W * 8);
+        life_step(g.data(), nxt.data(), W);
+        CHECK(d.observe(nxt.data(), nxt.size()) == 1, "block reported as period 1");
+    }
+
+    // Blinker: back-to-back states differ, the state two gens back repeats.
+    {
+        Grid g = make(W, {"......", "......", "..OOO.", "......", "......", "......", "......", "......"});
+        LifeCycleDetector d;
+        d.observe(g.data(), g.size());
+        Grid a = stepN(g, W, 1);
+        CHECK(d.observe(a.data(), a.size()) == 0, "blinker gen 1 is new");
+        Grid b = stepN(g, W, 2);
+        CHECK(d.observe(b.data(), b.size()) == 2, "blinker reported as period 2");
+    }
+
+    // A travelling glider keeps producing new states for the whole window.
+    {
+        Grid g = make(W, {"............", "............",
+                          ".....O......", "......O.....", "....OOO.....",
+                          "............", "............", "............"});
+        LifeCycleDetector d;
+        d.observe(g.data(), g.size());
+        bool flagged = false;
+        Grid cur = g, nxt((size_t)W * 8);
+        for (int i = 0; i < 6; i++) {          // 6 gens: glider still travelling
+            life_step(cur.data(), nxt.data(), W);
+            cur = nxt;
+            if (d.observe(cur.data(), cur.size())) flagged = true;
+        }
+        CHECK(!flagged, "travelling glider is not reported as settled");
+    }
+
+    // reset() forgets the history, so a reseeded board starts clean.
+    {
+        Grid g = make(W, {"......", "......", "..OO..", "..OO..", "......", "......", "......", "......"});
+        LifeCycleDetector d;
+        d.observe(g.data(), g.size());
+        CHECK(d.observe(g.data(), g.size()) == 1, "repeat seen before reset");
+        d.reset();
+        CHECK(d.observe(g.data(), g.size()) == 0, "history cleared by reset");
+    }
+
+    // The ring only remembers kLifeCycleWindow generations: a repeat older
+    // than the window is not reported.
+    {
+        Grid a = make(W, {"......", "......", "..OO..", "..OO..", "......", "......", "......", "......"});
+        Grid b = make(W, {"......", "......", "......", "......", "..OO..", "..OO..", "......", "......"});
+        LifeCycleDetector d;
+        d.observe(a.data(), a.size());
+        for (int i = 0; i < kLifeCycleWindow; i++)   // push `a` out of the ring
+            d.observe(b.data(), b.size());
+        CHECK(d.observe(a.data(), a.size()) == 0, "repeat older than the window is ignored");
+    }
+
     printf(failures ? "%d test(s) FAILED\n" : "all life tests passed\n", failures);
     return failures != 0;
 }
