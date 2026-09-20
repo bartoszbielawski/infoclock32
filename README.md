@@ -198,7 +198,7 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 | `…/power` | `on`\|`off` | Blank / unblank display |
 | `…/config` | `key=value` | Set DataStore key (keys containing `password`/`secret` are blocked) |
 | `…/reboot` | — | Restart device |
-| `…/request` | `IP`\|`HEAP`\|`UPTIME`\|`SSID`\|`<key>` | Reply to `…/publish/<name>` |
+| `…/request` | `ip`\|`heap`\|`uptime`\|`ssid`\|`<key>` | Reply to `…/publish/<name>`. Keys are **case-sensitive lowercase** |
 | `…/status` | — | Device publishes heartbeat JSON here every 60 s |
 
 ```bash
