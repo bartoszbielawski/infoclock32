@@ -26,18 +26,39 @@ static void seed_field(uint8_t* cells, size_t size)
         cells[i] = (random(0, 100) < 45) ? 1 : 0;
 }
 
+// Why a burst stopped. Only a settled board is thrown away; the other two
+// mean the universe was still evolving when the display had to go back.
+enum class BurstEnd { Settled, Preempted, Expired };
+
+// The universe, kept alive between bursts. The buffers were always reused —
+// what persists now is the pattern in them, plus the detector history and
+// generation count that belong with it.
+struct LifeBoard
+{
+    std::vector<uint8_t> cur, nxt;
+    LifeCycleDetector    cycle;
+    int                  generation = 0;
+    bool                 live       = false;   // false: seed fresh soup next burst
+};
+
 // Runs one animation burst on an already-acquired display, then returns.
-// Ends early when the board settles (nothing left to show) or when a waiting
-// priority-lane request may cut the hold short.
-static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
-                      int width, int burst_ms, uint32_t min_hold_ms)
+// Resumes `board` where the last burst left off unless it was reseeded; ends
+// early when the board settles or when the hold may be cut short.
+static BurstEnd run_burst(LMDS& display, LifeBoard& board, int width,
+                          int burst_ms, uint32_t min_hold_ms)
 {
     const size_t size = (size_t)width * 8;
-    LifeCycleDetector cycle;
-    int generation = 0;
+    uint8_t* cur = board.cur.data();
+    uint8_t* nxt = board.nxt.data();
 
-    seed_field(cur, size);
-    cycle.observe(cur, size);
+    if (!board.live)
+    {
+        seed_field(cur, size);
+        board.cycle.reset();
+        board.cycle.observe(cur, size);
+        board.generation = 0;
+        board.live = true;
+    }
 
     DisplayHold<LMDS> hold(ResourceManager<LMDS>::getInstance(), min_hold_ms);
     while (hold.elapsed() < (uint32_t)burst_ms)
@@ -48,31 +69,37 @@ static void run_burst(LMDS& display, uint8_t* cur, uint8_t* nxt,
         display.display();
 
         // Filler content: hand the display back as soon as the shared
-        // minimum-slice policy allows it. The animation can cut off anywhere.
+        // minimum-slice policy allows it. The animation can cut off anywhere —
+        // the board stays put and the next burst picks it up here.
         if (!hold.keepGoing())
         {
-            logPrintf("LIFE", "burst preempted after %lu ms", (unsigned long)hold.elapsed());
-            return;
+            logPrintf("LIFE", "burst preempted after %lu ms at gen %d",
+                      (unsigned long)hold.elapsed(), board.generation);
+            return BurstEnd::Preempted;
         }
 
         int pop = life_step(cur, nxt, width);
         std::memcpy(cur, nxt, size);
-        generation++;
+        board.generation++;
 
         // A board that died back, or one that repeats a state it already
         // showed (still life, blinker, any oscillator up to the detector's
-        // window), has nothing left to show — end the burst and let the next
-        // task have the display instead of animating a frozen pattern.
-        int period = cycle.observe(cur, size);
-        if (pop < 3 || period > 0)
+        // window), has nothing left to show — end the burst and drop it, so
+        // the next one starts from fresh soup instead of a frozen pattern.
+        int period = board.cycle.observe(cur, size);
+        if (life_is_settled(pop, period))
         {
             logPrintf("LIFE", "settled after %d gens (pop %d, period %d) — ending burst",
-                      generation, pop, period);
-            return;
+                      board.generation, pop, period);
+            board.live = false;
+            return BurstEnd::Settled;
         }
 
         vTaskDelay(GEN_DELAY_MS / portTICK_PERIOD_MS);
     }
+
+    logPrintf("LIFE", "burst time up at gen %d — resuming next time", board.generation);
+    return BurstEnd::Expired;
 }
 
 // Conway's Game of Life shown in periodic bursts between the clock and the
@@ -87,7 +114,7 @@ void game_of_life_task(void* /*parameter*/)
     // Let the boot animations and first clock cycle run before joining in.
     vTaskDelay(30000 / portTICK_PERIOD_MS);
 
-    std::vector<uint8_t> cur, nxt;
+    LifeBoard board;
 
     while (true)
     {
@@ -101,10 +128,11 @@ void game_of_life_task(void* /*parameter*/)
         int min_hold_s = max(0, min(burst_s, ds.get_value<int>("life_min_hold_s", shared_s)));
 
         int width = rmd.getResourceRef().getSegments() * 8;
-        if ((size_t)width * 8 != cur.size())
+        if ((size_t)width * 8 != board.cur.size())
         {
-            cur.resize((size_t)width * 8);
-            nxt.resize((size_t)width * 8);
+            board.cur.resize((size_t)width * 8);
+            board.nxt.resize((size_t)width * 8);
+            board.live = false;          // a resized board cannot be resumed
         }
 
         if (!is_night_now(ds, time(nullptr)))
@@ -116,9 +144,13 @@ void game_of_life_task(void* /*parameter*/)
             task_grace_all(burst_s * 1000 + 10000);
             if (auto display = rmd.acquire())
             {
-                logPrintf("LIFE", "burst start: %d s on %dx8 (min hold %d s)",
-                          burst_s, width, min_hold_s);
-                run_burst(*display, cur.data(), nxt.data(), width,
+                if (board.live)
+                    logPrintf("LIFE", "burst start: resuming at gen %d (%d s, min hold %d s)",
+                              board.generation, burst_s, min_hold_s);
+                else
+                    logPrintf("LIFE", "burst start: fresh soup, %d s on %dx8 (min hold %d s)",
+                              burst_s, width, min_hold_s);
+                run_burst(*display, board, width,
                           burst_s * 1000, (uint32_t)min_hold_s * 1000);
             }
             // no log on contention: display queue is expected to be busy

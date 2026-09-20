@@ -91,4 +91,13 @@ private:
     int      count_ = 0;   // live entries, capped at the window size
 };
 
+// The "nothing new can happen here" rule, shared by the task and its tests.
+// `pop` is the population of the generation just computed and `period` the
+// verdict LifeCycleDetector returned for it. A board that died back to a
+// couple of cells has nothing to show either, so it counts as settled.
+inline bool life_is_settled(int pop, int period)
+{
+    return pop < 3 || period > 0;
+}
+
 #endif // INFOCLOCK32_LIFE_HPP

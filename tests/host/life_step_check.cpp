@@ -157,6 +157,63 @@ int main()
         CHECK(d.observe(a.data(), a.size()) == 0, "repeat older than the window is ignored");
     }
 
+    // ── settled rule + state kept across bursts ─────────────────────────────
+
+    // life_is_settled: the rule the task ends a burst on.
+    {
+        CHECK(!life_is_settled(20, 0), "busy board is not settled");
+        CHECK( life_is_settled(20, 1), "still life is settled");
+        CHECK( life_is_settled(20, 2), "blinker is settled");
+        CHECK( life_is_settled(2,  0), "board that died back is settled");
+        CHECK(!life_is_settled(3,  0), "three cells still counts as alive");
+    }
+
+    // A burst cut short resumes: stepping a board in chunks, carrying the
+    // cells and the detector across the gaps, matches one straight run.
+    {
+        Grid start = make(W, {"............", "......O.....",
+                              ".....O......", "......O.....", "....OOO.....",
+                              "............", "..OO........", "..OO........"});
+        const int total = 60;   // this soup settles at gen 54
+
+        Grid straight = start;
+        LifeCycleDetector ds;
+        ds.observe(straight.data(), straight.size());
+        int straight_settled = -1;
+        {
+            Grid nxt((size_t)W * 8);
+            for (int g = 1; g <= total; g++) {
+                int pop = life_step(straight.data(), nxt.data(), W);
+                straight = nxt;
+                if (straight_settled < 0 && life_is_settled(pop, ds.observe(straight.data(), straight.size())))
+                    straight_settled = g;
+            }
+        }
+
+        Grid chunked = start;                 // same universe, three bursts
+        LifeCycleDetector dc;
+        dc.observe(chunked.data(), chunked.size());
+        int chunked_settled = -1, gen = 0;
+        {
+            Grid nxt((size_t)W * 8);
+            const int chunks[3] = {7, 13, 40};
+            for (int c = 0; c < 3; c++)
+                for (int i = 0; i < chunks[c]; i++) {
+                    int pop = life_step(chunked.data(), nxt.data(), W);
+                    chunked = nxt;
+                    gen++;
+                    if (chunked_settled < 0 && life_is_settled(pop, dc.observe(chunked.data(), chunked.size())))
+                        chunked_settled = gen;
+                }
+        }
+
+        CHECK(gen == total, "chunked run covers the same %d generations, got %d", total, gen);
+        CHECK(str(chunked, W) == str(straight, W), "resumed board matches an uninterrupted run");
+        CHECK(chunked_settled == straight_settled && straight_settled > 0,
+              "settle verdict survives the gaps (straight %d, chunked %d)",
+              straight_settled, chunked_settled);
+    }
+
     printf(failures ? "%d test(s) FAILED\n" : "all life tests passed\n", failures);
     return failures != 0;
 }
