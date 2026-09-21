@@ -167,7 +167,7 @@ void setup() {
   TempSensor* tempSensor = createTempSensor();  // sensor type from temp_sensor config key
   xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
-  xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
+  xTaskCreate(night_mode_task, "NightModeTask", 4096, nullptr, 1, nullptr);
 
 
   if (!dataStore.get_value("ota_password", "").empty())

@@ -11,7 +11,7 @@
 
 void night_mode_task(void* parameter)
 {
-    registerTask("NightMode", 2048, 120000);
+    registerTask("NightMode", 4096, 120000);
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     // Let DataStore load and NTP sync before first check.
