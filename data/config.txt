@@ -22,7 +22,7 @@ brightness=7
 #   EST5EDT,M3.2.0,M11.1.0              (US Eastern)
 timezone=UTC0
 
-# Display language for date/weather labels: en or fr
+# Display language for date labels: en, fr or pl
 language=en
 
 # ── Night mode ────────────────────────────────────────────────────────────────
@@ -59,6 +59,8 @@ resto_restaurants=3
 # Hours between which the menu is fetched and displayed (24-hour)
 resto_start_hour=9
 resto_end_hour=14
+# Test override: fetch for this date (YYYY-MM-DD) and bypass the time window
+#resto_test_date=2026-09-21
 
 # ── MQTT ─────────────────────────────────────────────────────────────────────
 enable_mqtt=0
@@ -90,15 +92,15 @@ temp_interval=30
 #
 # BMP280 (I2C, temperature + pressure — no humidity):
 #temp_sensor=bmp280
-#bmp280_addr=0x76   ; alt address: 0x77
+#bmp280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # BME280 (I2C, temperature + humidity + pressure):
 #temp_sensor=bme280
-#bme280_addr=0x76   ; alt address: 0x77
+#bme280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # SHT31 (I2C, temperature + humidity):
 #temp_sensor=sht31
-#sht31_addr=0x44    ; alt address: 0x45
+#sht31_addr=68      # decimal for 0x44; use 69 for 0x45
 #
 # AHT10 / AHT20 (I2C, temperature + humidity, fixed address 0x38):
 #temp_sensor=aht10
@@ -106,7 +108,10 @@ temp_interval=30
 #
 # DS18B20 (1-Wire, temperature only):
 #temp_sensor=ds18b20
-#ds18b20_pin=4      ; GPIO pin connected to the data line (default GPIO4)
+#ds18b20_pin=4      # GPIO pin connected to the data line (default GPIO4)
+#
+# Temperature correction in degrees C, added to every reading (default 0)
+#temp_offset=0
 
 # ── Sun widget & Game of Life ─────────────────────────────────────────────────
 # Sunrise/sunset line (offline solar math; needs a position, blank = disabled)
@@ -117,7 +122,23 @@ temp_interval=30
 # Conway's Game of Life bursts between clock cycles (quiet at night_start/night_end)
 #enable_life=0
 #life_interval_s=300
-#life_burst_s=15
+#life_burst_s=30
+# Seed each new board from whatever is on the matrix (0 = random soup)
+#life_seed_display=1
+# Random cells (percent) added around an image seed so thin strokes survive
+#life_fuel_pct=18
+# Guaranteed slice (seconds) a burst keeps before the clock may preempt it;
+# defaults to display_min_hold_s, 0 yields at once
+#life_min_hold_s=10
+
+# ── Display scheduling ────────────────────────────────────────────────────────
+# Minimum seconds a long hold (scroll, Life burst) keeps the display before
+# a waiting priority request (clock, user push) may preempt it (default 10)
+#display_min_hold_s=10
+
+# Decorative wipe transition between display hand-offs, at most once per
+# interval (minutes). 0 disables. (default 10)
+#wipe_interval=10
 
 # ── Custom messages ───────────────────────────────────────────────────────────
 # How often to cycle through messages (seconds)

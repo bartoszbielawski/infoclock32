@@ -23,6 +23,11 @@ hostname=infoclock32
 # Leave unset to disable authentication and keep all routes open.
 web_password=
 
+# ── OTA updates ──────────────────────────────────────────────────────────────
+# Set a password to enable ArduinoOTA firmware updates. Leave blank (default)
+# to disable OTA entirely. The first flash must always be wired.
+#ota_password=
+
 # ── Display ───────────────────────────────────────────────────────────────────
 # MAX7219 intensity. Range 0 (dim) – 15 (full). Default: 7
 brightness=7
@@ -44,7 +49,8 @@ night_end=06:30
 night_brightness=1
 
 # ── Feature toggles ───────────────────────────────────────────────────────────
-# Set to 0 to disable a task entirely. Default for all: 1 (enabled).
+# Set to 0 to disable a task entirely. Default for all: 1 (enabled),
+# except enable_life (default 0, off).
 enable_weather=1
 enable_lhc=1
 enable_mqtt=1
@@ -56,6 +62,24 @@ enable_resto=1
 # City ID: find yours at https://openweathermap.org/find
 ow_api_key=your_api_key_here
 ow_city_id=2988507
+
+# ── Restaurant menu (CERN Novae) ─────────────────────────────────────────────
+# Requires enable_resto=1. Scrolls lunch (midi) menus of the configured
+# CERN restaurants between resto_start_hour and resto_end_hour (end exclusive,
+# window wraps midnight). Menus refresh hourly.
+#
+# Identifies your CERN group to the Novae API. Default: CER103
+novae_codes=CER103
+#
+# Comma-separated restaurant numbers (1 = R1, 2 = R2, 3 = R3). Default: 3
+resto_restaurants=3
+#
+# Display window in 24-hour hours (end exclusive; window wraps midnight).
+resto_start_hour=9
+resto_end_hour=14
+#
+# Test override: fetch menus for this date (YYYY-MM-DD) and bypass the window.
+#resto_test_date=2026-09-21
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 # Requires enable_mqtt=1.
@@ -83,11 +107,12 @@ mqtt_password=
 
 # ── Temperature sensor ────────────────────────────────────────────────────────
 # Sensor type. Supported values:
+#   bmp180   — BMP180 via I2C, fixed address 0x77 (temp + pressure)
 #   bme280   — BME280 via I2C (temp + humidity + pressure)
 #   bmp280   — BMP280 via I2C (temp + pressure)
 #   sht31    — SHT31 via I2C (temp + humidity)
-#   aht10    — AHT10 via I2C (temp + humidity)
-#   aht20    — AHT20 via I2C (temp + humidity)
+#   aht10    — AHT10 via I2C, fixed address 0x38 (temp + humidity)
+#   aht20    — AHT20 via I2C, fixed address 0x38 (temp + humidity)
 #   ds18b20  — DS18B20 via 1-Wire (temp only)
 #   stub     — disabled / no hardware (default)
 temp_sensor=bme280
@@ -102,7 +127,10 @@ bme280_addr=118
 # Pin number for DS18B20 data line (1-Wire). Ignored for I2C sensors.
 #ds18b20_pin=4
 
-# How often to poll the sensor (seconds). Default: 30
+# Temperature correction in degrees C, added to every reading. Default: 0
+#temp_offset=0
+
+# How often to poll the sensor (seconds). Code default: 300
 temp_interval=30
 
 # ── Sun widget & Game of Life ─────────────────────────────────────────────────
@@ -115,26 +143,47 @@ sun_lon=2.3522
 #sun_interval_min=30
 
 # Conway's Game of Life idle animation — short bursts between clock cycles,
-# skipped during the night window.
+# skipped during the night window. Off by default; enable explicitly.
 enable_life=0
+# Seconds between bursts (30–3600) / burst length (5–120). Defaults: 300 / 30
 #life_interval_s=300
-#life_burst_s=15
+#life_burst_s=30
+# Seed each new board from whatever is on the matrix (0 = random soup)
+#life_seed_display=1
+# Random cells (percent, 0–50) added around an image seed so thin strokes survive
+#life_fuel_pct=18
+# Guaranteed slice (seconds) a burst keeps before the clock may preempt it;
+# defaults to display_min_hold_s, 0 yields at once
+#life_min_hold_s=10
+
+# ── Display scheduling & wipes ────────────────────────────────────────────────
+# Minimum seconds a long hold (scroll, Life burst) keeps the display before a
+# waiting priority request (clock, user push) may preempt it. Default: 10
+#display_min_hold_s=10
+
+# Decorative wipe transition between display hand-offs, at most once per
+# interval (minutes). 0 disables. Default: 10
+#wipe_interval=10
 
 # ── Custom messages ───────────────────────────────────────────────────────────
-# Up to 8 independent message slots (name can be any string, e.g. 1..8).
+# Named message slots — define as many as you like. Names may use letters,
+# digits, _ and - (the /messages web page enforces this for slots edited there).
 # A slot is active when its _text key exists and today falls within [start, end].
 #
-# How often to cycle through active messages (seconds). Default: 60
+# How often to cycle through active messages (seconds, 10–3600). Default: 60
 msg_interval=60
 #
 # Slot format:
 #   message_<name>_text      — text to scroll (required to activate the slot)
 #   message_<name>_start     — YYYY-MM-DD — hide before this date (optional)
 #   message_<name>_end       — YYYY-MM-DD — hide after this date (optional)
-#   message_<name>_countdown — YYYY-MM-DD — appends " in X days" or "X days ago"
+#   message_<name>_countdown — YYYY-MM-DD — appends ": 45d" ("today!" on the
+#                              day, "+Nd" after) unless the text contains {}
 #
 # {} in the text is replaced by the countdown number.
 # A countdown hides itself from the day after its target unless _end is set later.
+# {key} placeholders insert RuntimeStore values (temp_c, weather_id, …),
+# DeviceStore values (ip, hostname, heap, uptime, …) or DataStore config keys.
 # Example: always-on greeting
 message_1_text=Hello, world!
 #
@@ -143,8 +192,8 @@ message_1_text=Hello, world!
 #message_2_start=2026-04-01
 #message_2_end=2026-04-30
 #
-# Example: countdown to an event
-#message_3_text=Launch {} days
+# Example: countdown to an event (shows "Launch: 45d" style output)
+#message_3_text=Launch {}
 #message_3_countdown=2026-12-31
 
 # ── Logging / diagnostics ─────────────────────────────────────────────────────
