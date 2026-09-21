@@ -9,17 +9,23 @@
 #include <MapCollector.hpp>
 
 #include <data_store.hpp>
+#include <parse_utils.hpp>
+#include <runtime_store.hpp>
+#include <weather_icons.hpp>
+#include <WiFi.h>
 #include <http_utils.hpp>
 #include <graphic_utils.hpp>
+#include <logger.hpp>
 #include <pgmspace.h>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
+#include <task_registry.hpp>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
-static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "http://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
-static const char OW_WEATHER_API_FORECAST[] PROGMEM = "http://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric";
+static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
+static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric";
 
-std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
+static std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
 {
     // predicate used by MapCollector to decide which keys to keep, ignore values
     auto keep_pred = [&keys](const std::string& path, const std::string& value) -> bool {
@@ -36,82 +42,130 @@ std::map<std::string, std::string> parseJsonWithPredicate(const String &json, co
 }
 
 static const std::set<std::string> weatherKeys = {
-    "/root/main/temp"
+    "/root/main/temp",
+    "/root/weather/0/id",
+    "/root/weather/0/icon"
 };
 
+// OWM forecast returns 3-hour slots; index 2 = ~6 hours ahead from the current slot.
 static const std::set<std::string> forecastKeys = {
     "/root/list/2/main/temp",
     "/root/list/2/weather/0/description",
     "/root/city/name"
 };
 
-std::string readWeatherFromOWM()
+// Returns the display message, or an empty string on failure.
+// iconIndex (out): index into kWeatherIcons for the current condition,
+// or -1 if the condition could not be parsed.
+static std::string readWeatherFromOWM(int& iconIndex)
 {
-    auto apiKey = DataStore::getInstance().get_value("ow_api_key", "");
-    auto cityId = DataStore::getInstance().get_value("ow_city_id", "");
+    auto& ds    = DataStore::getInstance();
+    auto apiKey = ds.get_value("ow_api_key", "");
+    auto cityId = ds.get_value("ow_city_id", "");
 
-    //read current weather
+    if (apiKey.empty() || cityId.empty())
+    {
+        logPrintf("WTH", "ow_api_key or ow_city_id not configured");
+        return std::string();
+    }
+
+    // read current weather
     char url[128];
     snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str());
 
     String output;
-    auto response = HttpUtils::httpGet(url, output, false);
+    auto response = HttpUtils::httpGet(url, output, true);
     if (response != 200)
     {
-        Serial.printf("HTTP GET failed, response: %d\n", response);
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
+        logPrintf("WTH", "current weather HTTP GET failed: %d", response);
         return std::string();
     }
 
     auto currentWeather = parseJsonWithPredicate(output, weatherKeys);
-    
-    //read forcast
+
+    // read forecast
     snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str());
-    response = HttpUtils::httpGet(url, output, false);
+    response = HttpUtils::httpGet(url, output, true);
     if (response != 200)
     {
-        Serial.printf("HTTP GET failed, response: %d\n", response);
-        vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before retrying
+        logPrintf("WTH", "forecast HTTP GET failed: %d", response);
         return std::string();
     }
 
-    auto foracastWeather = parseJsonWithPredicate(output, forecastKeys);
+    auto forecastWeather = parseJsonWithPredicate(output, forecastKeys);
 
-    //create result string witht he following format:
+    // create result string with the following format:
     // Name: temp ^C (forecast temperature ^C, forecast description))
 
-    // format string stored in flash (PROGMEM) to save RAM
-    static const char WEATHER_FMT[] PROGMEM = "%s: %.1fC (%.1fC, %s)";
+    // \xF7 is the degree symbol in the LED matrix font.
+    // Use UTF-8 \xC2\xB0 (°) in the log string so /log renders correctly in browsers.
+    static const char WEATHER_FMT_DISP[] PROGMEM = "%s: %.1f\xF7" "C (%.1f\xF7" "C, %s)";
+    static const char WEATHER_FMT_LOG[]  PROGMEM = "%s: %.1f\xC2\xB0" "C (%.1f\xC2\xB0" "C, %s)";
+
+    float currentTemp  = parse_value(currentWeather["/root/main/temp"],         NAN);
+    float forecastTemp = parse_value(forecastWeather["/root/list/2/main/temp"], NAN);
+    if (std::isnan(currentTemp) || std::isnan(forecastTemp))
+    {
+        logPrintf("WTH", "failed to parse temperature values from API response");
+        return std::string();
+    }
+
+    const std::string& cityName = forecastWeather["/root/city/name"];
+    const std::string& description = forecastWeather["/root/list/2/weather/0/description"];
+    if (cityName.empty() || description.empty())
+    {
+        logPrintf("WTH", "missing city name or description in forecast response");
+        return std::string();
+    }
+
+    // Current condition drives the display icon; OWM's icon field carries
+    // a d/n suffix distinguishing day from night.
+    int conditionId = parse_value(currentWeather["/root/weather/0/id"], -1);
+    std::string iconField = currentWeather["/root/weather/0/icon"];
+    bool night = !iconField.empty() && iconField.back() == 'n';
+    iconIndex = (conditionId > 0) ? weatherIconIndex(conditionId, night) : -1;
+
+    // Publish for {placeholders} in custom messages and MQTT /request
+    RuntimeStore::getInstance().set("weather_id", std::to_string(conditionId));
+    RuntimeStore::getInstance().set("weather_desc", description);
+
+    char logInfo[256];
+    snprintf_P(logInfo, sizeof(logInfo), WEATHER_FMT_LOG,
+        cityName.c_str(), currentTemp, forecastTemp, description.c_str());
+    logPrintf("WTH", "%s", logInfo);
 
     char weatherInfo[256];
-    snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT,
-        foracastWeather["/root/city/name"].c_str(),
-        std::stof(currentWeather["/root/main/temp"]),
-        std::stof(foracastWeather["/root/list/2/main/temp"]),
-        foracastWeather["/root/list/2/weather/0/description"].c_str()
-    );
+    snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT_DISP,
+        cityName.c_str(), currentTemp, forecastTemp, description.c_str());
 
     return weatherInfo;
 }
 
 void open_weather_map_task(void *parameter)
 {
+    registerTask("Weather", 8192, 120000);
     std::string messageToBeDisplayed;
+    int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
     time_t last_weather_update = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    auto& matrix = rmd.getResourceRef();
 
     while (true)
     {
-        if (difftime(time(nullptr), last_weather_update) > 900)
+        task_heartbeat();
+        if (WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        if (difftime(time(nullptr), last_weather_update) > 30*60) // update weather every 30 minutes
         {
-            auto newWeather = readWeatherFromOWM();
+            auto newWeather = readWeatherFromOWM(iconIndex);
             if (not newWeather.empty())
             {
                 messageToBeDisplayed = newWeather;
                 last_weather_update = time(nullptr);
-            }               
+            }
         }
 
         if (messageToBeDisplayed.empty())
@@ -120,19 +174,18 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        Serial.printf("Weather: %s\n", messageToBeDisplayed.c_str());
-
-        if (not rmd.make_access_request())
+        // Blocking acquire: cover the worst-case wait + scroll hold, then
+        // re-anchor the watchdog window once granted (clock-task pattern).
+        task_heartbeat_grace(90000);
+        if (auto display = rmd.acquire())
         {
-            Serial.println("WeatherDisplay: Failed to get access to display");
-            vTaskDelay(60000 / portTICK_PERIOD_MS);
-            continue;
+            task_heartbeat();
+            task_heartbeat_grace(30000);
+            const uint8_t* icon = (iconIndex >= 0) ? kWeatherIcons[iconIndex] : nullptr;
+            scrollMessage(icon, kWeatherIconWidth, messageToBeDisplayed, display, 20);
         }
 
+        vTaskDelay(60000 / portTICK_PERIOD_MS);
 
-        scrollMessage(messageToBeDisplayed, matrix, 50);
-        rmd.release_access();
-
-        vTaskDelay(20000 / portTICK_PERIOD_MS); // update every minute
     }
 }

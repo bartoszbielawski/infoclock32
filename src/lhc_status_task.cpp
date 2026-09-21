@@ -1,11 +1,14 @@
 
 
 #include <pgmspace.h>
+#include <WiFi.h>
 #include <http_utils.hpp>
+#include <task_registry.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <logger.hpp>
 #include <string_utils.h>
 #include <string>
 
@@ -19,32 +22,92 @@ static std::map<std::string, std::string> interesting_fields =
     {"LhcMachineMode", ""}
 };
 
-void remoteHTMLTags(String& str)
+static const char sentinel_char = '\x07';
+static const char sentinel_str[] = "\x07";
+static const char double_sentinel_char[] = "\x07\x07";
+
+void removeHTMLTags(String& str)
 {
-    str.replace("<br>", "--");
-    str.replace("<br/>", "--");
+    str.trim();
+    String result;
+    result.reserve(str.length());
+    int i = 0;
+    while (i < str.length()) {
+
+        if (str[i] != '<') 
+        {
+            result += str[i++];
+            continue;
+        }
+
+        int close = str.indexOf('>', i);
+        if (close == -1) break;
+        String tag = str.substring(i + 1, close);
+        tag.trim();
+        if (tag.endsWith("/")) tag.remove(tag.length() - 1);
+        tag.trim();
+        tag.toUpperCase();
+        //replace <br> with a special char that will later be replaced with a space, this way we preserve intentional line breaks
+        if (tag == "BR") result += sentinel_char; 
+        i = close + 1;        
+    }
+
+    result.trim();
+
+    while (result.indexOf(double_sentinel_char) != -1)
+        result.replace(double_sentinel_char, sentinel_str);
+    
+    if (result.startsWith(sentinel_str)) result.remove(0, 1);
+    if (result.endsWith(sentinel_str)) result.remove(result.length() - 1, 1);
+
+    //replace remaining sentinel chars (originally <br>) with spaces, adding extra sentinels around them to preserve intentional multiple spaces
+    result.replace(sentinel_str, " \x07 "); 
+    result.trim();
+
+    // Decode HTML entities (&amp; must be last)
+    result.replace("&nbsp;",  " ");
+    result.replace("&lt;",    "<");
+    result.replace("&gt;",    ">");
+    result.replace("&quot;",  "\"");
+    result.replace("&apos;",  "'");
+    result.replace("&ndash;", "-");
+    result.replace("&mdash;", "-");
+    result.replace("&amp;",   "&");
+
+    str = result;
 }
+
+
 
 void lhc_status_task(void *parameter)
 {
+    // 60 s+ of work between beats is normal (30 s poll gate + GET + two
+    // scroll phases with delays), plus display contention can stack on top
+    registerTask("LHC", 8192, 120000);
     std::string modeAndEnergyMessage;
     std::string page1Message;
 
     time_t last_update = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    auto& matrix = rmd.getResourceRef();
 
     while (true)
     {
+        task_heartbeat();
+        if (WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
         if (difftime(time(nullptr), last_update) > 30)
         {
             String output;
             auto response = HttpUtils::httpGet(pageUrl, output, true);
             if (response != 200)
             {
-                Serial.printf("LHCStatus: HTTP GET failed, response: %d\n", response);
-                vTaskDelay(60000 / portTICK_PERIOD_MS); // wait a minute before
+                logPrintf("LHC", "HTTP GET failed, response: %d", response);
+                task_heartbeat_grace(320000);                // planned 5-minute cooldown below
+                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // 5-minute cooldown before retrying
                 continue;
             }      
             
@@ -70,11 +133,11 @@ void lhc_status_task(void *parameter)
                 if (interesting_fields.find(title.c_str()) != interesting_fields.end())
                 {
                     String value = line.substring(colonIndex + 1);
-                    remoteHTMLTags(value);
                     value.replace("</title>", "");
+                    removeHTMLTags(value);                    
                     value.trim();
                     interesting_fields[title.c_str()] = value.c_str();
-                    Serial.printf("LHCStatus: %s = %s\n", title.c_str(), value.c_str());
+                    logPrintf("LHC", "%s = %s", title.c_str(), value.c_str());
                     fields_updated = true;
                 }
             }
@@ -95,32 +158,33 @@ void lhc_status_task(void *parameter)
             }
         }   //end of update block
 
-        if (not rmd.make_access_request())
-        {
-            Serial.println("LHCStatus: Failed to get access to display");   
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
-
         if (not modeAndEnergyMessage.empty())
         {
-            scrollMessage(modeAndEnergyMessage, matrix, 50);
+            // Blocking acquires: cover the worst-case wait + scroll hold, then
+            // re-anchor the watchdog window once granted (clock-task pattern).
+            task_heartbeat_grace(90000);
+            if (auto display = rmd.acquire())
+            {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
+                scrollMessage(modeAndEnergyMessage, display, 20);
+            }
         }
-        rmd.release_access();
 
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
-        if (not rmd.make_access_request())
-        {
-            Serial.println("LHCStatus: Failed to get access to display");   
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+
         if (not page1Message.empty())
         {
-            Serial.printf("LHCStatus: Displaying page 1 message: %s\n", page1Message.c_str());
-            scrollMessage(page1Message, matrix, 50);
+            task_heartbeat_grace(90000);
+            if (auto display = rmd.acquire())
+            {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
+                logPrintf("LHC", "Page1: %s", page1Message.c_str());
+                scrollMessage(page1Message, display, 20);
+            }
         }
-        rmd.release_access();
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+        vTaskDelay(20000 / portTICK_PERIOD_MS);
     }
 }

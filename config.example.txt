@@ -1,0 +1,152 @@
+# infoclock32 — example configuration file
+# Copy relevant lines to /config.txt on the device (via the /edit page).
+# Lines starting with '#' are ignored. Format is key=value, one per line.
+# All keys are optional unless marked (required).
+
+# ── WiFi ──────────────────────────────────────────────────────────────────────
+# (required) Network credentials. Connection is managed by WiFiManager:
+# these values are tried first, then credentials saved in the setup portal.
+# If no connection can be made at boot, an AP named <hostname>-setup opens
+# (captive portal at 192.168.4.1) for wifi_portal_timeout_s seconds; a
+# background monitor keeps retrying and re-joining afterwards. Reboot to
+# reopen the portal.
+wifi_ssid=MyNetwork
+wifi_password=secret
+#wifi_portal_timeout_s=180
+
+# ── Device identity ───────────────────────────────────────────────────────────
+# Hostname used for DHCP, mDNS (<hostname>.local), and the setup AP name.
+# Allowed characters: letters, digits, hyphens. Default: infoclock32
+hostname=infoclock32
+
+# Password for the web UI (any username accepted).
+# Leave unset to disable authentication and keep all routes open.
+web_password=
+
+# ── Display ───────────────────────────────────────────────────────────────────
+# MAX7219 intensity. Range 0 (dim) – 15 (full). Default: 7
+brightness=7
+
+# POSIX TZ string — controls how UTC is converted to local time for the clock.
+# Pick the string for your zone; examples below:
+#   UTC0
+#   CET-1CEST,M3.5.0,M10.5.0/3     (Central Europe)
+#   GMT0BST,M3.5.0/1,M10.5.0       (UK)
+#   EST5EDT,M3.2.0,M11.1.0         (US Eastern)
+timezone=CET-1CEST,M3.5.0,M10.5.0/3
+
+# ── Night mode ────────────────────────────────────────────────────────────────
+# Dims the display between two wall-clock times. Leave both blank to disable.
+# Time format: HH:MM (24-hour). Wraps midnight correctly (e.g. 23:00 – 06:00).
+night_start=23:00
+night_end=06:30
+# Brightness level used during night hours. Default: 1
+night_brightness=1
+
+# ── Feature toggles ───────────────────────────────────────────────────────────
+# Set to 0 to disable a task entirely. Default for all: 1 (enabled).
+enable_weather=1
+enable_lhc=1
+enable_mqtt=1
+enable_resto=1
+
+# ── Weather (OpenWeatherMap) ───────────────────────────────────────────────────
+# Requires enable_weather=1.
+# Get a free API key at https://openweathermap.org/api
+# City ID: find yours at https://openweathermap.org/find
+ow_api_key=your_api_key_here
+ow_city_id=2988507
+
+# ── MQTT ──────────────────────────────────────────────────────────────────────
+# Requires enable_mqtt=1.
+# mqtt_client_id is also the MQTT topic prefix: <clientId>/push, /brightness …
+mqtt_server=192.168.1.10
+mqtt_client_id=infoclock32
+mqtt_user=
+mqtt_password=
+
+# ── Pin overrides ────────────────────────────────────────────────────────────
+# Override the compile-time pin defaults from pins.hpp. Useful when wiring
+# differs from the board definition without requiring a recompile.
+# Changes take effect on the next reboot.
+#
+# SPI (MAX7219 LED matrix)
+#spi_sck=4
+#spi_mosi=6
+#spi_cs=7
+#
+# I2C (temperature/pressure sensors)
+#i2c_sda=1
+#i2c_scl=0
+#
+# 1-Wire (DS18B20) — see ds18b20_pin under Temperature sensor below
+
+# ── Temperature sensor ────────────────────────────────────────────────────────
+# Sensor type. Supported values:
+#   bme280   — BME280 via I2C (temp + humidity + pressure)
+#   bmp280   — BMP280 via I2C (temp + pressure)
+#   sht31    — SHT31 via I2C (temp + humidity)
+#   aht10    — AHT10 via I2C (temp + humidity)
+#   aht20    — AHT20 via I2C (temp + humidity)
+#   ds18b20  — DS18B20 via 1-Wire (temp only)
+#   stub     — disabled / no hardware (default)
+temp_sensor=bme280
+
+# I2C address in decimal. Most breakout boards ship with SDO/CSB low → 0x76.
+# Pull SDO/CSB high to use the alternate address 0x77.
+# (bme280_addr, bmp280_addr, sht31_addr follow the same pattern)
+bme280_addr=118
+#bmp280_addr=118
+#sht31_addr=68
+
+# Pin number for DS18B20 data line (1-Wire). Ignored for I2C sensors.
+#ds18b20_pin=4
+
+# How often to poll the sensor (seconds). Default: 30
+temp_interval=30
+
+# ── Sun widget & Game of Life ─────────────────────────────────────────────────
+# Sunrise/sunset widget — pure offline solar math, only needs a position.
+# Task is not started while sun_lat/sun_lon are blank.
+enable_sun=1
+sun_lat=48.8566
+sun_lon=2.3522
+# How often to scroll the sun line (minutes, 5–720)
+#sun_interval_min=30
+
+# Conway's Game of Life idle animation — short bursts between clock cycles,
+# skipped during the night window.
+enable_life=0
+#life_interval_s=300
+#life_burst_s=15
+
+# ── Custom messages ───────────────────────────────────────────────────────────
+# Up to 8 independent message slots (name can be any string, e.g. 1..8).
+# A slot is active when its _text key exists and today falls within [start, end].
+#
+# How often to cycle through active messages (seconds). Default: 60
+msg_interval=60
+#
+# Slot format:
+#   message_<name>_text      — text to scroll (required to activate the slot)
+#   message_<name>_start     — YYYY-MM-DD — hide before this date (optional)
+#   message_<name>_end       — YYYY-MM-DD — hide after this date (optional)
+#   message_<name>_countdown — YYYY-MM-DD — appends " in X days" or "X days ago"
+#
+# {} in the text is replaced by the countdown number.
+# A countdown hides itself from the day after its target unless _end is set later.
+# Example: always-on greeting
+message_1_text=Hello, world!
+#
+# Example: date-bounded announcement
+#message_2_text=Conference starts soon!
+#message_2_start=2026-04-01
+#message_2_end=2026-04-30
+#
+# Example: countdown to an event
+#message_3_text=Launch {} days
+#message_3_countdown=2026-12-31
+
+# ── Logging / diagnostics ─────────────────────────────────────────────────────
+# IP address of a UDP syslog server (RFC 3164, port 514). Leave blank to disable.
+syslog_server=

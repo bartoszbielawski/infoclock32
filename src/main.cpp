@@ -1,7 +1,7 @@
 #include <Arduino.h>
-#include <WiFiManager.h>
 
-#include <create_tasks.h>
+#include <pins.hpp>
+
 #include <hardware_init.h>
 #include <resource_manager.hpp>
 
@@ -10,128 +10,28 @@
 #include <algorithm>
 
 #include <data_store.hpp>
+#include <logger.hpp>
+#include <runtime_store.hpp>
+#include <timezone_utils.hpp>
+#include <version.hpp>
+#include <watchdog_task.h>
+#include <Wire.h>
+#include <temp_sensor.hpp>
+#include <temp_sensor_factory.hpp>
+#include <temp_sensor_task.h>
+#include <custom_message_task.h>
+#include <night_mode_task.h>
+#include <resto_menu_task.h>
+#include <ota_task.h>
+#include <screen_wipe_task.h>
+#include <task_entry_points.hpp>
+#include <task_registry.hpp>
 
-void open_weather_map_task(void *parameter);
-void lhc_status_task(void *parameter);
-
+// Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
 
-// void animateDisplay(void *parameter)
-// {
-//   matrix.clear();
-//   int count = 0;
-//   int totalPixels = matrix.getSegments() * 8 * 8;
-//   while (true)
-//   {
-//     if (displayManager.make_access_request())
-//     {
-//       bool target_state = count < totalPixels / 2;
-//       if (target_state)
-//         count++;
-//       else
-//         count--;
-      
-//       int x = random(0, matrix.getSegments() * 8);
-//       int y = random(0, 8);
-
-//       while (matrix.getPixel(x, y) == target_state) {
-//         x = random(0, matrix.getSegments() * 8);
-//         y = random(0, 8);
-//       }
-
-//       matrix.setPixel(x, y, target_state);
-      
-//       matrix.displayToSerial(Serial);
-//       displayManager.release_access();
-//     }
-//     vTaskDelay(100 / portTICK_PERIOD_MS);
-//   }
-// }
-
-
-void displayClock(void *parameter)
-{
-  auto& rmd = ResourceManager<LMDS>::getInstance();
-  auto& matrix = rmd.getResourceRef();
-
-  while (true)
-  {
-    if (not rmd.make_access_request())
-    {
-      Serial.println("ClockDisplay: Failed to get access to display");
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
-      continue;
-    }
-    
-    //print the time
-    for (int i = 0; i < 3; i++)
-    {
-      matrix.clear();
-
-
-      time_t now = time(nullptr);
-      struct tm *timeinfo = localtime(&now);
-
-      Serial.printf("Current time: %02d:%02d:%02d\n", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-      
-      //print to the matrix centered
-      int16_t x1, y1;
-      uint16_t width, height;
-
-      
-      matrix.getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
-      matrix.setCursor((matrix.getSegments() * 8 - width) / 2, 0);
-      matrix.printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-      matrix.displayToSerial(Serial);
-
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-
-    matrix.clear();
-
-    time_t now = time(nullptr);
-    struct tm *timeinfo = localtime(&now);
-
-    Serial.printf("Current date: %04d-%02d-%02d\n", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
-    
-    matrix.setCursor(2, 0);
-    matrix.printf("%04d-%02d-%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
-    matrix.displayToSerial(Serial);
-    
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-    rmd.release_access();
-    
-    // wait a bit before updating again and requesting access again
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-  }
-}
-
-void marqueeDisplay(void *parameter)
-{  
-  auto& rmd = ResourceManager<LMDS>::getInstance();
-  auto& matrix = rmd.getResourceRef();
-  while (true)
-  {   
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    if (not rmd.make_access_request())
-    {
-      Serial.println("MarqueeDisplay: Failed to get access to display");
-      continue;
-    }
-
-
-    scrollMessage("ESP32-C3!", matrix, 50);
-
-    rmd.release_access();
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-  }
-}
-
+// Utility: list files in a LittleFS directory over serial output
 void listFiles(const char* dirname) {
-  if (!LittleFS.begin()) {
-    Serial.println("An Error has occurred while mounting LittleFS");
-    return;
-  }
   File root = LittleFS.open(dirname);
   if (!root) {
     Serial.println("Failed to open directory");
@@ -150,31 +50,188 @@ void listFiles(const char* dirname) {
     Serial.println(file.size());
     file = root.openNextFile();
   }
+
   root.close();
-  LittleFS.end();
   Serial.println("End of file list");
 }
 
 void setup() {
-  hardware_init();
-  create_tasks();
+  Serial.begin(1000000);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // HWCDC: wait up to 2 s for the host to open the port so early log lines aren't lost.
+  // On standalone boot (no PC connected) this times out and continues normally.
+  { unsigned long t = millis(); while (!Serial && millis() - t < 2000) delay(10); }
+#endif
 
-  //NTP client
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  LittleFS.begin(true);
 
-  ResourceManager<LMDS>::getInstance().initialize(new LMDS(8, 5)); // 8 modules, CS pin 5
-
+  // Load persisted config first (hostname/timezone/task toggles, etc.)
+  // Must happen before WiFi auto-connect logic in hardware_init().
   dataStore.load_from_file("/config.txt");
 
-  //xTaskCreate(animateDisplay, "DisplayTask", 2048, nullptr, 1, nullptr);
-  xTaskCreate(displayClock, "ClockTask", 2048, nullptr, 1, nullptr);
-  //xTaskCreate(marqueeDisplay, "MarqueeTask", 2048, nullptr, 1, nullptr);
-  //xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
-  xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
+  pinMode(LED_BLINK_PIN, OUTPUT);
 
-  
+  // Initialize board/network and core task infrastructure
+  hardware_init();
+
+  // Configure SNTP time sources (UTC base; timezone handled separately)
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+  // Configure SPI bus with explicit pins before constructing the LED matrix driver.
+  // Pin defaults come from pins.hpp; override via config keys spi_sck/spi_mosi/spi_cs.
+  int spiSck  = dataStore.get_value<int>("spi_sck",  MATRIX_SCK_PIN);
+  int spiMosi = dataStore.get_value<int>("spi_mosi", MATRIX_MOSI_PIN);
+  int spiCs   = dataStore.get_value<int>("spi_cs",   MATRIX_CS_PIN);
+  SPI.begin(spiSck, /*miso=*/-1, spiMosi);
+
+  // Create and register LED matrix resource
+  auto* lmds = new LMDS(SPI, SPISettings(5000000, MSBFIRST, SPI_MODE0), 8, spiCs);
+  lmds->begin();
+  ResourceManager<LMDS>::getInstance().initialize(lmds);
+  ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
+
+  // Logging and boot banner
+  logger_init();
+  logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
+
+  // Watchdog culprit from the previous restart (RTC memory, consumed on read).
+  char wdtCulprit[24] = "";
+  if (wdt_take_culprit(wdtCulprit, sizeof(wdtCulprit)))
+  {
+    RuntimeStore::getInstance().set("wdt_culprit", std::string(wdtCulprit));
+    logPrintf("SYS", "watchdog reboot — hung task: %s", wdtCulprit);
+  }
+
+  // Apply timezone loaded from config
+  apply_timezone();
+
+  auto& rmd = ResourceManager<LMDS>::getInstance();
+  // Restore display brightness from config, clamp to valid [0..15]
+  int brightness = dataStore.get_value<int>("brightness", 7);
+  brightness = max(0, min(15, brightness));
+  rmd.getResourceRef().setIntensity((uint8_t)brightness);
+
+  if (auto display = rmd.acquire())
+  {
+    // Show firmware version + reset reason so it's visible on every boot
+    static const char* const resetReasonStr[] = {
+      "unknown", "power on", "external rst", "software rst",
+      "panic", "interrupt wdt", "task wdt", "watchdog",
+      "deepsleep rst", "brownout", "SDIO rst"
+    };
+    esp_reset_reason_t reason = esp_reset_reason();
+    int reasonIdx = (int)reason < (int)(sizeof(resetReasonStr)/sizeof(resetReasonStr[0]))
+                    ? (int)reason : 0;
+    char bootMsg[64];
+    if (wdtCulprit[0])
+      snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: wdt (%s)", wdtCulprit);
+    else
+      snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
+    scrollMessage(bootMsg, display, 30);
+    if (wifi_is_ap_mode()) {
+      std::string apMsg = "WiFi setup: connect to "
+                          + dataStore.get_value("hostname", "infoclock32")
+                          + "-setup  then browse 192.168.4.1";
+      scrollMessage(apMsg, display, 40);
+    }
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
+  }
+
+  // Always-on local display task
+  xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
+
+  // Optional tasks controlled via config flags
+  if (dataStore.get_value<int>("enable_weather", 1))
+    xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
+
+  if (dataStore.get_value<int>("enable_lhc", 1))
+    xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "LHCStatusTask disabled (enable_lhc=0)");
+
+  if (dataStore.get_value<int>("enable_mqtt", 1))
+    xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
+
+  // HTTP server task
+  xTaskCreate(web_server_task, "WebServerTask", 10240, nullptr, 1, nullptr);
+
+  // Sensor/message/night mode tasks
+  // I2C pin defaults from pins.hpp; override via config keys i2c_sda/i2c_scl.
+  int i2cSda = dataStore.get_value<int>("i2c_sda", I2C_SDA_PIN);
+  int i2cScl = dataStore.get_value<int>("i2c_scl", I2C_SCL_PIN);
+  Wire.begin(i2cSda, i2cScl);
+  TempSensor* tempSensor = createTempSensor();  // sensor type from temp_sensor config key
+  xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
+  xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
+  xTaskCreate(night_mode_task, "NightModeTask", 4096, nullptr, 1, nullptr);
+
+
+  if (!dataStore.get_value("ota_password", "").empty())
+    xTaskCreate(ota_task, "OTATask", 4096, nullptr, 2, nullptr);
+  else
+    logPrintf("SYS", "OTATask disabled (ota_password not set)");
+
+  // Optional restaurant menu task
+  if (dataStore.get_value<int>("enable_resto", 1))
+    xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "RestoMenuTask disabled (enable_resto=0)");
+
+  // Sunrise/sunset widget (needs sun_lat/sun_lon; times are pure math)
+  if (dataStore.get_value<int>("enable_sun", 1))
+  {
+    float sunLat = dataStore.get_value<float>("sun_lat", NAN);
+    float sunLon = dataStore.get_value<float>("sun_lon", NAN);
+    if (isfinite(sunLat) && isfinite(sunLon))
+      xTaskCreate(sun_times_task, "SunTimesTask", 4096, nullptr, 1, nullptr);
+    else
+      logPrintf("SYS", "SunTimesTask not started (sun_lat/sun_lon not set)");
+  }
+  else
+    logPrintf("SYS", "SunTimesTask disabled (enable_sun=0)");
+
+  // Game of Life idle animation bursts (off by default — enable explicitly)
+  if (dataStore.get_value<int>("enable_life", 0))
+    xTaskCreate(game_of_life_task, "LifeTask", 4096, nullptr, 1, nullptr);
+  else
+    logPrintf("SYS", "LifeTask disabled (enable_life=0)");
+
+  // Boot date check: by now NTP should have synced (WiFi came up seconds ago).
+  // Wait for a valid local time (up to 10 s), then scroll the current day,
+  // date, and time so the timezone config can be verified at a glance.
+  {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10000))
+    {
+      char bootDate[24];
+      snprintf(bootDate, sizeof(bootDate), "%s %02d/%02d %02d:%02d",
+               localizedDayName(timeinfo.tm_wday),
+               timeinfo.tm_mday, timeinfo.tm_mon + 1,
+               timeinfo.tm_hour, timeinfo.tm_min);
+      logPrintf("SYS", "boot date check: %s", bootDate);
+      if (auto display = rmd.acquire())
+        scrollMessage(bootDate, display, 30);
+    }
+    else
+      logPrintf("SYS", "time not synced after 10 s — boot date check skipped");
+  }
+
+  // Watchdog goes last: the supervisor starts enforcing once every task is
+  // registered, and enableLoopWDT() only takes effect when loop() begins
+  // feeding it (the wrapper doesn't feed during setup()).
+  enableLoopWDT();
+  start_watchdog_task();
 }
 
-void loop() 
+// loopTask is a real FreeRTOS task so vTaskDelay yields properly here.
+void loop()
 {
+  digitalWrite(LED_BLINK_PIN, HIGH);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  digitalWrite(LED_BLINK_PIN, LOW);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }

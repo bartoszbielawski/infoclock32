@@ -1,0 +1,33 @@
+#!/bin/sh
+# Host-side tests for the pure headers in include/ (no hardware needed).
+# Run from anywhere: ./tests/host/run.sh
+set -e
+cd "$(dirname "$0")"
+CXXFLAGS="-std=c++17 -Wall -Wextra -Istubs -I../../include"
+
+c++ $CXXFLAGS custom_message_check.cpp -o custom_message_check
+c++ $CXXFLAGS sun_times_check.cpp     -o sun_times_check
+c++ $CXXFLAGS life_step_check.cpp     -o life_step_check
+c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
+c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
+c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
+c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
+
+./custom_message_check
+./sun_times_check
+./life_step_check
+./weather_icons_check
+./pressure_trend_check
+./wdt_check
+./uptime_check
+
+# ── ResourceManager handshake stress (host prototype shim) ───────────────────
+echo "── resource manager stress ──"
+if ( cd prototype && ./build.sh rm_stress > /dev/null 2>&1 && ./rm_stress > rm_stress.log 2>&1 ); then
+    grep -E "\[rm_stress\]|all resource manager stress|forcing handover" prototype/rm_stress.log
+else
+    echo "resource manager stress FAILED — last log lines:"
+    tail -30 prototype/rm_stress.log 2>/dev/null
+    exit 1
+fi
+rm -f prototype/rm_stress.log
