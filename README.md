@@ -1,5 +1,7 @@
 # infoclock32
 
+[![CI](https://github.com/bartoszbielawski/infoclock32/actions/workflows/ci.yml/badge.svg)](https://github.com/bartoszbielawski/infoclock32/actions/workflows/ci.yml)
+
 An ESP32 LED matrix info display — scrolling clock, weather, LHC beam status, temperature, custom messages, and more.
 
 ## Hardware
@@ -61,6 +63,10 @@ pio device monitor -b 1000000
 ```
 
 **Supported targets:** `esp32dev`, `esp32-c3-devkitm-1`, `esp32-s2-saola-1`, `esp32-s3-devkitc-1`
+
+### Releases & CI
+
+GitHub Actions builds all four targets on every push to `main`/`experimental` and on PRs; the `firmware-<env>` binaries are attached as artifacts to each run, and host-side tests run in CI as well. Pushing a `v*` tag (e.g. `git tag v1.0 && git push origin v1.0`) additionally publishes a [GitHub Release](https://github.com/bartoszbielawski/infoclock32/releases) with named, flashable `.bin` files for every target.
 
 ### OTA flashing
 
