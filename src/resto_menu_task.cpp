@@ -119,7 +119,7 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
     }
 
     // Parse the JSON array, filtering for midi service only.
-    DynamicJsonDocument doc(8192);
+    JsonDocument doc;
     DeserializationError err = deserializeJson(doc, body);
     if (err) {
         logPrintf(TAG, "R%d JSON error: %s", restaurantCode, err.c_str());
@@ -138,9 +138,9 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
         const char* pref = (lang == "fr") ? "fr" : "en";
         const char* fall = (lang == "fr") ? "en" : "fr";
         const char* raw = nullptr;
-        if (title.containsKey(pref) && title[pref].as<const char*>() && strlen(title[pref]))
+        if (title[pref].is<const char*>() && strlen(title[pref]))
             raw = title[pref];
-        else if (title.containsKey(fall) && title[fall].as<const char*>() && strlen(title[fall]))
+        else if (title[fall].is<const char*>() && strlen(title[fall]))
             raw = title[fall];
         if (!raw) continue;
 
@@ -208,7 +208,7 @@ void resto_menu_task(void* pvParameters) {
         auto currentTime = time(nullptr);
 
         bool stale = (fetchDate != cachedDate) ||
-                     (difftime(currentTime, lastFetch) > kFetchIntervalMs / 1000.0) && (!currentTime < 3600); // sanity check to avoid treating an invalid clock as stale
+                     (currentTime > 3600 && difftime(currentTime, lastFetch) > kFetchIntervalMs / 1000.0); // sanity check to avoid treating an invalid clock as stale
 
         if (stale) {
             cachedDate  = fetchDate;
