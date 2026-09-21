@@ -66,7 +66,7 @@ pio device monitor -b 1000000
 
 ### Releases & CI
 
-GitHub Actions builds all four targets on every push to `main`/`experimental` and on PRs; the `firmware-<env>` binaries are attached as artifacts to each run, and host-side tests run in CI as well. Pushing a `v*` tag (e.g. `git tag v1.0 && git push origin v1.0`) additionally publishes a [GitHub Release](https://github.com/bartoszbielawski/infoclock32/releases) with named, flashable `.bin` files for every target.
+GitHub Actions builds all four targets on every push to `main` and on PRs; the `firmware-<env>` binaries are attached as artifacts to each run, and host-side tests run in CI as well. Pushing a `v*` tag (e.g. `git tag v1.0 && git push origin v1.0`) additionally publishes a [GitHub Release](https://github.com/bartoszbielawski/infoclock32/releases) with named, flashable `.bin` files for every target.
 
 ### OTA flashing
 
@@ -277,7 +277,6 @@ The ESP32-C3 custom framework build uses C++17, so these work there but break on
 ### Branches
 
 - `main` — stable releases
-- `experimental` — current WIP
 
 ## Troubleshooting
 
