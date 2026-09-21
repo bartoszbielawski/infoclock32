@@ -26,10 +26,12 @@ jobs:
           python-version: '3.12'
       - run: pip install platformio
       - run: pio run -e ${{ matrix.env }}
+      - name: Name binary with the release tag
+        run: cp .pio/build/${{ matrix.env }}/firmware.bin "infoclock32-${{ github.ref_name }}-${{ matrix.env }}.bin"
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.env }}
-          path: .pio/build/${{ matrix.env }}/firmware.bin
+          path: infoclock32-*.bin
 
   release:
     needs: build
@@ -40,12 +42,6 @@ jobs:
           pattern: firmware-*
           merge-multiple: true
           path: dist
-      - name: Name binaries with the release tag
-        run: |
-          cd dist
-          for f in firmware-*.bin; do
-            mv "$f" "infoclock32-${GITHUB_REF_NAME}-${f#firmware-}"
-          done
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*.bin
