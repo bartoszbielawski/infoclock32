@@ -81,6 +81,24 @@ upload_port = infoclock32.local
 
 The first flash must always be wired.
 
+### Remote reflashing
+
+A device already on the network can be updated without a cable, using a `.bin` for the right target from [Releases](https://github.com/bartoszbielawski/infoclock32/releases) (e.g. `infoclock32-v0.1.0-esp32-c3-devkitm-1.bin` for an ESP32-C3):
+
+- **Web upload** (any build with the `/update` page) — browse to `http://<device>/update` and upload the file, or script it:
+
+  ```bash
+  curl -u ":<web_password>" \
+       -F "firmware=@infoclock32-v0.1.0-esp32-c3-devkitm-1.bin" \
+       http://infoclock32.local/update
+  ```
+
+  Omit `-u` when `web_password` is empty. The device reboots itself on success.
+
+- **ArduinoOTA** (if `ota_password` is set) — `pio run -e esp32-c3-devkitm-1 -t upload` with the `platformio.local.ini` from the OTA section above.
+
+If the running firmware has neither the `/update` page nor `ota_password` configured, there is no remote path — flash it once wired, after which both methods are available (they are part of the current firmware). `uploadfs` is not possible remotely; the filesystem keeps its existing `/config.txt` across OTA updates.
+
 ## Configuration
 
 ### First boot
