@@ -230,6 +230,8 @@ Fetches lunch (`midi`) menus from api.mynovae.ch for the configured restaurants 
 
 Content tasks compete for the display through the `ResourceManager` request queue; the clock and user-initiated push messages (web `/push`, `/actions`, MQTT) queue on a **priority lane** and are always served ahead of queued sensor/status updates, so the clock can never be starved. Long holds (scrolls, Life bursts) keep the display for at least `display_min_hold_s` and then yield as soon as a priority request is waiting.
 
+Each clock hold shows the date for 2 s, then the time for 5 s. If nothing else is queued, the time keeps ticking for up to 2 s more and the clock goes straight back to the date, so a stale time never sits frozen on the matrix. When another task is waiting, the clock releases at once and pauses 2 s before queuing again, giving that task an uncontended slot.
+
 Two safety nets guard against wedged holders: web and MQTT interactive paths acquire the display with short timeouts and report "display busy" (HTTP 503) instead of blocking, and MQTT pushes that arrive while the display is busy are re-queued and retried. A holder that stops making progress for 30 s has the display force-handed over (counted and shown on `/status`).
 
 Between hand-offs the display optionally plays a random wipe transition (`wipe_interval`, at most once per interval; skipped when a priority request is waiting).
@@ -338,7 +340,7 @@ The ESP32-C3 custom framework build uses C++17, so these work there but break on
 
 ### Branches
 
-- `main` — stable releases
+- `main` — the only branch; all work lands here and releases are cut from `v*` tags
 
 ## Troubleshooting
 
