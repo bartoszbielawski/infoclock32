@@ -109,7 +109,7 @@ void setup() {
   // Restore display brightness from config, clamp to valid [0..15]
   int brightness = dataStore.get_value<int>("brightness", 7);
   brightness = max(0, min(15, brightness));
-  rmd.getResourceRef().setIntensity((uint8_t)brightness);
+  apply_display_brightness(brightness);
 
   if (auto display = rmd.acquire())
   {

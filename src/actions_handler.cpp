@@ -8,6 +8,7 @@
 #include <logger.hpp>
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
+#include <night_mode_task.h>
 
 // ── /push ─────────────────────────────────────────────────────────────────────
 // Simple JSON endpoint for scripted / programmatic message display.
@@ -87,15 +88,11 @@ void handle_actions()
             int level = server.arg("level").toInt();
             if (level >= 0 && level <= 15)
             {
-                if (auto display = rmd.acquire(pdMS_TO_TICKS(500)))
-                {
-                    display->setIntensity((uint8_t)level);
-                    DataStore::getInstance().set_value("brightness", std::to_string(level));
-                    DataStore::getInstance().save_to_file("/config.txt");
-                    result = "&#10003; Brightness set to " + String(level) + ".";
-                    logPrintf("WEB", "brightness set to %d via /actions", level);
-                }
-                else { result = "&#9888; Display busy &mdash; try again."; }
+                bool saved = set_user_brightness(level);
+                result = "&#10003; Brightness set to " + String(level) +
+                         (saved ? "." : " until night mode ends.");
+                logPrintf("WEB", "brightness set to %d via /actions%s", level,
+                          saved ? "" : " (night mode: until it ends)");
             }
         }
         else if (action == "nightmode")
@@ -155,10 +152,11 @@ void handle_actions()
         }
         else if (action == "reset_display")
         {
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(500)))
+            // User action: priority lane, same bound as a push.
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
             {
                 display->begin();
-                display->setIntensity((uint8_t)DataStore::getInstance().get_value<int>("brightness", 7));
+                display->setIntensity((uint8_t)current_display_brightness());
                 result = "&#10003; Display reset.";
                 logPrintf("WEB", "display reset via /actions");
             }

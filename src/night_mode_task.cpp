@@ -8,11 +8,44 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <night_utils.hpp>
+#include <runtime_store.hpp>
+#include <night_mode_task.h>
+
+#include <atomic>
+#include <string>
+
+static std::atomic<bool> g_night{false};
+static std::atomic<int>  g_level{7};
+
+bool night_mode_active() { return g_night; }
+int  current_display_brightness() { return g_level; }
+
+void apply_display_brightness(int level)
+{
+    level = max(0, min(15, level));
+    g_level = level;
+    // Applied by whoever holds the display on their next frame (see LMDS),
+    // so this never waits for the display.
+    ResourceManager<LMDS>::getInstance().getResourceRef().requestIntensity((uint8_t)level);
+    RuntimeStore::getInstance().set("display_brightness", std::to_string(level));
+}
+
+bool set_user_brightness(int level)
+{
+    level = max(0, min(15, level));
+    apply_display_brightness(level);
+    // At night this is a temporary override: the configured daytime level
+    // must survive, so the next night → day switch restores it.
+    if (g_night)
+        return false;
+    DataStore::getInstance().set_value("brightness", std::to_string(level));
+    DataStore::getInstance().save_to_file("/config.txt");
+    return true;
+}
 
 void night_mode_task(void* parameter)
 {
     registerTask("NightMode", 4096, 120000);
-    auto& rmd = ResourceManager<LMDS>::getInstance();
 
     // Let DataStore load and NTP sync before first check.
     vTaskDelay(15000 / portTICK_PERIOD_MS);
@@ -31,6 +64,7 @@ void night_mode_task(void* parameter)
         {
             // Night mode not configured — reset state and idle.
             last_was_night = false;
+            g_night = false;
             vTaskDelay(60000 / portTICK_PERIOD_MS);
             continue;
         }
@@ -46,23 +80,11 @@ void night_mode_task(void* parameter)
             int level = is_night
                 ? ds.get_value("night_brightness", 1)
                 : ds.get_value("brightness",        7);
-            level = max(0, min(15, level));
-
-            // Brightness-only change: a 500 ms attempt mirrors the MQTT
-            // brightness path. last_was_night is only latched on success, so a
-            // busy display just retries on the next 60 s cycle instead of
-            // blocking this task (or a holder) for a full display hold.
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(500)))
-            {
-                display->setIntensity((uint8_t)level);
-                logPrintf("NGT", "night mode %s → brightness %d",
-                          is_night ? "on" : "off", level);
-                last_was_night = is_night;
-            }
-            else
-            {
-                logPrintf("NGT", "display busy, brightness change deferred");
-            }
+            apply_display_brightness(level);
+            logPrintf("NGT", "night mode %s → brightness %d",
+                      is_night ? "on" : "off", level);
+            last_was_night = is_night;
+            g_night = is_night;
         }
 
         vTaskDelay(60000 / portTICK_PERIOD_MS);

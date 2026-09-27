@@ -144,7 +144,7 @@ Key config keys:
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
 | `language` | `en` | Date labels: `en`, `fr`, `pl` |
 | `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
-| `night_brightness` | `1` | Intensity during night hours |
+| `night_brightness` | `1` | Intensity during night hours. A brightness change made at night (MQTT, `/actions`) is temporary and does not touch `brightness` |
 | `web_password` | — | HTTP Basic Auth password (blank = open) |
 | `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
 | `syslog_server` | — | UDP syslog destination IP (port 514) |
@@ -251,10 +251,11 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 | `…/push` | text | Scroll once immediately |
 | `…/looped` | text | Store and repeat; shown whenever the display is free |
 | `…/clear` | — | Clear the looped message |
-| `…/brightness` | `0`–`15` | Set display intensity (persisted to config) |
+| `…/brightness` | `0`–`15` | Set display intensity. By day it is saved as `brightness`; during night mode it only lasts until night mode ends |
+| `…/power` | `on`\|`off` | Blank / unblank the display (the clock keeps running underneath; not persisted) |
 | `…/config` | `key=value` | Set DataStore key (keys containing `password`/`secret` are blocked) |
 | `…/reboot` | — | Restart device |
-| `…/request` | key name | Reply to `…/publish/<name>`; looks up DeviceStore (system values like `ip`, `heap`, `uptime`, `ssid`, `rssi`, `mac`, `version`, …), then RuntimeStore (sensor readings, `weather_*`, `wdt_culprit`), then DataStore config keys. Keys are case-sensitive; any key containing `assword` is refused |
+| `…/request` | key name | Reply to `…/publish/<name>`; looks up DeviceStore (system values like `ip`, `heap`, `uptime`, `ssid`, `rssi`, `mac`, `version`, …), then RuntimeStore (sensor readings, `weather_*`, `wdt_culprit`, `display_brightness`), then DataStore config keys. Keys are case-sensitive; any key containing `assword` is refused |
 | `…/status` | — | Device publishes heartbeat JSON (`ip`, `heap`, `uptime`, `ssid`) here every 60 s |
 
 ```bash

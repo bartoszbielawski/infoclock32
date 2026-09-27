@@ -11,6 +11,7 @@
 #include <device_store.hpp>
 #include <uptime_utils.hpp>
 #include <logger.hpp>
+#include <night_mode_task.h>
 
 #include <string>
 
@@ -22,9 +23,7 @@ bool mqtt_is_connected() { return mqttClient.connected(); }
 static std::string loopedMessage;
 static QueueHandle_t pushQueue;
 
-// Pending hardware commands set in the callback, applied in the main loop
-// where display access is safe to acquire.
-static int8_t  pendingBrightness = -1;  // -1 = none, 0-15 = set level
+// Set in the callback, acted on in the main loop.
 static bool    pendingReboot     = false;
 
 static void publishStatus(const std::string& clientId)
@@ -75,7 +74,22 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
     {
         int level = atoi(buf);
         if (level >= 0 && level <= 15)
-            pendingBrightness = (int8_t)level;
+        {
+            bool saved = set_user_brightness(level);
+            logPrintf("MQT", "brightness set to %d%s", level,
+                      saved ? "" : " (night mode: until it ends)");
+        }
+    }
+    else if (topicStr.endsWith("/power"))
+    {
+        String state(buf);
+        state.trim();
+        state.toLowerCase();
+        if (state == "on" || state == "off")
+        {
+            ResourceManager<LMDS>::getInstance().getResourceRef().requestEnabled(state == "on");
+            logPrintf("MQT", "display power %s", state.c_str());
+        }
     }
     else if (topicStr.endsWith("/config"))
     {
@@ -173,32 +187,6 @@ static void pumpLoop(int ms)
     }
 }
 
-// Apply any pending hardware commands that require display access.
-static void applyPendingHardware(ResourceManager<LMDS> &rmd)
-{
-    static bool busyLogged = false;
-
-    if (pendingBrightness < 0)
-        return;
-
-    auto display = rmd.acquire(pdMS_TO_TICKS(500));
-    if (!display)
-    {
-        // Keep pendingBrightness set — retried on the next loop iteration.
-        if (!busyLogged)
-            logPrintf("MQT", "display busy, brightness change deferred");
-        busyLogged = true;
-        return;
-    }
-    busyLogged = false;
-
-    display->setIntensity((uint8_t)pendingBrightness);
-    DataStore::getInstance().set_value("brightness", std::to_string(pendingBrightness));
-    DataStore::getInstance().save_to_file("/config.txt");
-    logPrintf("MQT", "brightness set to %d", pendingBrightness);
-    pendingBrightness = -1;
-}
-
 void mqtt_task(void *parameter)
 {
     registerTask("MQTT", 8192, 90000);
@@ -238,9 +226,6 @@ void mqtt_task(void *parameter)
             reboot_with_message();
         }
 
-        // Apply brightness / power changes
-        applyPendingHardware(rmd);
-
         // Push messages next — drain the whole queue
         char *pushMsg = nullptr;
         while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
@@ -269,9 +254,10 @@ void mqtt_task(void *parameter)
         // Display looped message
         if (!loopedMessage.empty())
         {
-            // Skips this cycle when the display is busy; the looped message
-            // is shown again on the next iteration anyway.
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(1000)))
+            // Wait long enough to outlast a clock hold (7-9 s, cut short once
+            // anyone is queued); a shorter timeout almost never got a turn.
+            // On timeout the message is simply tried again next iteration.
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(15000)))
                 scrollMessage(loopedMessage, display, 50);
         }
 
