@@ -38,8 +38,9 @@ void handle_push()
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
     // Bounded priority wait: fail with "display busy" instead of blocking the
-    // single web-server task forever. The clock holds the display ~7 s of
-    // every ~9 s cycle, so the wait must span one full fast-lane cycle —
+    // single web-server task forever. The clock holds the display 7–9 s at a
+    // time (it cuts the extra seconds when anyone is queued), so the wait must
+    // span one full fast-lane cycle —
     // shorter timeouts make dashboard pushes fail most of the time.
     if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
     {

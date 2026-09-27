@@ -92,8 +92,11 @@ public:
             // Serve the priority lane first, then fall back to the normal
             // queue. A priority request arriving during a hold is granted
             // right after the release, ahead of queued normal requests.
+            // The idle wait on the normal queue is short because a fast-lane
+            // post doesn't wake it: a long wait here left the display frozen
+            // on the clock's last frame for up to that long.
             if (xQueueReceive(mgr->fast_queue, &request, 0) != pdTRUE &&
-                xQueueReceive(mgr->request_queue, &request, 1000 / portTICK_PERIOD_MS) != pdTRUE)
+                xQueueReceive(mgr->request_queue, &request, pdMS_TO_TICKS(100)) != pdTRUE)
                 continue;
 
             // Skip requests whose owner gave up while they sat queued —

@@ -27,6 +27,8 @@ void displayClock(void *parameter)
 {
   registerTask("Clock", 4096, 60000);
   auto& rmd = ResourceManager<LMDS>::getInstance();
+  // Another task (either lane) is queued for the display.
+  auto displayWanted = [&rmd] { return rmd.yieldRequested() || rmd.getQueueDepth(false) > 0; };
 
   while (true)
   {
@@ -35,6 +37,7 @@ void displayClock(void *parameter)
     // after at most one hold, but a hold can still last up to the manager's
     // 30 s force-handover bound (Life bursts broadcast their own grace).
     task_heartbeat_grace(90000);
+    bool othersWaiting = false;
     if (auto display = rmd.acquire(portMAX_DELAY, true))
     {
       // Fresh watchdog window for the hold itself (date + time + wipe hook).
@@ -65,8 +68,15 @@ void displayClock(void *parameter)
 
       // Show HH:MM:SS last, so the clock face is what the hold leaves behind
       // (the Life task seeds itself from the display — see life_seed_display).
-      for (int i = 0; i < 5; i++)
+      // After the first 5 frames keep ticking for up to kIdleFrames more while
+      // nobody else is queued: releasing into an idle display would leave the
+      // last frame frozen on screen until the next round.
+      static constexpr int kIdleFrames = 2;
+      for (int i = 0; i < 5 + kIdleFrames; i++)
       {
+        if (i >= 5 && displayWanted())
+          break;
+
         display->clear();
 
         time_t now = time(nullptr);
@@ -85,8 +95,13 @@ void displayClock(void *parameter)
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
       }
+      othersWaiting = displayWanted();
     } // display released here
 
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // Give the queued tasks an uncontended slot before the clock asks again.
+    // With nobody waiting, go straight back to the date instead of leaving a
+    // stale time on screen.
+    if (othersWaiting)
+      vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
