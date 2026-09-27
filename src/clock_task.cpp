@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 #include <ctime>
 
 #include <data_store.hpp>
@@ -19,6 +20,14 @@ const char* localizedDayName(int wday)
   if (lang == "fr") dayNames = kDayNamesFr;
   else if (lang == "pl") dayNames = kDayNamesPl;
   return dayNames[wday];
+}
+
+// While WiFi is down, light the bottom-right pixel of the clock face
+// (blinking once per second on the time view) as an offline indicator.
+static void drawWifiIndicator(LMDS& display, bool lit)
+{
+  if (lit && WiFi.status() != WL_CONNECTED)
+    display.setPixel(display.getSegments() * 8 - 1, 7, true);
 }
 
 // Main clock display task.
@@ -62,6 +71,7 @@ void displayClock(void *parameter)
         display->getTextBounds(dateStr, 0, 0, &x1, &y1, &width, &height);
         display->setCursor((display->getSegments() * 8 - width) / 2, 0);
         display->print(dateStr);
+        drawWifiIndicator(*display, true);
         display->display();
         vTaskDelay(2000 / portTICK_PERIOD_MS);
       }
@@ -91,6 +101,7 @@ void displayClock(void *parameter)
         display->getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
         display->setCursor((display->getSegments() * 8 - width) / 2, 0);
         display->printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        drawWifiIndicator(*display, timeinfo->tm_sec % 2 == 0);
         display->display();
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);

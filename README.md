@@ -27,7 +27,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 
 | Feature | Config key(s) |
 |---------|--------------|
-| Clock + date display | `language` (`en`/`fr`/`pl`), `timezone` |
+| Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`), `timezone` |
 | Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval`, `temp_offset` |
