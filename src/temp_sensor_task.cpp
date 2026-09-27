@@ -28,7 +28,7 @@ static const uint8_t* trendIconFor(TrendKind kind)
         case TREND_RISING:       return kWeatherIcons[WI_ARROW_UP];
         case TREND_FALLING:      return kWeatherIcons[WI_ARROW_DOWN];
         case TREND_FALLING_FAST: return kWeatherIcons[WI_ARROW_DOWN_FAST];
-        default:                 return kWeatherIcons[WI_ARROW_STEADY];
+        default:                 return kWeatherIcons[WI_TREND_STEADY];
     }
 }
 
