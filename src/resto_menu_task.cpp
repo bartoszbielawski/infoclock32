@@ -91,9 +91,16 @@ static bool withinWindow(int startHour, int endHour) {
 
 // ── fetch ────────────────────────────────────────────────────────────────────
 
+// One restaurant's menu: the display label plus its midi dishes, in API order.
+struct RestaurantMenu
+{
+    std::string label;               // e.g. "R3"
+    std::vector<std::string> dishes;
+};
+
 // Fetch and return deduplicated dish titles for one restaurant on a given date.
-static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
-                             const std::string& lang) {
+static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
+                                const std::string& lang) {
     const char* restaurantId = codeToId(restaurantCode);
     // API path language: "en" or "fr" (no Polish menu available).
     const char* apiLang = (lang == "fr") ? "fr" : "en";
@@ -157,15 +164,10 @@ static std::string fetchMenu(int restaurantCode, const std::string& dateStr,
         return {};
     }
 
-    std::string out = "R" + std::to_string(restaurantCode) + ":";
-    for (const auto& d : dishes) {
-        out += " ";
-        out += d;
-        out += " |";
-    }
-    // remove trailing " |"
-    if (out.size() >= 2) out.resize(out.size() - 2);
-    return out;
+    RestaurantMenu menu;
+    menu.label  = "R" + std::to_string(restaurantCode);
+    menu.dishes = dishes;
+    return menu;
 }
 
 // ── task ─────────────────────────────────────────────────────────────────────
@@ -176,7 +178,7 @@ void resto_menu_task(void* pvParameters) {
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
-    std::vector<std::string> cachedMenus; // one entry per configured restaurant
+    std::vector<RestaurantMenu> cachedMenus; // one entry per configured restaurant
     std::string cachedDate;
     time_t lastFetch = 0;
 
@@ -218,8 +220,8 @@ void resto_menu_task(void* pvParameters) {
             // each fetch can take up to ~15 s (HTTP timeout + TLS handshake)
             task_heartbeat_grace((codes.size() + 1) * 15000);
             for (int code : codes) {
-                std::string menu = fetchMenu(code, fetchDate, lang);
-                if (!menu.empty()) cachedMenus.push_back(menu);
+                RestaurantMenu menu = fetchMenu(code, fetchDate, lang);
+                if (!menu.dishes.empty()) cachedMenus.push_back(menu);
             }
         }
 
@@ -231,21 +233,34 @@ void resto_menu_task(void* pvParameters) {
 
         for (const auto& menu : cachedMenus)
         {
-            // Blocking acquire: cover the worst-case wait + scroll hold, then
-            // re-anchor the watchdog window once granted (clock-task pattern).
-            task_heartbeat_grace(90000);
-            if (auto display = rmd.acquire())
+            // One hold per dish, not one per menu. The minimum-slice policy
+            // (display_min_hold_s) cuts any hold that outlasts its slice, so a
+            // whole menu on one hold only ever showed its first dishes — the
+            // scroll was aborted mid-way and restarted from the start on the
+            // next round. A single dish always fits inside the slice, so the
+            // clock can now only take the display *between* dishes.
+            for (size_t i = 0; i < menu.dishes.size(); ++i)
             {
-                task_heartbeat();
-                task_heartbeat_grace(30000);
-                scrollMessage(menu, display, kScrollSpeedMs);
+                std::string message = menu.dishes[i];
+                if (i == 0) message = menu.label + ": " + message;
+
+                // Blocking acquire: cover the worst-case wait + scroll hold,
+                // then re-anchor the watchdog window once granted (the
+                // clock-task pattern).
+                task_heartbeat_grace(90000);
+                if (auto display = rmd.acquire())
+                {
+                    task_heartbeat();
+                    task_heartbeat_grace(30000);
+                    scrollMessage(message, display, kScrollSpeedMs);
+                }
+                else
+                {
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                    continue;
+                }
             }
-            else
-            {
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                continue;
-            }
-            
+
             //this delay is to avoid scrolling multiple menus back-to-back without giving a chance for other tasks to show their messages in between; adjust as needed
             task_heartbeat_grace(130000);
             vTaskDelay(120 * 1000 / portTICK_PERIOD_MS);

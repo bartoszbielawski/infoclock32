@@ -217,7 +217,7 @@ Push a one-off message via the `/` dashboard, `/push`, MQTT, or `/actions`.
 
 ## Restaurant menu (CERN Novae)
 
-Fetches lunch (`midi`) menus from api.mynovae.ch for the configured restaurants and scrolls them between `resto_start_hour` and `resto_end_hour` (the window wraps midnight). Restaurant numbers map to Novae salepoints: `1` = R1, `2` = R2, `3` = R3. Dishes are deduplicated per restaurant, shown in the configured `language` (`fr` falls back to `en`; there is no Polish menu), and each menu is separated by a pause so other tasks can display in between. Menus refresh hourly. `novae_codes` identifies your CERN group to the API (default `CER103`).
+Fetches lunch (`midi`) menus from api.mynovae.ch for the configured restaurants and scrolls them between `resto_start_hour` and `resto_end_hour` (the window wraps midnight). Restaurant numbers map to Novae salepoints: `1` = R1, `2` = R2, `3` = R3. Dishes are deduplicated per restaurant and shown in the configured `language` (`fr` falls back to `en`; there is no Polish menu). Each dish takes the display on its own, so a long menu is never truncated by the clock's minimum-hold slice, and consecutive restaurants are separated by a pause so other tasks can display in between. Menus refresh hourly. `novae_codes` identifies your CERN group to the API (default `CER103`).
 
 ## Display messages on boot and reboot
 

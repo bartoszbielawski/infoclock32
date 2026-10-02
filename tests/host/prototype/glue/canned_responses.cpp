@@ -27,12 +27,17 @@ const char kLhcRss[] =
     "<title>LhcPage1: Beam 1: 6800 GeV, Beam 2: 6800 GeV</title>\n"
     "</channel></rss>\n";
 
-// Novae API: array of menu items, midi service only.
+// Novae API: array of menu items, midi service only. Long enough that a
+// real-world menu joined into one string outlasts the display's minimum-hold
+// slice (display_min_hold_s) — that is the truncation this fixture guards.
 const char kNovaeMenu[] =
     R"([
-      {"model":{"service":"midi"},"title":{"en":"Pasta arrabiata\nside salad","fr":"Pates arrabiata"}},
+      {"model":{"service":"midi"},"title":{"en":"Roasted chicken with rosemary potatoes\nmixed green salad","fr":"Poulet rôti avec pommes de terre romarin"}},
       {"model":{"service":"soir"},"title":{"en":"Evening dish","fr":"Plat du soir"}},
-      {"model":{"service":"midi"},"title":{"en":"Grilled chicken\nrice"}}
+      {"model":{"service":"midi"},"title":{"en":"Mushroom risotto with parmesan and grilled zucchini"}},
+      {"model":{"service":"midi"},"title":{"en":"Baked cod filet with lemon butter sauce\nseasonal vegetables"}},
+      {"model":{"service":"midi"},"title":{"en":"Vegetarian lasagna with tomato basil sauce"}},
+      {"model":{"service":"midi"},"title":{"en":"Pasta arrabiata\nside salad","fr":"Pates arrabiata"}}
     ])";
 }  // namespace
 
