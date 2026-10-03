@@ -69,6 +69,15 @@ pio device monitor -b 1000000
 
 GitHub Actions builds all four targets on every push to `main` and on PRs; the `firmware-<env>` binaries are attached as artifacts to each run, and host-side tests run in CI as well. Pushing a `v*` tag (e.g. `git tag v1.0 && git push origin v1.0`) additionally publishes a [GitHub Release](https://github.com/bartoszbielawski/infoclock32/releases) with named, flashable `.bin` files for every target.
 
+### Flashing prebuilt binaries
+
+Each target ships two files:
+
+- `*-merged.bin` (`firmware-merged.bin` in CI artifacts): bootloader + partition table + app in one image. Flash it at offset `0x0` with a web flasher such as [espboards.dev](https://www.espboards.dev/tools/program/). Use it for the first flash of a blank device and whenever the release notes say the partition layout changed.
+- `*.bin` (`firmware.bin`): the app image only. Use it for OTA updates. Flashing it alone at `0x0` will not boot.
+
+The merged image does not contain the filesystem, so `/config.txt` survives a reflash unless the partition layout moved.
+
 ### OTA flashing
 
 Set `ota_password` in config, then create `platformio.local.ini`:

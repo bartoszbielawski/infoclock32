@@ -27,7 +27,9 @@ jobs:
       - run: pip install platformio
       - run: pio run -e ${{ matrix.env }}
       - name: Name binary with the release tag
-        run: cp .pio/build/${{ matrix.env }}/firmware.bin "infoclock32-${{ github.ref_name }}-${{ matrix.env }}.bin"
+        run: |
+          cp .pio/build/${{ matrix.env }}/firmware.bin "infoclock32-${{ github.ref_name }}-${{ matrix.env }}.bin"
+          cp .pio/build/${{ matrix.env }}/firmware-merged.bin "infoclock32-${{ github.ref_name }}-${{ matrix.env }}-merged.bin"
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.env }}
