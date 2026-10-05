@@ -20,7 +20,7 @@ brightness=7
 #   CET-1CEST,M3.5.0,M10.5.0/3          (Central Europe)
 #   GMT0BST,M3.5.0/1,M10.5.0            (UK)
 #   EST5EDT,M3.2.0,M11.1.0              (US Eastern)
-timezone=UTC0
+timezone=CET-1CEST,M3.5.0,M10.5.0/3
 
 # Display language for date labels: en, fr or pl
 language=en
@@ -48,7 +48,7 @@ ow_api_key=
 ow_city_id=
 
 # ── LHC beam status (CERN) ───────────────────────────────────────────────────
-enable_lhc=1
+enable_lhc=0
 
 # ── Restaurant menu (CERN Novae) ─────────────────────────────────────────────
 enable_resto=0
@@ -63,11 +63,11 @@ resto_end_hour=14
 #resto_test_date=2026-09-21
 
 # ── MQTT ─────────────────────────────────────────────────────────────────────
-enable_mqtt=0
-mqtt_server=
+enable_mqtt=1
+mqtt_server=192.168.1.10
 # Client ID is also used as the MQTT topic prefix: {mqtt_client_id}/push etc.
 mqtt_client_id=infoclock32
-mqtt_user=
+mqtt_user=mqtt
 mqtt_password=
 
 # ── Syslog ───────────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ temp_interval=30
 #temp_sensor=bmp180
 #
 # BMP280 (I2C, temperature + pressure — no humidity):
-#temp_sensor=bmp280
+temp_sensor=bmp280
 #bmp280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # BME280 (I2C, temperature + humidity + pressure):
@@ -112,6 +112,19 @@ temp_interval=30
 #
 # Temperature correction in degrees C, added to every reading (default 0)
 #temp_offset=0
+#
+# What scrolls on the display: ordered comma list of temp / humidity /
+# pressure (empty = nothing scrolls; placeholders still update).
+temp_display=temp,pressure
+#
+# Temperature decimal places on the display (0 or 1)
+temp_decimals=1
+#
+# Seconds between scrolls (0 = after every poll wake)
+temp_show_interval=0
+#
+# Seconds each reading stays centered on screen (0 = quick ~2 s flash)
+temp_hold_s=6
 
 # ── Sun widget & Game of Life ─────────────────────────────────────────────────
 # Sunrise/sunset line (offline solar math; needs a position, blank = disabled)
@@ -120,7 +133,7 @@ temp_interval=30
 #sun_lon=2.3522
 #sun_interval_min=30
 # Conway's Game of Life bursts between clock cycles (quiet at night_start/night_end)
-#enable_life=0
+enable_life=1
 #life_interval_s=300
 #life_burst_s=30
 # Seed each new board from whatever is on the matrix (0 = random soup)
@@ -160,3 +173,6 @@ msg_interval=60
 # Example — countdown:
 #   message_newyear_text=New Year in
 #   message_newyear_countdown=2027-01-01
+
+message_LHC_text={} days from LS3 start...
+message_LHC_countdown=2026-08-31
