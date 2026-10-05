@@ -566,6 +566,26 @@ void handle_api_runtime()
     server.send(200, "application/json", json);
 }
 
+// ── /frame (diagnostic: what is on the matrix right now) ─────────────────────
+// Reads the LMDS framebuffer via getPixel() — RAM only, no SPI traffic — so it
+// is safe to call without holding the display. Plain-text ASCII art, one char
+// per pixel ('#' lit). Useful for verifying custom faces remotely.
+
+void handle_frame()
+{
+    auto& display = ResourceManager<LMDS>::getInstance().getResourceRef();
+    const int w = display.getSegments() * 8;
+    std::string art;
+    art.reserve(w * 9 + 32);
+    for (int y = 0; y < 8; y++)
+    {
+        for (int x = 0; x < w; x++)
+            art += display.getPixel(x, y) ? '#' : '.';
+        art += '\n';
+    }
+    server.send(200, "text/plain", art.c_str());
+}
+
 // ── Server task / routing ─────────────────────────────────────────────────────
 
 void web_server_task(void* pvParameters)
@@ -581,6 +601,7 @@ void web_server_task(void* pvParameters)
     server.on("/log/entries", HTTP_GET,  handle_log_entries);
     server.on("/api/status",  HTTP_GET, handle_api_status);
     server.on("/api/runtime", HTTP_GET, handle_api_runtime);
+    server.on("/frame",       HTTP_GET, handle_frame);
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
     server.on("/update",  HTTP_GET,  handle_update_get);
