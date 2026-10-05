@@ -14,6 +14,13 @@ uint32_t display_min_hold_ms();
 
 void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &display, uint16_t displayOffset = 0);
 
+// showMessage/scrollMessage: a message that fits the display is centered and
+// shown for holdMs (preemptible after the display_min_hold_s slice);
+// holdMs < 0 derives it from speed (100*speed ms, the historical behavior).
+// A wider message scrolls across at `speed` ms/frame (holdMs ignored).
+void showMessage(std::string message, LMDS& display, int holdMs);
+void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int holdMs);
+
 void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1);
 
 // Variant that draws an icon bitmap to the left of the message:

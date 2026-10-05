@@ -32,8 +32,12 @@ uint32_t display_min_hold_ms()
   return (uint32_t)max(0, s) * 1000UL;
 }
 
-// Common scroll path: center the canvas if it fits, otherwise scroll it across.
-static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps)
+// Common scroll/show path: center the canvas if it fits, otherwise scroll it across.
+// holdMs >= 0 turns the call into a "show": a fitting message is centered and
+// held for holdMs; a wider one scrolls past at speed and then parks centered
+// for holdMs. holdMs < 0 keeps the legacy scroll-only behavior (static show of
+// 100*speed ms for fitting messages).
+static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps, int holdMs)
 {
   // Feeds the manager's force-handover timer and carries the shared
   // minimum-slice policy: short messages (the common case, 6-8 s) complete
@@ -43,21 +47,30 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   auto& rmd = ResourceManager<LMDS>::getInstance();
   DisplayHold<LMDS> hold(rmd, display_min_hold_ms());
 
+  // Draw the canvas centered (or center-cropped when wider than the display)
+  // and keep it on screen for ms. Checked every second so a waiting
+  // priority-lane request cuts the show after the minimum slice.
+  auto centerAndHold = [&](int ms) {
+    display.clear();
+    if (canvas.width() <= display.width())
+      copyCanvasToDisplay(canvas, 0, display, (display.width() - canvas.width()) / 2);
+    else
+      copyCanvasToDisplay(canvas, (canvas.width() - display.width()) / 2, display, 0);
+    display.display();
+    // 100*speed can exceed the force-handover window — keepGoing renews
+    // progress and cuts the show once a priority request has waited out
+    // the minimum slice.
+    for (int shown = 0; shown < ms; shown += 1000)
+    {
+      if (!hold.keepGoing()) return;
+      vTaskDelay(std::min(1000, ms - shown) / portTICK_PERIOD_MS);
+    }
+  };
+
   if (canvas.width() <= display.width())
   {
     logPrintf("DISP", "message fits on display, centering without scrolling");
-    display.clear();
-    int offset = (display.width() - canvas.width()) / 2;
-    copyCanvasToDisplay(canvas, 0, display, offset);
-    display.display();
-    // 100*speed can exceed the force-handover window — renew while showing.
-    // The centered show is capped at 2.5 s (100 * max speed 25), so it stays
-    // below the preemption threshold by construction.
-    for (int shown = 0; shown < 100 * speed; shown += 5000)
-    {
-      hold.renew();
-      vTaskDelay(std::min(5000, 100 * speed - shown) / portTICK_PERIOD_MS);
-    }
+    centerAndHold(holdMs >= 0 ? holdMs : 100 * speed);
     return;
   }
 
@@ -77,9 +90,14 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
     display.display();
     vTaskDelay(speed / portTICK_PERIOD_MS);
     if (i == 0) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
-    if (i == last) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
+    if (i == last && holdMs < 0) vTaskDelay(50 * speed / portTICK_PERIOD_MS);
   }
 
+  if (holdMs >= 0)
+  {
+    centerAndHold(holdMs);
+    return;
+  }
   vTaskDelay(10 * speed / portTICK_PERIOD_MS);
 }
 
@@ -95,6 +113,35 @@ static void drawIcon(GFXcanvas1& canvas, const uint8_t* icon, int iconWidth, int
   }
 }
 
+void showMessage(std::string message, LMDS& display, int holdMs)
+{
+  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+
+  logPrintf("DISP", "showing '%s' for %d ms", message.c_str(), holdMs);
+
+  GFXcanvas1 canvas(message.size() * FONT_WIDTH, 8);
+  canvas.print(message.c_str());
+
+  scrollCanvas(canvas, display, 20, 1, holdMs);
+}
+
+void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int holdMs)
+{
+  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+  static const int ICON_GAP = 1;   //space between icon and text
+
+  int iconArea = icon ? iconWidth + ICON_GAP : 0;
+  logPrintf("DISP", "showing '%s' %s icon for %d ms", message.c_str(), icon ? "with" : "without", holdMs);
+
+  GFXcanvas1 canvas(message.size() * FONT_WIDTH + iconArea, 8);
+  if (icon)
+    drawIcon(canvas, icon, iconWidth, 0);
+  canvas.setCursor(iconArea, 0);
+  canvas.print(message.c_str());
+
+  scrollCanvas(canvas, display, 20, 1, holdMs);
+}
+
 void scrollMessage(std::string message, LMDS& display, int speed, int steps)
 {
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
@@ -104,7 +151,7 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
   GFXcanvas1 canvas(message.size() * FONT_WIDTH, 8);
   canvas.print(message.c_str());
 
-  scrollCanvas(canvas, display, speed, steps);
+  scrollCanvas(canvas, display, speed, steps, -1);
 }
 
 void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps)
@@ -121,7 +168,7 @@ void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, 
   canvas.setCursor(iconArea, 0);
   canvas.print(message.c_str());
 
-  scrollCanvas(canvas, display, speed, steps);
+  scrollCanvas(canvas, display, speed, steps, -1);
 }
 
 void wipeDisplayLeftToRight(LMDS& display, int speed)
