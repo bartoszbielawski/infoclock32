@@ -7,6 +7,7 @@
 #include <task_registry.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
+#include <clock_face.hpp>
 
 // Day-name table for the configured language (en/fr/pl), see "language" config key
 const char* localizedDayName(int wday)
@@ -42,6 +43,9 @@ void displayClock(void *parameter)
   while (true)
   {
     task_heartbeat();
+    // Time face for this round; re-read every round so a style change
+    // (web, MQTT, /edit) applies without a reboot.
+    std::string clockStyle = DataStore::getInstance().get_value("clock_style", "hhmmss");
     // Cover the wait for the display: the priority lane guarantees a grant
     // after at most one hold, but a hold can still last up to the manager's
     // 30 s force-handover bound (Life bursts broadcast their own grace).
@@ -76,7 +80,7 @@ void displayClock(void *parameter)
         vTaskDelay(2000 / portTICK_PERIOD_MS);
       }
 
-      // Show HH:MM:SS last, so the clock face is what the hold leaves behind
+      // Show the time face last, so the clock face is what the hold leaves behind
       // (the Life task seeds itself from the display — see life_seed_display).
       // After the first 5 frames keep ticking for up to kIdleFrames more while
       // nobody else is queued: releasing into an idle display would leave the
@@ -92,15 +96,45 @@ void displayClock(void *parameter)
         time_t now = time(nullptr);
         struct tm *timeinfo = localtime(&now);
 
+        // Blinking-colon phase, shared by the hh:mm and dot-matrix faces
+        bool colonOn = timeinfo->tm_sec % 2 == 0;
+
         if (i == 0)
-          logPrintf("DISP", "clock %02d:%02d:%02d",
+          logPrintf("DISP", "clock %s %02d:%02d:%02d", clockStyle.c_str(),
                     timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
-        int16_t x1, y1;
-        uint16_t width, height;
-        display->getTextBounds("00:00:00", 0, 0, &x1, &y1, &width, &height);
-        display->setCursor((display->getSegments() * 8 - width) / 2, 0);
-        display->printf("%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        if (clockStyle == "bcd")
+        {
+          drawBCDTime(*display, timeinfo->tm_hour, timeinfo->tm_min, colonOn,
+                      (display->getSegments() * 8 - kBCDFaceWidth) / 2, 0);
+        }
+        else if (clockStyle == "bold")
+        {
+          drawBoldTime(*display, timeinfo->tm_hour, timeinfo->tm_min, colonOn,
+                       (display->getSegments() * 8 - kBoldFaceWidth) / 2, 0);
+        }
+        else
+        {
+          // Font faces: HH:MM (with or without the seconds sweep) or HH:MM:SS.
+          // Unknown clock_style values fall through to the HH:MM:SS default.
+          char face[12];
+          if (clockStyle == "hhmm" || clockStyle == "sweep")
+            snprintf(face, sizeof(face), "%02d%c%02d",
+                     timeinfo->tm_hour, colonOn ? ':' : ' ', timeinfo->tm_min);
+          else
+            snprintf(face, sizeof(face), "%02d:%02d:%02d",
+                     timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
+          int16_t x1, y1;
+          uint16_t width, height;
+          display->getTextBounds(face, 0, 0, &x1, &y1, &width, &height);
+          display->setCursor((display->getSegments() * 8 - width) / 2, 0);
+          display->print(face);
+
+          if (clockStyle == "sweep")
+            display->setPixel(sweepX(timeinfo->tm_sec, display->getSegments() * 8 - 2), 7, true);
+        }
+
         drawWifiIndicator(*display, timeinfo->tm_sec % 2 == 0);
         display->display();
 

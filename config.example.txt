@@ -40,6 +40,14 @@ brightness=7
 #   EST5EDT,M3.2.0,M11.1.0         (US Eastern)
 timezone=CET-1CEST,M3.5.0,M10.5.0/3
 
+# Time face shown between the other widgets:
+#   hhmmss — hh:mm:ss with ticking seconds (default)
+#   hhmm   — hh:mm with a blinking colon
+#   sweep  — hh:mm plus a seconds pixel racing along the bottom row
+#   bold   — hh:mm drawn with a bold 6x8 digit font
+#   bcd    — hh:mm as binary dots (BCD)
+#clock_style=hhmmss
+
 # ── Night mode ────────────────────────────────────────────────────────────────
 # Dims the display between two wall-clock times. Leave both blank to disable.
 # Time format: HH:MM (24-hour). Wraps midnight correctly (e.g. 23:00 – 06:00).

@@ -27,7 +27,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 
 | Feature | Config key(s) |
 |---------|--------------|
-| Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`), `timezone` |
+| Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`), `timezone`, `clock_style` |
 | Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval`, `temp_offset`, `temp_display`, `temp_decimals`, `temp_show_interval` |
@@ -127,13 +127,14 @@ Access at `http://<device-ip>/` or `http://<hostname>.local/`
 | `GET /log` | ✓ | Live log viewer (40 entries, newest first, auto-refresh 5 s) |
 | `GET /log/entries` | ✓ | Log JSON feed (`?since=<seq>` delta polling) |
 | `GET /edit` · `POST /edit` | ✓ | Edit `/config.txt`; reloads DataStore on save |
-| `GET /actions` · `POST /actions` | ✓ | Push message, brightness, night mode, timezone, hostname, web password, display reset, reboot |
+| `GET /actions` · `POST /actions` | ✓ | Push message, brightness, night mode, clock style, sensor display, timezone, hostname, web password, display reset, reboot |
 | `GET /messages` · `POST /messages` | ✓ | Custom message slot editor (text, date window, countdown) |
 | `GET /wifi` · `POST /wifi` | ✓ | Network scan + credentials; writes `wifi_ssid`/`wifi_password`, then suggests reboot |
 | `GET /update` · `POST /update` | ✓ | HTTP firmware upload (.bin) |
 | `POST /reboot` | ✓ | Restart device |
 | `GET /api/status` | ✓ | JSON status (uptime, heap, RSSI, MQTT, display diagnostics) |
 | `GET /api/runtime` | ✓ | JSON RuntimeStore snapshot |
+| `GET /frame` | ✓ | Matrix framebuffer as ASCII art (diagnostic) |
 | `GET /push` · `POST /push` | — | JSON message push: `?msg=Hello&speed=<ms>` (10–500); 503 "display busy" when the display can't be acquired |
 
 Auth: HTTP Basic with any username and the `web_password` config value. Leave `web_password` empty to disable auth entirely. Note that `/push` is intentionally unauthenticated so scripts and automations can post messages without credentials.
@@ -152,6 +153,7 @@ Key config keys:
 | `brightness` | `7` | Display intensity 0–15 |
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
 | `language` | `en` | Date labels: `en`, `fr`, `pl` |
+| `clock_style` | `hhmmss` | Time face: `hhmmss` (ticking seconds), `hhmm` (blinking colon), `sweep` (hh:mm + seconds bar), `bold` (bold 6x8 digit font), `bcd` (binary dots); re-read every clock round |
 | `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
 | `night_brightness` | `1` | Intensity during night hours. A brightness change made at night (MQTT, `/actions`) is temporary and does not touch `brightness` |
 | `web_password` | — | HTTP Basic Auth password (blank = open) |

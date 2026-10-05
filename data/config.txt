@@ -25,6 +25,14 @@ timezone=CET-1CEST,M3.5.0,M10.5.0/3
 # Display language for date labels: en, fr or pl
 language=en
 
+# Time face shown between the other widgets:
+#   hhmmss — hh:mm:ss with ticking seconds (default)
+#   hhmm   — hh:mm with a blinking colon
+#   sweep  — hh:mm plus a seconds pixel racing along the bottom row
+#   bold   — hh:mm drawn with a bold 6x8 digit font
+#   bcd    — hh:mm as binary dots (BCD)
+#clock_style=hhmmss
+
 # ── Night mode ────────────────────────────────────────────────────────────────
 # Dim the display between these times (HH:MM, 24-hour). Leave blank to disable.
 night_start=23:00

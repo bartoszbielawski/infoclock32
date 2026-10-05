@@ -146,6 +146,23 @@ void handle_actions()
             logPrintf("WEB", "sensor display '%s', decimals %d, show every %ld s, hold %ld s via /actions",
                       list.c_str(), dec, showS, holdS);
         }
+        else if (action == "clockstyle")
+        {
+            String style = server.arg("style");
+            style.trim();
+            if (style == "hhmmss" || style == "hhmm" || style == "sweep" ||
+                style == "bold" || style == "bcd")
+            {
+                DataStore::getInstance().set_value("clock_style", style.c_str());
+                DataStore::getInstance().save_to_file("/config.txt");
+                result = "&#10003; Clock style set to " + style + ".";
+                logPrintf("WEB", "clock_style=%s via /actions", style.c_str());
+            }
+            else
+            {
+                result = "&#9888;&#65039; Unknown clock style.";
+            }
+        }
         else if (action == "hostname")
         {
             String hn = server.arg("hostname");
@@ -230,6 +247,8 @@ void handle_actions()
              ds.get_value<int>("temp_show_interval", 0));
     snprintf(holdStr, sizeof(holdStr), "%d",
              ds.get_value<int>("temp_hold_s", 0));
+
+    String curClockStyle = ds.get_value("clock_style", "hhmmss").c_str();
 
     sendPageHead("Actions");
     sendPageNav("/actions");
@@ -341,6 +360,38 @@ void handle_actions()
     server.sendContent_P(PSTR("' style='width:80px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<span style='font-size:.85rem;color:#64748b'>s on screen (0 = quick ~2 s flash)</span>"
                                "</div>"
+                               "<button class='btn btn-primary' type='submit'>Save</button>"
+                               "</form></div>"));
+
+    // Clock style
+    server.sendContent_P(PSTR("<div class='card'>"
+                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+                               "&#128336; Clock</h3>"
+                               "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+                               "Picks the face shown between the other widgets "
+                               "(the 2 s date screen is always shown). "
+                               "Applies on the next clock round &mdash; no reboot needed.</p>"
+                               "<form method='POST'>"
+                               "<input type='hidden' name='action' value='clockstyle'>"
+                               "<select name='style' style='display:block;width:100%;padding:6px 8px;"
+                               "border:1px solid #cbd5e1;border-radius:6px;font-size:.9rem;"
+                               "margin-bottom:10px;background:#fff;color:#1e293b'>"
+                               "<option value='hhmmss'"));
+    if (curClockStyle == "hhmmss") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">hh:mm:ss (default)</option>"
+                               "<option value='hhmm'"));
+    if (curClockStyle == "hhmm") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">hh:mm with blinking colon</option>"
+                               "<option value='sweep'"));
+    if (curClockStyle == "sweep") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">hh:mm + seconds sweep</option>"
+                               "<option value='bold'"));
+    if (curClockStyle == "bold") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">Bold digits</option>"
+                               "<option value='bcd'"));
+    if (curClockStyle == "bcd") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">binary (BCD dots)</option>"
+                               "</select>"
                                "<button class='btn btn-primary' type='submit'>Save</button>"
                                "</form></div>"));
 
