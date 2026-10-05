@@ -114,7 +114,7 @@ If the running firmware has neither the `/update` page nor `ota_password` config
 
 On a freshly flashed device LittleFS is empty — all settings use defaults until the user saves via `/edit` or MQTT `/config`.
 
-Connection is handled by [WiFiManager](https://github.com/tzapu/WiFiManager). If `wifi_ssid` is not configured (or connecting fails), the device opens a captive-portal AP named `<hostname>-setup` (default: `infoclock32-setup`) at `192.168.4.1` for `wifi_portal_timeout_s` seconds (default 180), then boots offline — a background monitor keeps retrying and reconnects whenever the network returns. Reboot the device to reopen the setup portal. You can also change credentials without the portal via the `/wifi` web page (writes `wifi_ssid`/`wifi_password` to config, then reboot).
+Connection is handled by [WiFiManager](https://github.com/tzapu/WiFiManager). On boot, `wifi_ssid`/`wifi_password` from config are tried first (without overwriting the portal's stored credentials); if they fail, the device falls back to the last credentials saved via the setup portal, and finally opens a captive-portal AP named `<hostname>-setup` (default: `infoclock32-setup`) at `192.168.4.1` for `wifi_portal_timeout_s` seconds (default 180), then boots offline — a background monitor keeps retrying and reconnects whenever the network returns. Reboot the device to reopen the setup portal. You can also change credentials without the portal via the `/wifi` web page (writes `wifi_ssid`/`wifi_password` to config, then reboot); provisioning through the setup portal connects immediately and heals a wrong config entry on the next boot.
 
 ### Web UI
 

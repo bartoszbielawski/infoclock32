@@ -68,21 +68,49 @@ void hardware_init()
 
     WiFi.setHostname(s_hostname.c_str());
 
-    // Standard WiFiManager provisioning (2.0.x): autoConnect() uses the
-    // NVS-stored station credentials, and opens a captive portal
-    // ("<hostname>-setup" @ 192.168.4.1) when they fail or are absent.
-    // The portal gives up after wifi_portal_timeout_s so the clock still
-    // boots offline; rebooting reopens it.
-    static WiFiManager wm;
-    wm.setHostname(s_hostname.c_str());
-    wm.setConfigPortalTimeout(portal_timeout_s);
-    wm.setBreakAfterConfig(true);
-
-    if (!ssid.empty())
-        WiFi.begin(ssid.c_str(), password.c_str());  // config.txt wins: seeds WM's credential store
-
     std::string apName = s_hostname + "-setup";
-    bool connected = wm.autoConnect(apName.c_str());
+
+    bool connected = false;
+    if (!ssid.empty())
+    {
+        // Try the config.txt credentials first, but WITHOUT persisting them:
+        // a plain WiFi.begin() writes the pair into the NVS station store, so
+        // one wrong line in config.txt used to shadow the credentials the
+        // setup portal had saved — every boot re-poisoned the store and the
+        // portal could never heal the device (issue #3). With persistence
+        // off, a failed attempt falls through to the stored credentials and
+        // finally the portal below.
+        WiFi.persistent(false);
+        logPrintf("WIFI", "trying config.txt credentials, SSID=%s", ssid.c_str());
+        WiFi.begin(ssid.c_str(), password.c_str());
+        for (int i = 0; i < 100; i++)
+        {
+            wl_status_t st = WiFi.status();
+            if (st == WL_CONNECTED ||
+                st == WL_NO_SSID_AVAIL ||     // SSID not in the air
+                st == WL_CONNECT_FAILED)      // rejected by the AP
+                break;
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
+        connected = WiFi.status() == WL_CONNECTED;
+        logPrintf("WIFI", connected ? "connected with config.txt credentials"
+                                    : "config.txt credentials failed - trying stored/portal credentials");
+    }
+
+    if (!connected)
+    {
+        // Standard WiFiManager provisioning (2.0.x): autoConnect() uses the
+        // NVS-station credentials — which the setup portal fills in and a
+        // failed config.txt attempt no longer clobbers — and opens a captive
+        // portal (apName @ 192.168.4.1) when they fail or are absent.
+        // The portal gives up after wifi_portal_timeout_s so the clock still
+        // boots offline; rebooting reopens it.
+        static WiFiManager wm;
+        wm.setHostname(s_hostname.c_str());
+        wm.setConfigPortalTimeout(portal_timeout_s);
+        wm.setBreakAfterConfig(true);
+        connected = wm.autoConnect(apName.c_str());
+    }
 
     if (connected)
     {
