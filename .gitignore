@@ -11,6 +11,7 @@ tests/host/sun_times_check
 tests/host/life_step_check
 tests/host/weather_icons_check
 tests/host/pressure_trend_check
+tests/host/temp_display_check
 tests/host/wdt_check
 tests/host/uptime_check
 

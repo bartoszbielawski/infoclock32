@@ -18,6 +18,7 @@ life_interval_s=60
 life_burst_s=8
 temp_sensor=stub
 temp_interval=30
+temp_display=temp,pressure
 msg_interval=60
 
 # scrolling message

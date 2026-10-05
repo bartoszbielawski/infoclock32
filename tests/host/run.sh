@@ -10,6 +10,7 @@ c++ $CXXFLAGS sun_times_check.cpp     -o sun_times_check
 c++ $CXXFLAGS life_step_check.cpp     -o life_step_check
 c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
 c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
+c++ $CXXFLAGS temp_display_check.cpp    -o temp_display_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 
@@ -18,6 +19,7 @@ c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 ./life_step_check
 ./weather_icons_check
 ./pressure_trend_check
+./temp_display_check
 ./wdt_check
 ./uptime_check
 

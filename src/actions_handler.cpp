@@ -9,6 +9,7 @@
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
 #include <night_mode_task.h>
+#include <temp_display.hpp>
 
 // ── /push ─────────────────────────────────────────────────────────────────────
 // Simple JSON endpoint for scripted / programmatic message display.
@@ -110,6 +111,41 @@ void handle_actions()
             logPrintf("WEB", "night mode %s-%s brightness %d via /actions",
                       start.c_str(), end.c_str(), nbr);
         }
+        else if (action == "tempdisplay")
+        {
+            // Checkboxes build the ordered temp_display list; unchecked boxes
+            // are simply absent from the POST body.
+            std::string list;
+            auto addItem = [&list](bool on, const char* name) {
+                if (!on) return;
+                if (!list.empty()) list += ',';
+                list += name;
+            };
+            addItem(server.hasArg("show_temp"),     "temp");
+            addItem(server.hasArg("show_humidity"), "humidity");
+            addItem(server.hasArg("show_pressure"), "pressure");
+
+            int dec = server.arg("temp_decimals").toInt();
+            if (dec != 0) dec = 1;
+            long showS = server.arg("temp_show_interval").toInt();
+            if (showS < 0) showS = 0;
+            if (showS > 86400) showS = 86400;
+            long holdS = server.arg("temp_hold_s").toInt();
+            if (holdS < 0) holdS = 0;
+            if (holdS > 30) holdS = 30;
+
+            auto& ds = DataStore::getInstance();
+            ds.set_value("temp_display", list);
+            ds.set_value("temp_decimals", std::to_string(dec));
+            ds.set_value("temp_show_interval", std::to_string(showS));
+            ds.set_value("temp_hold_s", std::to_string(holdS));
+            ds.save_to_file("/config.txt");
+            result = "&#10003; Sensor display saved.";
+            if (list.empty())
+                result += " Readings no longer scroll &mdash; placeholders keep updating.";
+            logPrintf("WEB", "sensor display '%s', decimals %d, show every %ld s, hold %ld s via /actions",
+                      list.c_str(), dec, showS, holdS);
+        }
         else if (action == "hostname")
         {
             String hn = server.arg("hostname");
@@ -186,6 +222,15 @@ void handle_actions()
     char   nBrStr[4];
     snprintf(nBrStr, sizeof(nBrStr), "%d", ds.get_value<int>("night_brightness", 1));
 
+    String curTempDisplay = ds.get_value("temp_display", kTempDisplayDefault).c_str();
+    char decStr[2], showIntStr[8], holdStr[4];
+    snprintf(decStr, sizeof(decStr), "%d",
+             ds.get_value<int>("temp_decimals", 1) == 0 ? 0 : 1);
+    snprintf(showIntStr, sizeof(showIntStr), "%d",
+             ds.get_value<int>("temp_show_interval", 0));
+    snprintf(holdStr, sizeof(holdStr), "%d",
+             ds.get_value<int>("temp_hold_s", 0));
+
     sendPageHead("Actions");
     sendPageNav("/actions");
     server.sendContent_P(PSTR("<h2>Actions</h2>"));
@@ -248,6 +293,53 @@ void handle_actions()
                                "<input type='number' name='night_brightness' min='0' max='15' value='"));
     server.sendContent(nBrStr);
     server.sendContent_P(PSTR("' style='width:60px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                               "</div>"
+                               "<button class='btn btn-primary' type='submit'>Save</button>"
+                               "</form></div>"));
+
+    // Temperature sensor display
+    server.sendContent_P(PSTR("<div class='card'>"
+                               "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
+                               "&#127777; Sensor display</h3>"
+                               "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
+                               "Choose which temperature-sensor readings scroll on the matrix. "
+                               "Polling and the {temp_c} / {temp_rh} / {temp_hpa} placeholders "
+                               "keep working regardless &mdash; no reboot needed.</p>"
+                               "<form method='POST'>"
+                               "<input type='hidden' name='action' value='tempdisplay'>"
+                               "<div style='display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:.9rem;color:#1e293b'>"
+                               "<label><input type='checkbox' name='show_temp'"));
+    if (curTempDisplay.indexOf("temp") >= 0) server.sendContent_P(PSTR(" checked"));
+    server.sendContent_P(PSTR("> Temperature (&deg;C)</label>"
+                               "<label><input type='checkbox' name='show_humidity'"));
+    if (curTempDisplay.indexOf("humidity") >= 0) server.sendContent_P(PSTR(" checked"));
+    server.sendContent_P(PSTR("> Humidity (%RH, only with a humidity sensor)</label>"
+                               "<label><input type='checkbox' name='show_pressure'"));
+    if (curTempDisplay.indexOf("pressure") >= 0) server.sendContent_P(PSTR(" checked"));
+    server.sendContent_P(PSTR("> Pressure (hPa, with trend arrow)</label>"
+                               "</div>"
+                               "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
+                               "<label style='font-size:.9rem'>Decimals</label>"
+                               "<select name='temp_decimals' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                               "<option value='0'"));
+    if (decStr[0] == '0') server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">0</option>"
+                               "<option value='1'"));
+    if (decStr[0] == '1') server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">1</option>"
+                               "</select>"
+                               "<label style='font-size:.9rem'>Show every</label>"
+                               "<input type='number' name='temp_show_interval' min='0' max='86400' value='"));
+    server.sendContent(showIntStr);
+    server.sendContent_P(PSTR("' style='width:80px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                               "<span style='font-size:.85rem;color:#64748b'>s (0 = after every poll)</span>"
+                               "</div>"
+                               "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
+                               "<label style='font-size:.9rem'>Hold each reading</label>"
+                               "<input type='number' name='temp_hold_s' min='0' max='30' value='"));
+    server.sendContent(holdStr);
+    server.sendContent_P(PSTR("' style='width:80px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
+                               "<span style='font-size:.85rem;color:#64748b'>s on screen (0 = quick ~2 s flash)</span>"
                                "</div>"
                                "<button class='btn btn-primary' type='submit'>Save</button>"
                                "</form></div>"));

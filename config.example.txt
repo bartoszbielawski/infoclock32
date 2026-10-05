@@ -133,6 +133,20 @@ bme280_addr=118
 # How often to poll the sensor (seconds). Code default: 300
 temp_interval=30
 
+# What scrolls on the display: ordered comma list of temp / humidity /
+# pressure. Empty = nothing scrolls (placeholders still update).
+# Default: temp,pressure
+#temp_display=temp,pressure
+
+# Temperature decimal places on the display (0 or 1, default 1)
+#temp_decimals=1
+
+# Seconds between scrolls (0 = after every poll wake; default 0)
+#temp_show_interval=0
+
+# Seconds each reading stays centered on screen (0 = quick ~2 s flash)
+#temp_hold_s=0
+
 # ── Sun widget & Game of Life ─────────────────────────────────────────────────
 # Sunrise/sunset widget — pure offline solar math, only needs a position.
 # Task is not started while sun_lat/sun_lon are blank.
