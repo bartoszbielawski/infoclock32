@@ -70,16 +70,29 @@ void hardware_init()
 
     std::string apName = s_hostname + "-setup";
 
+    // config.txt is the single source of truth for station credentials.
+    // The setup portal is just another editor of the file: whatever is
+    // provisioned there is mirrored into wifi_ssid/wifi_password, so the
+    // /wifi page, /edit and the portal all write the same keys and a
+    // provisioned device boots straight from the file.
+    static WiFiManager wm;
+    wm.setHostname(s_hostname.c_str());
+    wm.setConfigPortalTimeout(portal_timeout_s);
+    wm.setBreakAfterConfig(true);
+    wm.setSaveConfigCallback([&wm]() {
+        auto& ds = DataStore::getInstance();
+        ds.set_value("wifi_ssid",     std::string(wm.getWiFiSSID().c_str()));
+        ds.set_value("wifi_password", std::string(wm.getWiFiPass().c_str()));
+        ds.save_to_file("/config.txt");
+        logPrintf("WIFI", "portal credentials saved to config, SSID=%s",
+                  wm.getWiFiSSID().c_str());
+    });
+
     bool connected = false;
     if (!ssid.empty())
     {
-        // Try the config.txt credentials first, but WITHOUT persisting them:
-        // a plain WiFi.begin() writes the pair into the NVS station store, so
-        // one wrong line in config.txt used to shadow the credentials the
-        // setup portal had saved — every boot re-poisoned the store and the
-        // portal could never heal the device (issue #3). With persistence
-        // off, a failed attempt falls through to the stored credentials and
-        // finally the portal below.
+        // Try the config.txt credentials first — without persisting them, so
+        // the attempt cannot rewrite the NVS cache (issue #3).
         WiFi.persistent(false);
         logPrintf("WIFI", "trying config.txt credentials, SSID=%s", ssid.c_str());
         WiFi.begin(ssid.c_str(), password.c_str());
@@ -94,21 +107,22 @@ void hardware_init()
         }
         connected = WiFi.status() == WL_CONNECTED;
         logPrintf("WIFI", connected ? "connected with config.txt credentials"
-                                    : "config.txt credentials failed - trying stored/portal credentials");
+                                    : "config.txt credentials failed");
     }
 
     if (!connected)
     {
-        // Standard WiFiManager provisioning (2.0.x): autoConnect() uses the
-        // NVS-station credentials — which the setup portal fills in and a
-        // failed config.txt attempt no longer clobbers — and opens a captive
-        // portal (apName @ 192.168.4.1) when they fail or are absent.
-        // The portal gives up after wifi_portal_timeout_s so the clock still
-        // boots offline; rebooting reopens it.
-        static WiFiManager wm;
-        wm.setHostname(s_hostname.c_str());
-        wm.setConfigPortalTimeout(portal_timeout_s);
-        wm.setBreakAfterConfig(true);
+        if (!ssid.empty())
+        {
+            // The file is the authority and it failed: erase the stored pair
+            // so a stale cache cannot outvote it, and autoConnect() opens the
+            // portal directly (no doomed stored-credentials attempt first).
+            WiFi.disconnect(false, true);
+            logPrintf("WIFI", "opening setup portal at %s / 192.168.4.1",
+                      apName.c_str());
+        }
+        // With wifi_ssid blank this still tries the NVS pair first — the
+        // recovery hatch for a freshly reflashed filesystem.
         connected = wm.autoConnect(apName.c_str());
     }
 
