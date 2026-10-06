@@ -50,8 +50,8 @@ int main()
     expect_row(8, 3, 0x1E);
     expect_row(8, 4, 0x33);
     expect_row(2, 7, 0x3E);
-    expect_row(5, 0, 0x3E);
-    expect_row(7, 0, 0x3E);
+    expect_row(5, 0, 0x3F);
+    expect_row(7, 0, 0x3F);
 
     // Rendered bold face at 21:07, origin centered (17, 0) on 64 px
     // (30 px face: digits at 17, 24, colon 31-32, digits 34, 41)
@@ -83,9 +83,8 @@ int main()
             CHECK(d.get(34, y) && d.get(35, y) && d.get(38, y) && d.get(39, y), "0: sides row %d", y);
         CHECK(!d.get(36, 3) && !d.get(37, 5), "0: hollow");
 
-        // '7' at x 41-46: top bar with rounded left tip, diagonal into a stem
-        CHECK(d.get(41, 0) && d.get(45, 0), "7: top bar, square right join");
-        CHECK(!d.get(46, 0), "7: bar left tip rounded");
+        // '7' at x 41-46: full top bar, diagonal into a straight stem
+        CHECK(d.get(41, 0) && d.get(46, 0), "7: full top bar");
         CHECK(d.get(45, 1) && d.get(45, 3) && d.get(43, 6), "7: stem");
         CHECK(!d.get(41, 1) && !d.get(41, 7), "7: nothing below/after");
 
