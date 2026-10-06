@@ -33,17 +33,17 @@ static int litCount(const FakeDisp& d)
 
 static void expect_row(int digit, int row, uint8_t want)
 {
-    CHECK(kBoldDigits[digit][row] == want, "bold[%d][%d]=%02X want %02X",
-          digit, row, kBoldDigits[digit][row], want);
+    CHECK(kThickDigits[digit][row] == want, "thick[%d][%d]=%02X want %02X",
+          digit, row, kThickDigits[digit][row], want);
 }
 
 int main()
 {
-    // Bold digit table: every digit fully defined (8 non-empty rows) and a
+    // Thick digit table: every digit fully defined (8 non-empty rows) and a
     // few spot values
     for (int digit = 0; digit < 10; digit++)
         for (int row = 0; row < 8; row++)
-            CHECK(kBoldDigits[digit][row] != 0, "bold[%d][%d] empty", digit, row);
+            CHECK(kThickDigits[digit][row] != 0, "thick[%d][%d] empty", digit, row);
     expect_row(0, 0, 0x1E);
     expect_row(0, 1, 0x3F);
     expect_row(1, 1, 0x1C);
@@ -53,11 +53,11 @@ int main()
     expect_row(5, 0, 0x3F);
     expect_row(7, 0, 0x3F);
 
-    // Rendered bold face at 21:07, origin centered (17, 0) on 64 px
+    // Rendered thick face at 21:07, origin centered (17, 0) on 64 px
     // (30 px face: digits at 17, 24, colon 31-32, digits 34, 41)
     {
         FakeDisp d;
-        drawBoldTime(d, 21, 7, true, 17, 0);
+        drawThickTime(d, 21, 7, true, 17, 0);
 
         // '2' at x 17-22: bowl rows 0-1, diagonal to the lower left, full base
         CHECK(d.get(18, 0) && d.get(21, 0), "2: bowl top");
@@ -94,7 +94,7 @@ int main()
         for (int digit = 0; digit < 10; digit++)
         {
             FakeDisp t;
-            drawBoldTime(t, digit * 11, digit, true, 17, 0);
+            drawThickTime(t, digit * 11, digit, true, 17, 0);
             CHECK(litCount(t) > 0, "digit %d renders", digit);
         }
     }
@@ -102,16 +102,16 @@ int main()
     // Colon off clears both blocks; midnight "00:00" renders four full zeros
     {
         FakeDisp d;
-        drawBoldTime(d, 0, 0, false, 17, 0);
+        drawThickTime(d, 0, 0, false, 17, 0);
         CHECK(!d.get(31, 2) && !d.get(32, 6), "colon off");
         int zeros = litCount(d);
         CHECK(zeros == 4 * 36, "four zeros = 144 px, got %d", zeros);
     }
 
-    // Bold face fits the display: 30 px + centered offset leaves margins
+    // Thick face fits the display: 30 px + centered offset leaves margins
     {
         FakeDisp d;
-        drawBoldTime(d, 88, 88, true, (64 - kBoldFaceWidth) / 2, 0);
+        drawThickTime(d, 88, 88, true, (64 - kThickFaceWidth) / 2, 0);
         CHECK(litCount(d) == 4 * 32 + 8, "88:88 = 136 px, got %d", litCount(d));
         CHECK(!d.get(0, 0) && !d.get(63, 7), "within bounds");
     }

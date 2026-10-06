@@ -5,20 +5,20 @@
 #include <stdint.h>
 
 // Pure layout helpers for the clock faces driven by the `clock_style` config
-// key. No Arduino/FreeRTOS — unit tested on the host
+// key. No Arduino/FreeRTOS â€” unit tested on the host
 // (see tests/host/clock_face_check.cpp). The draw functions take any
-// display-like object with setPixel(x, y, bool) — LMDS on device, a fake
+// display-like object with setPixel(x, y, bool) â€” LMDS on device, a fake
 // pixel grid in tests.
 
-// ── Bold digit font ──────────────────────────────────────────────────────────
-// Hand-tuned 6x8 digit bitmaps for the `bold` clock face: 2 px strokes, real
-// glyph shapes (not a 7-seg emulation), drawn with drawBoldTime().
+// â”€â”€ Thick digit font â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Hand-tuned 6x8 digit bitmaps for the `thick` clock face: 2 px strokes, real
+// glyph shapes (not a 7-seg emulation), drawn with drawThickTime().
 
 // One byte per row, bit 5 = left column ... bit 0 = right column.
 // Free-standing bar ends are cut so they chamfer into the air (2's foot
 // right tip, 5/7's top bars); corners where a stroke joins the bar stay
 // square, so strokes always land connected.
-static const uint8_t kBoldDigits[10][8] = {
+static const uint8_t kThickDigits[10][8] = {
     // 0: rounded stadium, hollow center
     { 0x1E, 0x3F, 0x33, 0x33, 0x33, 0x33, 0x3F, 0x1E },
     // 1: left flag at the top, plain stem to the bottom
@@ -42,26 +42,26 @@ static const uint8_t kBoldDigits[10][8] = {
 };
 
 template<class D>
-inline void drawBoldDigit(D& d, int digit, int x0, int y0)
+inline void drawThickDigit(D& d, int digit, int x0, int y0)
 {
     if (digit < 0 || digit > 9) return;
     for (int r = 0; r < 8; r++)
     {
-        const uint8_t bits = kBoldDigits[digit][r];
+        const uint8_t bits = kThickDigits[digit][r];
         for (int c = 0; c < 6; c++)
             if (bits & (1 << (5 - c))) d.setPixel(x0 + c, y0 + r, true);
     }
 }
 
-// hh:mm in bold digits: two digits, 1 px gap, 2 px colon, 1 px gap, two digits.
+// hh:mm in thick digits: two digits, 1 px gap, 2 px colon, 1 px gap, two digits.
 // x offsets within the face: digits 0, 7, colon 14-15, digits 17, 24.
-static const int kBoldFaceWidth = 30; // 4*6 digit px + 4 gaps + 2 colon px
+static const int kThickFaceWidth = 30; // 4*6 digit px + 4 gaps + 2 colon px
 
 template<class D>
-inline void drawBoldTime(D& d, int h, int m, bool colonOn, int x0, int y0)
+inline void drawThickTime(D& d, int h, int m, bool colonOn, int x0, int y0)
 {
-    drawBoldDigit(d, (h / 10) % 10, x0, y0);
-    drawBoldDigit(d, h % 10, x0 + 7, y0);
+    drawThickDigit(d, (h / 10) % 10, x0, y0);
+    drawThickDigit(d, h % 10, x0 + 7, y0);
     if (colonOn)
     {
         for (int r = 2; r <= 3; r++)            // upper 2x2 block
@@ -71,11 +71,11 @@ inline void drawBoldTime(D& d, int h, int m, bool colonOn, int x0, int y0)
             for (int i = 0; i <= 1; i++)
                 d.setPixel(x0 + 14 + i, y0 + r, true);
     }
-    drawBoldDigit(d, m / 10, x0 + 17, y0);
-    drawBoldDigit(d, m % 10, x0 + 24, y0);
+    drawThickDigit(d, m / 10, x0 + 17, y0);
+    drawThickDigit(d, m % 10, x0 + 24, y0);
 }
 
-// ── BCD (binary) clock ───────────────────────────────────────────────────────
+// â”€â”€ BCD (binary) clock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Four dot columns (hours tens/units, minutes tens/units), bit i at
 // (bottom - i): bit 0 on the bottom row.
 
@@ -87,7 +87,7 @@ inline uint8_t bcdColumnBits(int value, int bits)
     return mask;
 }
 
-// Column pitch 3 px: HT HU : MT MU → x offsets 0, 3, 6, 9, 12.
+// Column pitch 3 px: HT HU : MT MU â†’ x offsets 0, 3, 6, 9, 12.
 static const int kBCDFaceWidth = 13;
 
 template<class D>
@@ -109,7 +109,7 @@ inline void drawBCDTime(D& d, int h, int m, bool colonOn, int x0, int y0)
     for (int i = 0; i < 4; i++) if (mu & (1 << i)) d.setPixel(x0 + 12, bottom - i, true);
 }
 
-// ── Seconds sweep ────────────────────────────────────────────────────────────
+// â”€â”€ Seconds sweep â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // One pixel racing along the bottom row: 0 s at the left edge, 59 s at maxX.
 // The WiFi indicator owns the very last column, so callers pass
 // maxX = display width - 2 (62 on a 64 px display).

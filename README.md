@@ -153,7 +153,7 @@ Key config keys:
 | `brightness` | `7` | Display intensity 0–15 |
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
 | `language` | `en` | Date labels: `en`, `fr`, `pl` |
-| `clock_style` | `hhmmss` | Time face: `hhmmss` (ticking seconds), `hhmm` (blinking colon), `sweep` (hh:mm + seconds bar), `bold` (bold 6x8 digit font), `bcd` (binary dots); re-read every clock round |
+| `clock_style` | `hhmmss` | Time face: `hhmmss` (ticking seconds), `hhmm` (blinking colon), `sweep` (hh:mm + seconds bar), `thick` (thick 6x8 digit font), `bcd` (binary dots); re-read every clock round |
 | `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
 | `night_brightness` | `1` | Intensity during night hours. A brightness change made at night (MQTT, `/actions`) is temporary and does not touch `brightness` |
 | `web_password` | — | HTTP Basic Auth password (blank = open) |

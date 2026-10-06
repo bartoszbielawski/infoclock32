@@ -11,13 +11,13 @@
 #include <night_mode_task.h>
 #include <temp_display.hpp>
 
-// ── /push ─────────────────────────────────────────────────────────────────────
+// â”€â”€ /push â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Simple JSON endpoint for scripted / programmatic message display.
 //
 //   GET  /push?msg=Hello+World
 //   POST /push   (body: msg=Hello+World)
 //
-// Optional: &speed=<ms>  — scroll delay in ms, 10–500 (default 50).
+// Optional: &speed=<ms>  â€” scroll delay in ms, 10â€“500 (default 50).
 // Returns: {"ok":true} or {"ok":false,"error":"..."}
 // No authentication required.
 
@@ -40,9 +40,9 @@ void handle_push()
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
     // Bounded priority wait: fail with "display busy" instead of blocking the
-    // single web-server task forever. The clock holds the display 7–9 s at a
+    // single web-server task forever. The clock holds the display 7â€“9 s at a
     // time (it cuts the extra seconds when anyone is queued), so the wait must
-    // span one full fast-lane cycle —
+    // span one full fast-lane cycle â€”
     // shorter timeouts make dashboard pushes fail most of the time.
     if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
     {
@@ -57,7 +57,7 @@ void handle_push()
     }
 }
 
-// ── /actions ──────────────────────────────────────────────────────────────────
+// â”€â”€ /actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 void handle_actions()
 {
@@ -151,7 +151,7 @@ void handle_actions()
             String style = server.arg("style");
             style.trim();
             if (style == "hhmmss" || style == "hhmm" || style == "sweep" ||
-                style == "bold" || style == "bcd")
+                style == "thick" || style == "bcd")
             {
                 DataStore::getInstance().set_value("clock_style", style.c_str());
                 DataStore::getInstance().save_to_file("/config.txt");
@@ -385,9 +385,9 @@ void handle_actions()
                                "<option value='sweep'"));
     if (curClockStyle == "sweep") server.sendContent_P(PSTR(" selected"));
     server.sendContent_P(PSTR(">hh:mm + seconds sweep</option>"
-                               "<option value='bold'"));
-    if (curClockStyle == "bold") server.sendContent_P(PSTR(" selected"));
-    server.sendContent_P(PSTR(">Bold digits</option>"
+                               "<option value='thick'"));
+    if (curClockStyle == "thick") server.sendContent_P(PSTR(" selected"));
+    server.sendContent_P(PSTR(">Thick digits</option>"
                                "<option value='bcd'"));
     if (curClockStyle == "bcd") server.sendContent_P(PSTR(" selected"));
     server.sendContent_P(PSTR(">binary (BCD dots)</option>"

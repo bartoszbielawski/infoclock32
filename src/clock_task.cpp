@@ -81,7 +81,7 @@ void displayClock(void *parameter)
       }
 
       // Show the time face last, so the clock face is what the hold leaves behind
-      // (the Life task seeds itself from the display — see life_seed_display).
+      // (the Life task seeds itself from the display â€” see life_seed_display).
       // After the first 5 frames keep ticking for up to kIdleFrames more while
       // nobody else is queued: releasing into an idle display would leave the
       // last frame frozen on screen until the next round.
@@ -108,10 +108,10 @@ void displayClock(void *parameter)
           drawBCDTime(*display, timeinfo->tm_hour, timeinfo->tm_min, colonOn,
                       (display->getSegments() * 8 - kBCDFaceWidth) / 2, 0);
         }
-        else if (clockStyle == "bold")
+        else if (clockStyle == "thick")
         {
-          drawBoldTime(*display, timeinfo->tm_hour, timeinfo->tm_min, colonOn,
-                       (display->getSegments() * 8 - kBoldFaceWidth) / 2, 0);
+          drawThickTime(*display, timeinfo->tm_hour, timeinfo->tm_min, colonOn,
+                       (display->getSegments() * 8 - kThickFaceWidth) / 2, 0);
         }
         else
         {
