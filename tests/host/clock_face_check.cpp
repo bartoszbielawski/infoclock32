@@ -44,13 +44,13 @@ int main()
     for (int digit = 0; digit < 10; digit++)
         for (int row = 0; row < 8; row++)
             CHECK(kBoldDigits[digit][row] != 0, "bold[%d][%d] empty", digit, row);
-    expect_row(0, 0, 0x3F);
-    expect_row(0, 1, 0x33);
+    expect_row(0, 0, 0x1E);
+    expect_row(0, 1, 0x3F);
     expect_row(1, 1, 0x1C);
     expect_row(8, 3, 0x1E);
     expect_row(8, 4, 0x33);
-    expect_row(7, 0, 0x3F);
-    expect_row(2, 7, 0x3F);
+    expect_row(7, 0, 0x1E);
+    expect_row(2, 7, 0x1E);
 
     // Rendered bold face at 21:07, origin centered (17, 0) on 64 px
     // (30 px face: digits at 17, 24, colon 31-32, digits 34, 41)
@@ -62,7 +62,8 @@ int main()
         CHECK(d.get(18, 0) && d.get(21, 0), "2: bowl top");
         CHECK(d.get(22, 1) && d.get(22, 2), "2: right side");
         CHECK(d.get(18, 5) && d.get(19, 5) && d.get(17, 6), "2: diagonal");
-        CHECK(d.get(17, 7) && d.get(20, 7) && d.get(22, 7), "2: base");
+        CHECK(d.get(18, 7) && d.get(21, 7), "2: rounded foot");
+        CHECK(!d.get(17, 7) && !d.get(22, 7), "2: foot corners cut");
         CHECK(!d.get(17, 2), "2: left side dark below bowl");
 
         // '1' at x 24-29: plain 2 px stem rows 0-7, left flag at row 1
@@ -74,15 +75,16 @@ int main()
         CHECK(d.get(31, 2) && d.get(32, 3) && d.get(31, 5) && d.get(32, 6), "colon on");
         CHECK(!d.get(31, 4) && !d.get(32, 0) && !d.get(31, 7), "colon no bleed");
 
-        // '0' at x 34-39: hollow oval, 2 px sides
-        CHECK(d.get(34, 0) && d.get(37, 0) && d.get(39, 0), "0: top");
+        // '0' at x 34-39: rounded stadium, hollow center
+        CHECK(d.get(35, 0) && d.get(38, 0), "0: rounded top");
+        CHECK(d.get(35, 7) && d.get(38, 7), "0: rounded bottom");
         for (int y = 1; y <= 6; y++)
             CHECK(d.get(34, y) && d.get(35, y) && d.get(38, y) && d.get(39, y), "0: sides row %d", y);
-        CHECK(d.get(34, 7) && d.get(39, 7), "0: bottom");
         CHECK(!d.get(36, 3) && !d.get(37, 5), "0: hollow");
 
-        // '7' at x 41-46: full top bar, diagonal into a straight stem
-        CHECK(d.get(41, 0) && d.get(44, 0) && d.get(46, 0), "7: top bar");
+        // '7' at x 41-46: rounded top bar, diagonal into a straight stem
+        CHECK(d.get(42, 0) && d.get(45, 0), "7: rounded top bar");
+        CHECK(!d.get(41, 0) && !d.get(46, 0), "7: bar corners cut");
         CHECK(d.get(45, 1) && d.get(45, 3) && d.get(43, 6), "7: stem");
         CHECK(!d.get(41, 1) && !d.get(41, 7), "7: nothing below/after");
 
