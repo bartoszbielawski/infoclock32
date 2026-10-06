@@ -15,25 +15,26 @@
 // glyph shapes (not a 7-seg emulation), drawn with drawBoldTime().
 
 // One byte per row, bit 5 = left column ... bit 0 = right column.
-// Free-standing outer corners are cut (see 0, 2, 5, 7) so the bars chamfer
-// into the strokes instead of ending in square blocks.
+// Free-standing bar ends are cut so they chamfer into the air (2's foot
+// right tip, 5/7's top bars); corners where a stroke joins the bar stay
+// square, so strokes always land connected.
 static const uint8_t kBoldDigits[10][8] = {
     // 0: rounded stadium, hollow center
     { 0x1E, 0x3F, 0x33, 0x33, 0x33, 0x33, 0x3F, 0x1E },
     // 1: left flag at the top, plain stem to the bottom
     { 0x0C, 0x1C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C },
-    // 2: rounded bowl, diagonal to the lower left, rounded foot
-    { 0x1E, 0x33, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x1E },
+    // 2: rounded bowl, diagonal to the lower left, foot with rounded right tip
+    { 0x1E, 0x33, 0x03, 0x06, 0x0C, 0x18, 0x30, 0x3E },
     // 3: two bowls with a middle notch
     { 0x1E, 0x33, 0x03, 0x0E, 0x03, 0x03, 0x33, 0x1E },
     // 4: diagonal, full crossbar, center stem
     { 0x06, 0x0E, 0x1E, 0x36, 0x3F, 0x0C, 0x0C, 0x0C },
-    // 5: rounded top bar, left stem, full middle bar, lower bowl
-    { 0x1E, 0x30, 0x30, 0x3F, 0x03, 0x33, 0x33, 0x1E },
+    // 5: top bar with rounded right tip, left stem, full middle bar, lower bowl
+    { 0x3E, 0x30, 0x30, 0x3F, 0x03, 0x33, 0x33, 0x1E },
     // 6: closed top hook, left stem, full middle bar, bowl
     { 0x1E, 0x33, 0x30, 0x3F, 0x33, 0x33, 0x33, 0x1E },
-    // 7: rounded top bar, diagonal into a straight stem
-    { 0x1E, 0x03, 0x03, 0x06, 0x06, 0x0C, 0x0C, 0x0C },
+    // 7: top bar with rounded left tip, diagonal into a straight stem
+    { 0x3E, 0x03, 0x03, 0x06, 0x06, 0x0C, 0x0C, 0x0C },
     // 8: two stacked bowls with a pinched waist
     { 0x1E, 0x33, 0x33, 0x1E, 0x33, 0x33, 0x33, 0x1E },
     // 9: closed bowl, middle bar, right stem, tail
