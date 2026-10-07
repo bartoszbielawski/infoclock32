@@ -12,6 +12,9 @@
 #include <uptime_utils.hpp>
 #include <logger.hpp>
 #include <night_mode_task.h>
+#include <mqtt_discovery.hpp>
+#include <version.hpp>
+#include <esp_timer.h>
 
 #include <string>
 
@@ -25,6 +28,70 @@ static QueueHandle_t pushQueue;
 
 // Set in the callback, acted on in the main loop.
 static bool    pendingReboot     = false;
+
+static std::string mqtt_client_id()
+{
+    return DataStore::getInstance().get_value("mqtt_client_id", "infoclock32");
+}
+
+// Publish to <clientId>/publish/<key> with retain — the same topics the
+// `…/request` path answers on. Retain means HA (and any subscriber) sees the
+// last value immediately after a restart.
+static void publish_state(const std::string& clientId, const char* key, const std::string& value)
+{
+    if (value.empty()) return;
+    std::string topic = clientId + "/publish/" + key;
+    mqttClient.publish(topic.c_str(), value.c_str(), true);
+}
+
+// Home Assistant availability: a dedicated topic — the /status heartbeat
+// publishes JSON there, which HA's exact-payload matcher would never see as
+// "online". A retained last-will covers unclean disconnects.
+static void publish_availability(const std::string& clientId)
+{
+    std::string topic = ha_discovery::availability_topic(clientId);
+    mqttClient.publish(topic.c_str(), "online", true);
+}
+
+static void publish_discovery(const std::string& clientId)
+{
+    if (DataStore::getInstance().get_value<int>("enable_mqtt_discovery", 1) == 0)
+        return;
+
+    ha_discovery::DeviceMeta meta;
+    meta.name        = WiFi.getHostname();
+    meta.identifiers = WiFi.macAddress().c_str();
+    meta.model       = ESP.getChipModel();
+    meta.sw_version  = APP_VERSION;
+
+    for (const auto& m : ha_discovery::build_discovery_messages(clientId, meta))
+        mqttClient.publish(m.topic.c_str(), m.payload.c_str(), true);
+
+    logPrintf("MQT", "Home Assistant discovery published");
+}
+
+// Refresh all HA-facing state values. Called on connect and from the 60 s
+// heartbeat. Missing sensor values are skipped silently — the discovery
+// config stays retained and the entity just stays unknown until data arrives.
+static void publish_ha_states(const std::string& clientId)
+{
+    RuntimeStore& rs   = RuntimeStore::getInstance();
+    DeviceStore&  dst  = DeviceStore::getInstance();
+
+    publish_state(clientId, "temp_c",   rs.get("temp_c"));
+    publish_state(clientId, "temp_rh",  rs.get("temp_rh"));
+    publish_state(clientId, "temp_hpa", rs.get("temp_hpa"));
+    publish_state(clientId, "weather_desc", rs.get("weather_desc"));
+    publish_state(clientId, "heap",     dst.get("heap"));
+    publish_state(clientId, "rssi",     dst.get("rssi"));
+    publish_state(clientId, "display_power", rs.get("display_power", "on"));
+    publish_state(clientId, "display_brightness", std::to_string(current_display_brightness()));
+
+    char uptimeS[24];
+    snprintf(uptimeS, sizeof(uptimeS), "%lld",
+             (long long)(esp_timer_get_time() / 1000000LL));
+    publish_state(clientId, "uptime_s", uptimeS);
+}
 
 static void publishStatus(const std::string& clientId)
 {
@@ -78,6 +145,10 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
             bool saved = set_user_brightness(level);
             logPrintf("MQT", "brightness set to %d%s", level,
                       saved ? "" : " (night mode: until it ends)");
+
+            char lvl[8];
+            snprintf(lvl, sizeof(lvl), "%d", current_display_brightness());
+            publish_state(mqtt_client_id(), "display_brightness", lvl);
         }
     }
     else if (topicStr.endsWith("/power"))
@@ -87,8 +158,15 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         state.toLowerCase();
         if (state == "on" || state == "off")
         {
+            // Turning on while brightness is 0 would leave the display
+            // unblanked yet dark — bump to the configured day brightness.
+            if (state == "on" && current_display_brightness() == 0)
+                set_user_brightness(DataStore::getInstance().get_value<int>("brightness", 7));
             ResourceManager<LMDS>::getInstance().getResourceRef().requestEnabled(state == "on");
+            RuntimeStore::getInstance().set("display_power", std::string(state.c_str()));
             logPrintf("MQT", "display power %s", state.c_str());
+
+            publish_state(mqtt_client_id(), "display_power", state.c_str());
         }
     }
     else if (topicStr.endsWith("/config"))
@@ -157,12 +235,17 @@ static bool reconnect()
     mqttClient.setServer(server.c_str(), 1883);
     mqttClient.setCallback(onMessage);
     mqttClient.setKeepAlive(60);
+    // Retained "offline" last-will: HA marks the device unavailable if it
+    // dies without a clean disconnect (passed via the connect overloads —
+    // this PubSubClient version has no setWill()).
+    std::string willTopic = ha_discovery::availability_topic(clientId);
 
     bool connected;
     if (user.empty())
-        connected = mqttClient.connect(clientId.c_str());
+        connected = mqttClient.connect(clientId.c_str(), willTopic.c_str(), 1, true, "offline");
     else
-        connected = mqttClient.connect(clientId.c_str(), user.c_str(), pass.c_str());
+        connected = mqttClient.connect(clientId.c_str(), user.c_str(), pass.c_str(),
+                                       willTopic.c_str(), 1, true, "offline");
 
     if (!connected)
     {
@@ -173,6 +256,12 @@ static bool reconnect()
     std::string topic = clientId + "/+";
     mqttClient.subscribe(topic.c_str());
     logPrintf("MQT", "connected to %s, subscribed to %s", server.c_str(), topic.c_str());
+
+    // Retained discovery configs and availability survive broker restarts,
+    // and republishing on every connect also heals a wiped broker.
+    publish_availability(clientId);
+    publish_discovery(clientId);
+    publish_ha_states(clientId);
     return true;
 }
 
@@ -191,6 +280,9 @@ void mqtt_task(void *parameter)
 {
     registerTask("MQTT", 8192, 90000);
     pushQueue = xQueueCreate(4, sizeof(char *));
+
+    // The display boots enabled — seed the power state before anything reads it.
+    RuntimeStore::getInstance().set("display_power", "on");
 
     auto &rmd = ResourceManager<LMDS>::getInstance();
 
@@ -265,8 +357,9 @@ void mqtt_task(void *parameter)
         time_t now = time(nullptr);
         if (difftime(now, lastHeartbeat) >= 60)
         {
-            std::string clientId = DataStore::getInstance().get_value("mqtt_client_id", "infoclock32");
+            std::string clientId = mqtt_client_id();
             publishStatus(clientId);
+            publish_ha_states(clientId);
             lastHeartbeat = now;
         }
 

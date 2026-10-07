@@ -15,6 +15,7 @@ tests/host/temp_display_check
 tests/host/clock_face_check
 tests/host/wdt_check
 tests/host/uptime_check
+tests/host/mqtt_discovery_check
 
 # host prototype build artifact
 tests/host/prototype/prototype

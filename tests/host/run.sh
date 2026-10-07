@@ -14,6 +14,7 @@ c++ $CXXFLAGS temp_display_check.cpp    -o temp_display_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
+c++ $CXXFLAGS mqtt_discovery_check.cpp -o mqtt_discovery_check
 
 ./custom_message_check
 ./sun_times_check
@@ -24,6 +25,7 @@ c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 ./clock_face_check
 ./wdt_check
 ./uptime_check
+./mqtt_discovery_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

@@ -150,6 +150,16 @@ Topics prefixed with client id (`mqtt_client_id`, default `infoclock32`):
 DataStore). Hardware commands are deferred to the task loop via pending flags.
 **Gap:** `/config` sets values in memory but never persists them.
 
+Home Assistant discovery (`mqtt_discovery.hpp`, pure/host-testable): retained
+configs on `homeassistant/…` published on every connect + states republished
+retained to `/publish/<key>` on connect and every 60 s heartbeat (`uptime_s`,
+`heap`, `rssi`, `display_power`, `display_brightness`, sensor values).
+`display_power` tracked in RuntimeStore by the `/power` handler; `/power on`
+with brightness 0 bumps brightness to the configured `brightness`.
+Availability = dedicated `/availability` topic (online/offline, retained LWT —
+`/status` itself carries JSON so it can't be the availability topic).
+`enable_mqtt_discovery=1`.
+
 ### Rendering — graphic_utils.cpp / graphic_utils.hpp
 
 `scrollMessage(text, display, speed_ms)`, `scrollCanvas()`, and all wipe/transition

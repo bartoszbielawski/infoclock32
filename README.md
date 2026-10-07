@@ -33,7 +33,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval`, `temp_offset`, `temp_display`, `temp_decimals`, `temp_show_interval` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
 | Night mode (auto-dim) | `night_start`, `night_end`, `night_brightness` |
-| MQTT integration | `enable_mqtt`, `mqtt_server`, `mqtt_client_id`, … |
+| MQTT integration (incl. Home Assistant auto-discovery) | `enable_mqtt`, `enable_mqtt_discovery`, `mqtt_server`, `mqtt_client_id`, … |
 | Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes`, `resto_restaurants`, `resto_start_hour`, `resto_end_hour` |
 | Sunrise/sunset widget (offline math) | `enable_sun`, `sun_lat`, `sun_lon`, `sun_interval_min` |
 | Game of Life idle animation | `enable_life`, `life_interval_s`, `life_burst_s`, `life_min_hold_s`, `life_seed_display`, `life_fuel_pct` |
@@ -177,6 +177,7 @@ Key config keys:
 | `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
+| `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
 | `temp_sensor` | `stub` | Sensor driver (see below) |
 | `temp_interval` | `300` | Sensor poll interval in seconds (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
@@ -296,6 +297,22 @@ mosquitto_pub -h <broker> -t infoclock32/brightness -m "12"
 mosquitto_pub -h <broker> -t infoclock32/config -m "temp_interval=60"
 ```
 
+### Home Assistant discovery
+
+With `enable_mqtt_discovery=1` (default), the device publishes retained discovery configs under the standard `homeassistant/` prefix on every (re)connect, and all entities appear automatically under one device card in HA → Settings → Devices & Services → MQTT — zero HA-side configuration. Availability rides a dedicated `…/availability` topic (`online`/retained LWT `offline`), so a crashed device shows as unavailable.
+
+| Entity | Type | Notes |
+|--------|------|-------|
+| Temperature / Humidity / Pressure | sensors | `temp_c` (strips `°C`), `temp_rh`, `temp_hpa` |
+| Weather | sensor | `weather_desc` |
+| Free heap / WiFi signal / Uptime | sensors | DeviceStore values + `uptime_s` (seconds) |
+| Display | light | slider → `…/brightness` (0–15), on/off → `…/power`; states from `…/publish/display_*` |
+| Display power | switch | same `…/power` topic, plain on/off |
+| Scroll message | text | text change → `…/push` (max 128 chars) |
+| Reboot | button | `…/reboot` |
+
+State values are republished (retained) to `…/publish/<key>` on connect and refreshed by the 60 s heartbeat — the same topics `…/request` answers on, so they also work as generic MQTT sensors for other automation systems. To verify: `mosquitto_sub -v -t 'homeassistant/+/infoclock32_#/config'`.
+
 ## Logging
 
 All events are written to three destinations simultaneously:
@@ -322,6 +339,7 @@ infoclock32/
 │   ├── runtime_store.hpp         # Volatile KV store (sensor readings, etc.)
 │   ├── device_store.hpp          # Read-only device parameters (ip, heap, uptime, …)
 │   ├── data_store.hpp            # Persistent config (LittleFS key=value)
+│   ├── mqtt_discovery.hpp        # HA MQTT discovery config builder (pure, host-testable)
 │   ├── custom_message.hpp        # Message slots, date windows, countdowns, placeholders
 │   ├── life.hpp / sun_times.hpp  # Game of Life step + solar math (pure, host-testable)
 │   ├── weather_icons.hpp         # Condition + trend arrow bitmaps
