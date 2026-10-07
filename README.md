@@ -134,10 +134,25 @@ Access at `http://<device-ip>/` or `http://<hostname>.local/`
 | `POST /reboot` | ✓ | Restart device |
 | `GET /api/status` | ✓ | JSON status (uptime, heap, RSSI, MQTT, display diagnostics) |
 | `GET /api/runtime` | ✓ | JSON RuntimeStore snapshot |
+| `GET /metrics` | — | Prometheus scrape endpoint (system gauges + numeric RuntimeStore values) |
 | `GET /frame` | ✓ | Matrix framebuffer as ASCII art (diagnostic) |
 | `GET /push` · `POST /push` | — | JSON message push: `?msg=Hello&speed=<ms>` (10–500); 503 "display busy" when the display can't be acquired |
 
-Auth: HTTP Basic with any username and the `web_password` config value. Leave `web_password` empty to disable auth entirely. Note that `/push` is intentionally unauthenticated so scripts and automations can post messages without credentials.
+Auth: HTTP Basic with any username and the `web_password` config value. Leave `web_password` empty to disable auth entirely. Note that `/push` is intentionally unauthenticated so scripts and automations can post messages without credentials, and `/metrics` is open for the same reason — it carries only non-sensitive system gauges, never config keys or secrets.
+
+### Prometheus monitoring
+
+`GET /metrics` serves the [Prometheus text format](https://prometheus.io/docs/instrumenting/exposition/) (unauthenticated). Fixed system metrics: `infoclock_build_info` (version/chip labels), `infoclock_uptime_seconds`, `infoclock_heap_free_bytes`, `infoclock_heap_min_free_bytes`, `infoclock_wifi_rssi_dbm`, `infoclock_mqtt_connected` (only when `mqtt_server` is set), and display diagnostics (`infoclock_display_drops_total`, `infoclock_display_force_handovers_total`, `infoclock_display_queue_depth`). Additionally, every numeric RuntimeStore value is exposed automatically as `infoclock_<key>` (e.g. `infoclock_temp_c`, `infoclock_temp_hpa`, `infoclock_temp_rh`, `infoclock_weather_id`, `infoclock_display_brightness`) — a value counts as numeric if it parses fully, optionally followed by `°C`.
+
+Scrape config on the Prometheus side:
+
+```yaml
+scrape_configs:
+  - job_name: infoclock32
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['infoclock32.local']   # or the device IP
+```
 
 ### Config file
 

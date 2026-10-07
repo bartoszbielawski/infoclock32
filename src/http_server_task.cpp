@@ -13,6 +13,11 @@
 #include <mqtt_task.h>
 #include <web_ui.hpp>
 #include <task_registry.hpp>
+#include <esp_timer.h>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <cctype>
 
 // Handlers defined in other translation units
 void handle_push();
@@ -566,6 +571,103 @@ void handle_api_runtime()
     server.send(200, "application/json", json);
 }
 
+// ── /metrics (Prometheus scrape format, unauthenticated like / and /status) ───
+
+// Metric names claimed by the fixed system metrics below; a RuntimeStore key
+// mapping to one of these is skipped so HELP/TYPE lines never collide.
+static bool metrics_name_reserved(const std::string& name)
+{
+    static const char* kReserved[] = {
+        "build_info", "uptime_seconds", "heap_free_bytes", "heap_min_free_bytes",
+        "wifi_rssi_dbm", "mqtt_connected", "display_drops_total",
+        "display_force_handovers_total", "display_queue_depth"
+    };
+    for (const char* r : kReserved)
+        if (name == r) return true;
+    return false;
+}
+
+void handle_metrics()
+{
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+
+    std::string out;
+    out.reserve(1536);
+    char line[192];
+
+    snprintf(line, sizeof(line),
+             "# HELP infoclock_build_info Firmware build metadata.\n"
+             "# TYPE infoclock_build_info gauge\n"
+             "infoclock_build_info{version=\"" APP_VERSION "\",chip=\"%s\"} 1\n"
+             "# HELP infoclock_uptime_seconds Seconds since boot.\n"
+             "# TYPE infoclock_uptime_seconds counter\n"
+             "infoclock_uptime_seconds %llu\n"
+             "# HELP infoclock_heap_free_bytes Currently free heap.\n"
+             "# TYPE infoclock_heap_free_bytes gauge\n"
+             "infoclock_heap_free_bytes %u\n"
+             "# HELP infoclock_heap_min_free_bytes Lowest free heap seen since boot.\n"
+             "# TYPE infoclock_heap_min_free_bytes gauge\n"
+             "infoclock_heap_min_free_bytes %u\n"
+             "# HELP infoclock_wifi_rssi_dbm WiFi signal strength.\n"
+             "# TYPE infoclock_wifi_rssi_dbm gauge\n"
+             "infoclock_wifi_rssi_dbm %d\n"
+             "# HELP infoclock_display_drops_total Display acquire attempts refused (queue or pending table full).\n"
+             "# TYPE infoclock_display_drops_total counter\n"
+             "infoclock_display_drops_total %lu\n"
+             "# HELP infoclock_display_force_handovers_total Display taken away from a wedged holder.\n"
+             "# TYPE infoclock_display_force_handovers_total counter\n"
+             "infoclock_display_force_handovers_total %lu\n"
+             "# HELP infoclock_display_queue_depth Display requests waiting per lane.\n"
+             "# TYPE infoclock_display_queue_depth gauge\n"
+             "infoclock_display_queue_depth{lane=\"fast\"} %u\n"
+             "infoclock_display_queue_depth{lane=\"normal\"} %u\n",
+             ESP.getChipModel(),
+             (unsigned long long)(esp_timer_get_time() / 1000000ULL),
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size(),
+             WiFi.RSSI(),
+             (unsigned long)rmd.getDropCount(),
+             (unsigned long)rmd.getForceHandoverCount(),
+             (unsigned)rmd.getQueueDepth(true),
+             (unsigned)rmd.getQueueDepth(false));
+    out += line;
+
+    std::string mqttServer = DataStore::getInstance().get_value("mqtt_server", "");
+    if (!mqttServer.empty())
+        out += std::string("# HELP infoclock_mqtt_connected MQTT broker connectivity.\n"
+                           "# TYPE infoclock_mqtt_connected gauge\n"
+                           "infoclock_mqtt_connected ") +
+               (mqtt_is_connected() ? "1\n" : "0\n");
+
+    // Passthrough: every RuntimeStore entry whose value parses as a number is
+    // published as infoclock_<key>. Values are strings ("22.5°C", "1013", "+0.85"),
+    // so the parser accepts an optional trailing "°C" unit before failing a key.
+    auto snap = RuntimeStore::getInstance().snapshot();
+    for (const auto& kv : snap)
+    {
+        const char* p   = kv.second.c_str();
+        char*       end = nullptr;
+        double      v   = strtod(p, &end);
+        if (end == p) continue;
+        while (*end == ' ' || *end == '\t') ++end;
+        if (*end != '\0' && std::strcmp(end, "\xc2\xb0" "C") != 0) continue;
+        if (!std::isfinite(v)) continue;
+
+        std::string name;
+        name.reserve(kv.first.size());
+        for (const char* k = kv.first.c_str(); *k; ++k)
+            name += (std::isalnum((unsigned char)*k) || *k == '_') ? *k : '_';
+        if (metrics_name_reserved(name)) continue;
+
+        snprintf(line, sizeof(line), "%.6g", v);
+        out += "# TYPE infoclock_" + name + " gauge\n"
+               "infoclock_" + name + " " + line + "\n";
+    }
+
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "text/plain; version=0.0.4; charset=utf-8", out.c_str());
+}
+
 // ── /frame (diagnostic: what is on the matrix right now) ─────────────────────
 // Reads the LMDS framebuffer via getPixel() — RAM only, no SPI traffic — so it
 // is safe to call without holding the display. Plain-text ASCII art, one char
@@ -601,6 +703,7 @@ void web_server_task(void* pvParameters)
     server.on("/log/entries", HTTP_GET,  handle_log_entries);
     server.on("/api/status",  HTTP_GET, handle_api_status);
     server.on("/api/runtime", HTTP_GET, handle_api_runtime);
+    server.on("/metrics",     HTTP_GET, handle_metrics);
     server.on("/frame",       HTTP_GET, handle_frame);
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
