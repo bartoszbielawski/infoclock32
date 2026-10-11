@@ -176,6 +176,17 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
         ",\"mode\":\"text\""
         ",\"min\":0"
         ",\"max\":128");
+    // Always-visible brightness slider: the light's slider hides in compact
+    // HA views, this number entity renders inline on device pages and
+    // dashboards. Shares the command/state topics with the light.
+    add("number", "brightness", "Brightness",
+        "\"command_topic\":\"" + clientId + "/brightness\""
+        ",\"state_topic\":\"" + pub("display_brightness") + "\""
+        ",\"min\":0"
+        ",\"max\":15"
+        ",\"step\":1"
+        ",\"mode\":\"slider\""
+        ",\"icon\":\"mdi:brightness-6\"");
     add("button", "reboot", "Reboot",
         "\"command_topic\":\"" + clientId + "/reboot\""
         ",\"device_class\":\"restart\"");

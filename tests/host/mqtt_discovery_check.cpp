@@ -29,7 +29,7 @@ int main()
     DeviceMeta meta{"myclock", "AABBCCDDEEFF", "ESP32-C3", "v1.0"};
     auto msgs = build_discovery_messages(clientId, meta);
 
-    CHECK(msgs.size() == 13, "13 discovery configs");
+    CHECK(msgs.size() == 14, "14 discovery configs");
 
     // Common block on every entity: availability, device card, unique_id prefix.
     bool allHaveCommon = true;
@@ -85,6 +85,17 @@ int main()
     CHECK(s != nullptr && s->payload.find("\"state_on\":\"on\"") != std::string::npos &&
           s->payload.find("\"state_topic\":\"infoclock32/publish/display_power\"") != std::string::npos,
           "power switch reads published state");
+
+    // Number control: always-visible brightness slider bound to the light's
+    // command/state topics.
+    const DiscoveryMessage* n = find(msgs, "homeassistant/number/infoclock32_brightness/config");
+    CHECK(n != nullptr &&
+          n->payload.find("\"command_topic\":\"infoclock32/brightness\"") != std::string::npos &&
+          n->payload.find("\"state_topic\":\"infoclock32/publish/display_brightness\"") != std::string::npos &&
+          n->payload.find("\"min\":0") != std::string::npos &&
+          n->payload.find("\"max\":15") != std::string::npos &&
+          n->payload.find("\"step\":1") != std::string::npos,
+          "brightness number control targets /brightness, 0-15");
 
     // Uptime sensor is numeric, not the formatted "2d 4h…" string.
     CHECK(find(msgs, "homeassistant/sensor/infoclock32_uptime_s/config") != nullptr,
