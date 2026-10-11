@@ -125,17 +125,20 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
         "\"state_topic\":\"" + pub("heap") + "\""
         ",\"unit_of_measurement\":\"B\""
         ",\"state_class\":\"measurement\""
-        ",\"icon\":\"mdi:memory\"");
+        ",\"icon\":\"mdi:memory\""
+        ",\"entity_category\":\"diagnostic\"");
     add("sensor", "rssi", "WiFi signal",
         "\"state_topic\":\"" + pub("rssi") + "\""
         ",\"device_class\":\"signal_strength\""
         ",\"unit_of_measurement\":\"dBm\""
-        ",\"state_class\":\"measurement\"");
+        ",\"state_class\":\"measurement\""
+        ",\"entity_category\":\"diagnostic\"");
     add("sensor", "uptime_s", "Uptime",
         "\"state_topic\":\"" + pub("uptime_s") + "\""
         ",\"unit_of_measurement\":\"s\""
         ",\"state_class\":\"total_increasing\""
-        ",\"icon\":\"mdi:timer-outline\"");
+        ",\"icon\":\"mdi:timer-outline\""
+        ",\"entity_category\":\"diagnostic\"");
     // Standalone brightness sensor: the display light entity hides its
     // brightness attribute while off (e.g. night mode), this one always
     // reports. 0-15, matching the MAX7219 intensity scale.

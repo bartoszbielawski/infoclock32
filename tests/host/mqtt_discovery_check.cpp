@@ -102,6 +102,17 @@ int main()
     const DiscoveryMessage* ssid = find(msgs, "homeassistant/sensor/infoclock32_ssid/config");
     CHECK(ssid != nullptr && ssid->payload.find("\"state_topic\":\"infoclock32/publish/ssid\"") != std::string::npos,
           "ssid sensor exists");
+
+    // Health/telemetry sensors are diagnostics, keeping the main entity list clean.
+    auto isDiagnostic = [&msgs](const char* topic) {
+        const DiscoveryMessage* m = find(msgs, topic);
+        return m && m->payload.find("\"entity_category\":\"diagnostic\"") != std::string::npos;
+    };
+    CHECK(isDiagnostic("homeassistant/sensor/infoclock32_heap/config"), "heap is diagnostic");
+    CHECK(isDiagnostic("homeassistant/sensor/infoclock32_rssi/config"), "rssi is diagnostic");
+    CHECK(isDiagnostic("homeassistant/sensor/infoclock32_uptime_s/config"), "uptime_s is diagnostic");
+    CHECK(isDiagnostic("homeassistant/sensor/infoclock32_ip/config"), "ip is diagnostic");
+    CHECK(isDiagnostic("homeassistant/sensor/infoclock32_ssid/config"), "ssid is diagnostic");
     // Weather is deliberately absent: the device mirrors only its own
     // telemetry; a weather log is OpenWeatherMap's job.
     CHECK(find(msgs, "homeassistant/sensor/infoclock32_weather_desc/config") == nullptr,
