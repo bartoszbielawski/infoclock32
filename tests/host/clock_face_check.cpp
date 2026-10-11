@@ -45,11 +45,12 @@ int main()
         for (int row = 0; row < 8; row++)
             CHECK(kThickDigits[digit][row] != 0, "thick[%d][%d] empty", digit, row);
     expect_row(0, 0, 0x1E);
-    expect_row(0, 1, 0x3F);
-    expect_row(1, 1, 0x1C);
+    expect_row(0, 1, 0x33);
+    expect_row(1, 1, 0x3C);
+    expect_row(6, 1, 0x30);
     expect_row(8, 3, 0x1E);
     expect_row(8, 4, 0x33);
-    expect_row(2, 7, 0x3E);
+    expect_row(2, 7, 0x3F);
     expect_row(5, 0, 0x3F);
     expect_row(7, 0, 0x3F);
 
@@ -63,8 +64,7 @@ int main()
         CHECK(d.get(18, 0) && d.get(21, 0), "2: bowl top");
         CHECK(d.get(22, 1) && d.get(22, 2), "2: right side");
         CHECK(d.get(18, 5) && d.get(19, 5) && d.get(17, 6), "2: diagonal");
-        CHECK(d.get(17, 7) && d.get(21, 7), "2: foot, square left join");
-        CHECK(!d.get(22, 7), "2: foot right tip rounded");
+        CHECK(d.get(17, 7) && d.get(22, 7), "2: full-width foot");
         CHECK(!d.get(17, 2), "2: left side dark below bowl");
 
         // '1' at x 24-29: plain 2 px stem rows 0-7, left flag at row 1
@@ -105,7 +105,7 @@ int main()
         drawThickTime(d, 0, 0, false, 17, 0);
         CHECK(!d.get(31, 2) && !d.get(32, 6), "colon off");
         int zeros = litCount(d);
-        CHECK(zeros == 4 * 36, "four zeros = 144 px, got %d", zeros);
+        CHECK(zeros == 4 * 32, "four zeros = 128 px, got %d", zeros);
     }
 
     // Thick face fits the display: 30 px + centered offset leaves margins
