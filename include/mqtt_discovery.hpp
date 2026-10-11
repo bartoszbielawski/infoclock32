@@ -190,6 +190,14 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
     add("button", "reboot", "Reboot",
         "\"command_topic\":\"" + clientId + "/reboot\""
         ",\"device_class\":\"restart\"");
+    add("button", "flash", "Flash display",
+        "\"command_topic\":\"" + clientId + "/flash\""
+        ",\"payload_press\":\"full\""
+        ",\"icon\":\"mdi:flash\"");
+    add("button", "flash_negative", "Flash (negative)",
+        "\"command_topic\":\"" + clientId + "/flash\""
+        ",\"payload_press\":\"neg\""
+        ",\"icon\":\"mdi:flash-outline\"");
 
     return msgs;
 }

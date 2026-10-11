@@ -37,6 +37,8 @@ static QueueHandle_t pushQueue;
 
 // Set in the callback, acted on in the main loop.
 static bool    pendingReboot     = false;
+static bool    pendingFlash      = false;
+static bool    pendingFlashFull  = true;   // full = strobe lit matrix; false = negative
 
 static std::string mqtt_client_id()
 {
@@ -140,6 +142,17 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
             if (xQueueSend(pushQueue, &copy, 0) != pdTRUE)
                 free(copy);
         }
+    }
+    else if (topicStr.endsWith("/flash"))
+    {
+        // Payload picks the mode: "neg"/"negative" strobes the current
+        // screen against its blank inverse, anything else takes over the
+        // display and strobes the whole matrix lit. Repeats coalesce.
+        String p(buf);
+        p.trim();
+        p.toLowerCase();
+        pendingFlashFull = !(p == "neg" || p == "negative");
+        pendingFlash = true;
     }
     else if (topicStr.endsWith("/looped"))
     {
@@ -354,6 +367,74 @@ void mqtt_task(void *parameter)
                 logPrintf("MQT", "push queue full, message dropped");
                 free(pushMsg);
                 pumpLoop(50);
+            }
+        }
+
+        // Attention strobe, two modes (~2.4 s, 8 blinks at 150 ms):
+        // - full: take over the display and strobe the whole matrix lit
+        //   against blank.
+        // - negative: strobe the current frame against its pixel-inverted
+        //   copy — a photographic-negative flicker.
+        // Both force the display on for the strobe, restore the frame and
+        // the configured power state afterwards, and work at any brightness
+        // (they toggle enable/fill, not intensity).
+        if (pendingFlash)
+        {
+            pendingFlash = false;
+            bool fullMode = pendingFlashFull;
+            logPrintf("MQT", "display flash %s triggered", fullMode ? "full" : "negative");
+            // Fast lane like a push: an attention call should not queue
+            // behind the whole normal lane.
+            if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
+            {
+                bool powerOn = RuntimeStore::getInstance().get("display_power", "on") == "on";
+                const int w = display->getSegments() * 8;
+
+                // Save the frame — full redraws over it, negative inverts it.
+                bool saved[64][8];
+                for (int x = 0; x < w; x++)
+                    for (int y = 0; y < 8; y++)
+                        saved[x][y] = display->getPixel(x, y);
+
+                if (fullMode)
+                {
+                    for (int i = 0; i < 16; i++)
+                    {
+                        display->requestEnabled(true);
+                        if (i % 2 == 0)
+                            for (int x = 0; x < w; x++) display->setColumn(x, 0xFF);
+                        else
+                            display->clear();
+                        display->display();
+                        vTaskDelay(150 / portTICK_PERIOD_MS);
+                    }
+                }
+                else
+                {
+                    // Starts with the inverted frame for an immediate jump.
+                    for (int i = 0; i < 16; i++)
+                    {
+                        display->requestEnabled(true);
+                        for (int x = 0; x < w; x++)
+                            for (int y = 0; y < 8; y++)
+                                display->setPixel(x, y, (i % 2 == 0) ? !saved[x][y]
+                                                                     : saved[x][y]);
+                        display->display();
+                        vTaskDelay(150 / portTICK_PERIOD_MS);
+                    }
+                }
+
+                // Restore exactly what was on screen before the strobe.
+                for (int x = 0; x < w; x++)
+                    for (int y = 0; y < 8; y++)
+                        display->setPixel(x, y, saved[x][y]);
+                display->requestEnabled(powerOn);
+                display->display();
+                logPrintf("MQT", "display flash done");
+            }
+            else
+            {
+                logPrintf("MQT", "flash skipped - display busy");
             }
         }
 

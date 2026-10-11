@@ -288,6 +288,7 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 | `…/power` | `on`\|`off` | Blank / unblank the display (the clock keeps running underneath; not persisted) |
 | `…/config` | `key=value` | Set DataStore key (keys containing `password`/`secret` are blocked) |
 | `…/reboot` | — | Restart device |
+| `…/flash` | `full` (default)\|`neg` | Attention strobe for ~2.4 s (8 blinks): `full` takes over the display strobing the whole matrix lit↔blank; `neg` strobes the current frame against its pixel-inverted negative. Both force the display on for the strobe, then restore the previous frame and the power state. Works at any brightness |
 | `…/request` | key name | Reply to `…/publish/<name>`; looks up DeviceStore (system values like `ip`, `heap`, `uptime`, `ssid`, `rssi`, `mac`, `version`, …), then RuntimeStore (sensor readings, `weather_*`, `wdt_culprit`, `display_brightness`), then DataStore config keys. Keys are case-sensitive; any key containing `assword` is refused |
 | `…/status` | — | Device publishes heartbeat JSON (`ip`, `heap`, `uptime`, `ssid`) here every 60 s |
 
@@ -304,12 +305,17 @@ With `enable_mqtt_discovery=1` (default), the device publishes retained discover
 | Entity | Type | Notes |
 |--------|------|-------|
 | Temperature / Humidity / Pressure | sensors | `temp_c` (strips `°C`), `temp_rh`, `temp_hpa` |
-| Weather | sensor | `weather_desc` |
-| Free heap / WiFi signal / Uptime | sensors | DeviceStore values + `uptime_s` (seconds) |
+| Free heap / WiFi signal / Uptime | sensors (diagnostic) | DeviceStore values + `uptime_s` (seconds) |
+| IP address / WiFi network | sensors (diagnostic) | refreshed by the heartbeat, survives DHCP changes |
 | Display | light | slider → `…/brightness` (0–15), on/off → `…/power`; states from `…/publish/display_*` |
+| Brightness | number | always-visible 0–15 slider → `…/brightness` (visible even when compact views hide the light's slider) |
 | Display power | switch | same `…/power` topic, plain on/off |
 | Scroll message | text | text change → `…/push` (max 128 chars) |
 | Reboot | button | `…/reboot` |
+| Flash display | button | `…/flash` (`full`) — whole-matrix strobe, then the previous frame is restored |
+| Flash (negative) | button | `…/flash` (`neg`) — the current frame flickers against its pixel-inverted negative |
+
+Weather is deliberately not mirrored over MQTT — if you want weather in HA, use OpenWeatherMap's own integration directly.
 
 State values are republished (retained) to `…/publish/<key>` on connect and refreshed by the 60 s heartbeat — the same topics `…/request` answers on, so they also work as generic MQTT sensors for other automation systems. To verify: `mosquitto_sub -v -t 'homeassistant/+/infoclock32_#/config'`.
 

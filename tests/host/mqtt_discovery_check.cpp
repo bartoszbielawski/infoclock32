@@ -29,7 +29,7 @@ int main()
     DeviceMeta meta{"myclock", "AABBCCDDEEFF", "ESP32-C3", "v1.0"};
     auto msgs = build_discovery_messages(clientId, meta);
 
-    CHECK(msgs.size() == 14, "14 discovery configs");
+    CHECK(msgs.size() == 16, "16 discovery configs");
 
     // Common block on every entity: availability, device card, unique_id prefix.
     bool allHaveCommon = true;
@@ -77,6 +77,13 @@ int main()
     const DiscoveryMessage* b = find(msgs, "homeassistant/button/infoclock32_reboot/config");
     CHECK(b != nullptr && b->payload.find("\"command_topic\":\"infoclock32/reboot\"") != std::string::npos,
           "reboot button targets /reboot");
+    const DiscoveryMessage* fl = find(msgs, "homeassistant/button/infoclock32_flash/config");
+    CHECK(fl != nullptr && fl->payload.find("\"command_topic\":\"infoclock32/flash\"") != std::string::npos &&
+          fl->payload.find("\"payload_press\":\"full\"") != std::string::npos,
+          "flash button targets /flash with full mode");
+    const DiscoveryMessage* fln = find(msgs, "homeassistant/button/infoclock32_flash_negative/config");
+    CHECK(fln != nullptr && fln->payload.find("\"payload_press\":\"neg\"") != std::string::npos,
+          "negative flash button targets /flash with neg payload");
     const DiscoveryMessage* x = find(msgs, "homeassistant/text/infoclock32_push/config");
     CHECK(x != nullptr && x->payload.find("\"command_topic\":\"infoclock32/push\"") != std::string::npos &&
           x->payload.find("\"max\":128") != std::string::npos,
