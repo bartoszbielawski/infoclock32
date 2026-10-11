@@ -29,7 +29,7 @@ int main()
     DeviceMeta meta{"myclock", "AABBCCDDEEFF", "ESP32-C3", "v1.0"};
     auto msgs = build_discovery_messages(clientId, meta);
 
-    CHECK(msgs.size() == 11, "11 discovery configs");
+    CHECK(msgs.size() == 10, "10 discovery configs");
 
     // Common block on every entity: availability, device card, unique_id prefix.
     bool allHaveCommon = true;
@@ -89,8 +89,10 @@ int main()
     // Uptime sensor is numeric, not the formatted "2d 4h…" string.
     CHECK(find(msgs, "homeassistant/sensor/infoclock32_uptime_s/config") != nullptr,
           "uptime_s sensor exists");
-    CHECK(find(msgs, "homeassistant/sensor/infoclock32_weather_desc/config") != nullptr,
-          "weather_desc sensor exists");
+    // Weather is deliberately absent: the device mirrors only its own
+    // telemetry; a weather log is OpenWeatherMap's job.
+    CHECK(find(msgs, "homeassistant/sensor/infoclock32_weather_desc/config") == nullptr,
+          "no weather_desc sensor");
 
     // JSON escaping of quotes, backslashes and control chars.
     CHECK(json_escape("a\"b\\c\td") == "a\\\"b\\\\c\\u0009d", "json_escape quotes/backslash/tab");

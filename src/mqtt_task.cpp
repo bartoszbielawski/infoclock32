@@ -90,7 +90,8 @@ static void publish_ha_states(const std::string& clientId)
     publish_state(clientId, "temp_c",   rs.get("temp_c"));
     publish_state(clientId, "temp_rh",  rs.get("temp_rh"));
     publish_state(clientId, "temp_hpa", rs.get("temp_hpa"));
-    publish_state(clientId, "weather_desc", rs.get("weather_desc"));
+    // weather_desc is deliberately not published: the device only mirrors
+    // its own sensor/telemetry; a weather log is OpenWeatherMap's job.
     publish_state(clientId, "heap",     dst.get("heap"));
     publish_state(clientId, "rssi",     dst.get("rssi"));
     publish_state(clientId, "display_power", rs.get("display_power", "on"));
