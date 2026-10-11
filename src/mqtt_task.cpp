@@ -21,6 +21,15 @@
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 
+// Discovery configs are several hundred bytes of JSON each; PubSubClient's
+// default 256-byte buffer makes those publishes fail silently. 1 KB covers
+// the largest config with headroom. Applied once before any connection.
+static void enlarge_mqtt_buffer()
+{
+    static bool done = false;
+    if (!done) { done = true; mqttClient.setBufferSize(1024); }
+}
+
 bool mqtt_is_connected() { return mqttClient.connected(); }
 
 static std::string loopedMessage;
@@ -227,6 +236,8 @@ static bool reconnect()
         logPrintf("MQT", "no mqtt_server configured");
         return false;
     }
+
+    enlarge_mqtt_buffer();
 
     std::string clientId = ds.get_value("mqtt_client_id", "infoclock32");
     std::string user     = ds.get_value("mqtt_user", "");
