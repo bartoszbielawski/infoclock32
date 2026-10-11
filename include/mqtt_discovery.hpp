@@ -136,6 +136,23 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
         ",\"unit_of_measurement\":\"s\""
         ",\"state_class\":\"total_increasing\""
         ",\"icon\":\"mdi:timer-outline\"");
+    // Standalone brightness sensor: the display light entity hides its
+    // brightness attribute while off (e.g. night mode), this one always
+    // reports. 0-15, matching the MAX7219 intensity scale.
+    add("sensor", "display_brightness", "Display brightness",
+        "\"state_topic\":\"" + pub("display_brightness") + "\""
+        ",\"unit_of_measurement\":\"\""
+        ",\"state_class\":\"measurement\""
+        ",\"icon\":\"mdi:brightness-6\"");
+    // Network diagnostics — informational text, no automations expected.
+    add("sensor", "ip", "IP address",
+        "\"state_topic\":\"" + pub("ip") + "\""
+        ",\"icon\":\"mdi:ip-outline\""
+        ",\"entity_category\":\"diagnostic\"");
+    add("sensor", "ssid", "WiFi network",
+        "\"state_topic\":\"" + pub("ssid") + "\""
+        ",\"icon\":\"mdi:wifi\""
+        ",\"entity_category\":\"diagnostic\"");
     add("light", "display", "Display",
         "\"state_topic\":\"" + pub("display_power") + "\""
         ",\"payload_on\":\"on\""

@@ -94,6 +94,8 @@ static void publish_ha_states(const std::string& clientId)
     // its own sensor/telemetry; a weather log is OpenWeatherMap's job.
     publish_state(clientId, "heap",     dst.get("heap"));
     publish_state(clientId, "rssi",     dst.get("rssi"));
+    publish_state(clientId, "ip",       dst.get("ip"));
+    publish_state(clientId, "ssid",     dst.get("ssid"));
     publish_state(clientId, "display_power", rs.get("display_power", "on"));
     publish_state(clientId, "display_brightness", std::to_string(current_display_brightness()));
 

@@ -29,7 +29,7 @@ int main()
     DeviceMeta meta{"myclock", "AABBCCDDEEFF", "ESP32-C3", "v1.0"};
     auto msgs = build_discovery_messages(clientId, meta);
 
-    CHECK(msgs.size() == 10, "10 discovery configs");
+    CHECK(msgs.size() == 13, "13 discovery configs");
 
     // Common block on every entity: availability, device card, unique_id prefix.
     bool allHaveCommon = true;
@@ -89,6 +89,19 @@ int main()
     // Uptime sensor is numeric, not the formatted "2d 4h…" string.
     CHECK(find(msgs, "homeassistant/sensor/infoclock32_uptime_s/config") != nullptr,
           "uptime_s sensor exists");
+
+    // Brightness sensor mirrors the light's brightness even when off.
+    const DiscoveryMessage* br = find(msgs, "homeassistant/sensor/infoclock32_display_brightness/config");
+    CHECK(br != nullptr && br->payload.find("\"state_topic\":\"infoclock32/publish/display_brightness\"") != std::string::npos,
+          "display_brightness sensor exists");
+    // Network diagnostics.
+    const DiscoveryMessage* ip = find(msgs, "homeassistant/sensor/infoclock32_ip/config");
+    CHECK(ip != nullptr && ip->payload.find("\"state_topic\":\"infoclock32/publish/ip\"") != std::string::npos &&
+          ip->payload.find("\"entity_category\":\"diagnostic\"") != std::string::npos,
+          "ip sensor exists, diagnostic");
+    const DiscoveryMessage* ssid = find(msgs, "homeassistant/sensor/infoclock32_ssid/config");
+    CHECK(ssid != nullptr && ssid->payload.find("\"state_topic\":\"infoclock32/publish/ssid\"") != std::string::npos,
+          "ssid sensor exists");
     // Weather is deliberately absent: the device mirrors only its own
     // telemetry; a weather log is OpenWeatherMap's job.
     CHECK(find(msgs, "homeassistant/sensor/infoclock32_weather_desc/config") == nullptr,
