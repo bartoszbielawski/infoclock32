@@ -121,6 +121,11 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
         ",\"device_class\":\"pressure\""
         ",\"unit_of_measurement\":\"hPa\""
         ",\"state_class\":\"measurement\"");
+    add("sensor", "temp_co2", "CO2",
+        "\"state_topic\":\"" + pub("temp_co2") + "\""
+        ",\"device_class\":\"co2\""
+        ",\"unit_of_measurement\":\"ppm\""
+        ",\"state_class\":\"measurement\"");
     add("sensor", "heap", "Free heap",
         "\"state_topic\":\"" + pub("heap") + "\""
         ",\"unit_of_measurement\":\"B\""

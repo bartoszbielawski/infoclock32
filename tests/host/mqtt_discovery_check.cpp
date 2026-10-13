@@ -29,7 +29,7 @@ int main()
     DeviceMeta meta{"myclock", "AABBCCDDEEFF", "ESP32-C3", "v1.0"};
     auto msgs = build_discovery_messages(clientId, meta);
 
-    CHECK(msgs.size() == 16, "16 discovery configs");
+    CHECK(msgs.size() == 17, "17 discovery configs");
 
     // Common block on every entity: availability, device card, unique_id prefix.
     bool allHaveCommon = true;
@@ -60,6 +60,15 @@ int main()
               t->payload.find("\"state_topic\":\"infoclock32/publish/temp_c\"") != std::string::npos &&
               t->payload.find("\"device_class\":\"temperature\"") != std::string::npos,
               "temp_c strips unit, reads publish/temp_c");
+
+    // CO2: ppm, co2 device class.
+    const DiscoveryMessage* co2 = find(msgs, "homeassistant/sensor/infoclock32_temp_co2/config");
+    CHECK(co2 != nullptr, "temp_co2 sensor topic");
+    if (co2)
+        CHECK(co2->payload.find("\"state_topic\":\"infoclock32/publish/temp_co2\"") != std::string::npos &&
+              co2->payload.find("\"device_class\":\"co2\"") != std::string::npos &&
+              co2->payload.find("\"unit_of_measurement\":\"ppm\"") != std::string::npos,
+              "temp_co2 reads publish/temp_co2, ppm");
 
     // Light: power for on/off, brightness 0-15 for the slider.
     const DiscoveryMessage* l = find(msgs, "homeassistant/light/infoclock32_display/config");

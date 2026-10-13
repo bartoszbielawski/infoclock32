@@ -124,6 +124,7 @@ void handle_actions()
             addItem(server.hasArg("show_temp"),     "temp");
             addItem(server.hasArg("show_humidity"), "humidity");
             addItem(server.hasArg("show_pressure"), "pressure");
+            addItem(server.hasArg("show_co2"),      "co2");
 
             int dec = server.arg("temp_decimals").toInt();
             if (dec != 0) dec = 1;
@@ -316,12 +317,12 @@ void handle_actions()
                                "<button class='btn btn-primary' type='submit'>Save</button>"
                                "</form></div>"));
 
-    // Temperature sensor display
+    // Sensor display
     server.sendContent_P(PSTR("<div class='card'>"
                                "<h3 style='font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:12px'>"
                                "&#127777; Sensor display</h3>"
                                "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
-                               "Choose which temperature-sensor readings scroll on the matrix. "
+                               "Choose which sensor readings scroll on the matrix. "
                                "Polling and the {temp_c} / {temp_rh} / {temp_hpa} placeholders "
                                "keep working regardless &mdash; no reboot needed.</p>"
                                "<form method='POST'>"
@@ -336,6 +337,9 @@ void handle_actions()
                                "<label><input type='checkbox' name='show_pressure'"));
     if (curTempDisplay.indexOf("pressure") >= 0) server.sendContent_P(PSTR(" checked"));
     server.sendContent_P(PSTR("> Pressure (hPa, with trend arrow)</label>"
+                               "<label><input type='checkbox' name='show_co2'"));
+    if (curTempDisplay.indexOf("co2") >= 0) server.sendContent_P(PSTR(" checked"));
+    server.sendContent_P(PSTR("> CO2 (ppm, only with a CO2 sensor)</label>"
                                "</div>"
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
                                "<label style='font-size:.9rem'>Decimals</label>"

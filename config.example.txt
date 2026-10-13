@@ -125,6 +125,8 @@ enable_mqtt_discovery=1
 #   aht10    Ã¢â‚¬â€ AHT10 via I2C, fixed address 0x38 (temp + humidity)
 #   aht20    Ã¢â‚¬â€ AHT20 via I2C, fixed address 0x38 (temp + humidity)
 #   ds18b20  Ã¢â‚¬â€ DS18B20 via 1-Wire (temp only)
+#   scd4x    Ã¢â‚¬â€ Sensirion SCD4x/SCD40/SCD30 via I2C, fixed address 0x62
+#              (CO2 + temp + humidity)
 #   stub     Ã¢â‚¬â€ disabled / no hardware (default)
 temp_sensor=bme280
 
@@ -145,7 +147,7 @@ bme280_addr=118
 temp_interval=30
 
 # What scrolls on the display: ordered comma list of temp / humidity /
-# pressure. Empty = nothing scrolls (placeholders still update).
+# pressure / co2. Empty = nothing scrolls (placeholders still update).
 # Default: temp,pressure
 #temp_display=temp,pressure
 

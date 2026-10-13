@@ -181,7 +181,7 @@ Key config keys:
 | `temp_sensor` | `stub` | Sensor driver (see below) |
 | `temp_interval` | `300` | Sensor poll interval in seconds (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
-| `temp_display` | `temp,pressure` | Ordered comma list of what scrolls: `temp`, `humidity`, `pressure`; empty = never scroll (placeholders still update) |
+| `temp_display` | `temp,pressure` | Ordered comma list of what scrolls: `temp`, `humidity`, `pressure`, `co2`; empty = never scroll (placeholders still update) |
 | `temp_decimals` | `1` | Decimal places for the temperature readout (0 or 1); also applies to `{temp_c}` |
 | `temp_show_interval` | `0` | Seconds between scrolls, decoupled from `temp_interval`; `0` = after every poll wake |
 | `temp_hold_s` | `0` | Seconds each reading stays centered on screen (0 = quick ~2 s flash); wider readouts (pressure with trend icon) scroll past first, then park |
@@ -214,15 +214,16 @@ Set `temp_sensor` in config to one of the supported drivers:
 | `sht31` | SHT31 | I2C | `sht31_addr` (default `0x44`) |
 | `aht10` / `aht20` | AHT10 / AHT20 | I2C 0x38 (fixed) | — |
 | `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
+| `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
 | `stub` (default) | None | — | — |
 
-Sensor readings are published to RuntimeStore and visible on the `/status` page: `temp_c` (string including `°C`, e.g. `22.5°C`, formatted per `temp_decimals`), `temp_hpa` (integer hPa), `temp_rh` (%). Use them in custom messages as `{temp_c}` placeholders.
+Sensor readings are published to RuntimeStore and visible on the `/status` page: `temp_c` (string including `°C`, e.g. `22.5°C`, formatted per `temp_decimals`), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders.
 
-**What scrolls, and how** — `temp_display` is an ordered comma list of `temp`, `humidity`, `pressure` (e.g. `humidity,temp` shows humidity first). Measurements the sensor cannot provide are skipped with a one-time log line; an empty list disables scrolling entirely while placeholders keep updating. `temp_decimals` (`0`/`1`) sets the temperature precision on the display. `temp_show_interval` decouples display from polling: `0` scrolls after every poll wake (~30 s), otherwise the readouts appear at most once per that many seconds — useful to poll fast (pressure trend) but scroll rarely. `temp_hold_s` keeps each reading parked on the matrix instead of flashing for ~2 s. All four keys are re-read live, no reboot needed; the `/actions` page has a Sensor display card for them.
+**What scrolls, and how** — `temp_display` is an ordered comma list of `temp`, `humidity`, `pressure`, `co2` (e.g. `humidity,temp` shows humidity first). Measurements the sensor cannot provide are skipped with a one-time log line; an empty list disables scrolling entirely while placeholders keep updating. `temp_decimals` (`0`/`1`) sets the temperature precision on the display. `temp_show_interval` decouples display from polling: `0` scrolls after every poll wake (~30 s), otherwise the readouts appear at most once per that many seconds — useful to poll fast (pressure trend) but scroll rarely. `temp_hold_s` keeps each reading parked on the matrix instead of flashing for ~2 s. All four keys are re-read live, no reboot needed; the `/actions` page has a Sensor display card for them.
 
 Sensors with pressure also get a **barometric trend**: the pressure readout on the display is prefixed with a trend arrow glyph (single/double up or down arrows, or → for steady), and RuntimeStore publishes `pressure_trend` (`rising fast`/`rising`/`steady`/`falling`/`falling fast`) and `pressure_rate` (hPa/hour). The trend is a least-squares slope over recent readings — it needs about 30 minutes of samples after boot before the arrow appears.
 
-To add a new sensor, implement the `TempSensor` interface in a new header and add an entry to `createTempSensor()` in `include/temp_sensor_factory.hpp`.
+To add a new sensor, implement the `Sensor` interface in a new header and add an entry to `createSensor()` in `include/sensor_factory.hpp`.
 
 ## Custom messages
 
@@ -337,8 +338,8 @@ Log tags: `SYS`, `DISP`, `TMP`, `WTH`, `LHC`, `MSG`, `NGT`, `SUN`, `LIFE`, `RST`
 infoclock32/
 ├── include/
 │   ├── pins.hpp                  # Board-specific pin definitions
-│   ├── temp_sensor.hpp           # TempSensor abstract base + StubTempSensor
-│   ├── temp_sensor_factory.hpp   # createTempSensor() — picks driver from config
+│   ├── sensor.hpp                # Sensor abstract base (temp/humidity/pressure/CO2) + StubSensor
+│   ├── sensor_factory.hpp        # createSensor() — picks driver from config
 │   ├── *_sensor.hpp              # Concrete sensor implementations
 │   ├── resource_manager.hpp      # Display arbiter (priority lane, RAII guard, force handover)
 │   ├── task_registry.hpp         # Self-registering task list (watchdog + /status)
@@ -367,7 +368,7 @@ infoclock32/
 │   ├── mqtt_task.cpp             # MQTT client
 │   ├── lhc_status_task.cpp       # LHC beam status polling
 │   ├── weather_forecast_task.cpp # OpenWeatherMap forecast
-│   ├── temp_sensor_task.cpp      # Sensor polling + RuntimeStore publishing
+│   ├── sensor_task.cpp           # Sensor polling + RuntimeStore publishing
 │   ├── custom_message_task.cpp   # Scheduled messages
 │   ├── night_mode_task.cpp       # Auto-dim on schedule
 │   ├── sun_times_task.cpp        # Sunrise/sunset widget

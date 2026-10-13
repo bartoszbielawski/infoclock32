@@ -10,7 +10,7 @@
 #include <pressure_trend.hpp>
 #include <weather_icons.hpp>
 
-// Display formatting for the temperature sensor task: parse the temp_display
+// Display formatting for the sensor task: parse the temp_display
 // config list and turn measurements into LED-matrix text. Pure C++ — no
 // Arduino/FreeRTOS — so it can be unit tested on the host
 // (see tests/host/temp_display_check.cpp).
@@ -20,6 +20,7 @@ enum TempDisplayItem
     TDI_TEMP = 0,
     TDI_HUMIDITY,
     TDI_PRESSURE,
+    TDI_CO2,
     TDI_COUNT
 };
 
@@ -60,13 +61,21 @@ inline std::string formatPressureLine(float hpa)
     return buf;
 }
 
+inline std::string formatCo2Line(int ppm)
+{
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%dppmCO2", ppm);
+    return buf;
+}
+
 // True when the sensor described by its capability flags can provide the item.
-inline bool itemAvailable(TempDisplayItem item, bool hasHumidity, bool hasPressure)
+inline bool itemAvailable(TempDisplayItem item, bool hasHumidity, bool hasPressure, bool hasCo2)
 {
     switch (item)
     {
         case TDI_HUMIDITY: return hasHumidity;
         case TDI_PRESSURE: return hasPressure;
+        case TDI_CO2:      return hasCo2;
         default:           return true;   // temperature is always there
     }
 }
@@ -74,7 +83,7 @@ inline bool itemAvailable(TempDisplayItem item, bool hasHumidity, bool hasPressu
 // Canonical name of a single item.
 inline const char* tempDisplayName(TempDisplayItem item)
 {
-    static const char* names[TDI_COUNT] = { "temp", "humidity", "pressure" };
+    static const char* names[TDI_COUNT] = { "temp", "humidity", "pressure", "co2" };
     return names[item];
 }
 
@@ -114,6 +123,7 @@ inline std::vector<TempDisplayItem> parseDisplayList(const std::string& list)
         if (tok == "temp" || tok == "temperature")      item = TDI_TEMP;
         else if (tok == "humidity" || tok == "rh")      item = TDI_HUMIDITY;
         else if (tok == "pressure" || tok == "hpa")     item = TDI_PRESSURE;
+        else if (tok == "co2")                          item = TDI_CO2;
         else                                            known = false;
 
         if (known)

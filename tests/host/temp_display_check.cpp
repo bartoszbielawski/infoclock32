@@ -24,6 +24,7 @@ int main()
 {
     // List parsing: default, order, aliases, case/whitespace
     expect_list(kTempDisplayDefault, "temp,pressure");
+    expect_list("CO2", "co2");
     expect_list("", "");
     expect_list("   ", "");
     expect_list("TEMP", "temp");
@@ -41,11 +42,13 @@ int main()
     expect_list("temp,,pressure,", "temp,pressure");
 
     // Availability gating
-    CHECK(itemAvailable(TDI_TEMP, false, false), "temp always available");
-    CHECK(!itemAvailable(TDI_HUMIDITY, false, true), "humidity needs hasHumidity");
-    CHECK(itemAvailable(TDI_HUMIDITY, true, false), "humidity ok");
-    CHECK(!itemAvailable(TDI_PRESSURE, true, false), "pressure needs hasPressure");
-    CHECK(itemAvailable(TDI_PRESSURE, false, true), "pressure ok");
+    CHECK(itemAvailable(TDI_TEMP, false, false, false), "temp always available");
+    CHECK(!itemAvailable(TDI_HUMIDITY, false, true, false), "humidity needs hasHumidity");
+    CHECK(itemAvailable(TDI_HUMIDITY, true, false, false), "humidity ok");
+    CHECK(!itemAvailable(TDI_PRESSURE, true, false, false), "pressure needs hasPressure");
+    CHECK(itemAvailable(TDI_PRESSURE, false, true, false), "pressure ok");
+    CHECK(!itemAvailable(TDI_CO2, true, true, false), "co2 needs hasCo2");
+    CHECK(itemAvailable(TDI_CO2, false, false, true), "co2 ok");
 
     // Temperature formatting (LED degree glyph)
     expect_line(formatTempLine(22.5f, 1), std::string("22.5\xF7" "C"), "temp 1 decimal");
@@ -62,11 +65,12 @@ int main()
         expect_line(buf, std::string("23\xC2\xB0" "C"), "runtime temp 0 decimals");
     }
 
-    // Humidity and pressure
+    // Humidity, pressure and CO2
     expect_line(formatHumidityLine(45.4f), "45%RH", "humidity int");
     expect_line(formatHumidityLine(45.6f), "46%RH", "humidity rounds");
     expect_line(formatPressureLine(1013.25f), "1013 hPa", "pressure int");
     expect_line(formatPressureLine(987.6f), "988 hPa", "pressure rounds");
+    expect_line(formatCo2Line(412), "412ppmCO2", "co2 int");
 
     // Round-trip: canonical string parses back to the same items
     {
