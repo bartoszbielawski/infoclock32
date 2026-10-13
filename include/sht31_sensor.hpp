@@ -4,7 +4,7 @@
 #include <sensor.hpp>
 
 // SHT30 / SHT31 / SHT35 I2C temperature + humidity sensor (Sensirion).
-// Config key: temp_sensor=sht31
+// Config key: sensors=sht31  (comma-separated list; see sensor_factory.hpp)
 // Address:    sht31_addr  (default 0x44; 0x45 if ADDR pin pulled high)
 //
 // Accuracy: ±0.3 °C, ±2 %RH.  No pull-ups needed on I2C lines (use 4.7 kΩ

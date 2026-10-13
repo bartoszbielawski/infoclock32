@@ -30,7 +30,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`), `timezone`, `clock_style` |
 | Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
-| Temperature sensor (multiple drivers) | `temp_sensor`, `temp_interval`, `temp_offset`, `temp_display`, `temp_decimals`, `temp_show_interval` |
+| Sensors (multiple drivers, round-robin) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
 | Night mode (auto-dim) | `night_start`, `night_end`, `night_brightness` |
 | MQTT integration (incl. Home Assistant auto-discovery) | `enable_mqtt`, `enable_mqtt_discovery`, `mqtt_server`, `mqtt_client_id`, … |
@@ -178,13 +178,15 @@ Key config keys:
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
-| `temp_sensor` | `stub` | Sensor driver (see below) |
-| `temp_interval` | `300` | Sensor poll interval in seconds (the shipped `data/config.txt` pins `30`) |
+| `sensors` | `stub` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
+| `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
-| `temp_display` | `temp,pressure` | Ordered comma list of what scrolls: `temp`, `humidity`, `pressure`, `co2`; empty = never scroll (placeholders still update) |
-| `temp_decimals` | `1` | Decimal places for the temperature readout (0 or 1); also applies to `{temp_c}` |
-| `temp_show_interval` | `0` | Seconds between scrolls, decoupled from `temp_interval`; `0` = after every poll wake |
-| `temp_hold_s` | `0` | Seconds each reading stays centered on screen (0 = quick ~2 s flash); wider readouts (pressure with trend icon) scroll past first, then park |
+| `humidity_offset` | `0` | Humidity correction in %RH added to readings |
+| `pressure_offset` | `0` | Pressure correction in hPa added to readings |
+| `co2_offset` | `0` | CO2 correction in ppm added to readings |
+| `sensor_display` | `temp,pressure` | Ordered comma list of what scrolls: `temp`, `humidity`, `pressure`, `co2`; empty = never scroll (placeholders still update) |
+| `sensor_readout_interval` | `0` | Seconds between scrolls, decoupled from `sensor_interval`; `0` = after every poll wake |
+| `sensor_hold_s` | `0` | Seconds each reading stays centered on screen (0 = quick ~2 s flash); wider readouts (pressure with trend icon) scroll past first, then park |
 | `msg_interval` | `60` | Custom message cycle interval (seconds) |
 | `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |
 | `sun_interval_min` | `30` | How often the sun line scrolls (minutes, 5–720) |
@@ -202,9 +204,9 @@ Key config keys:
 | `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
 | `enable_life` | `0` | Game of Life idle animation (off by default) |
 
-## Temperature sensor
+## Sensors
 
-Set `temp_sensor` in config to one of the supported drivers:
+Set `sensors` in config to a **comma-separated list** of supported drivers (max 4, duplicates removed). With several sensors they are polled **round-robin** — one sensor per `sensor_interval`, so the full round takes N×interval:
 
 | Value | Sensor | Interface | Extra keys |
 |-------|--------|-----------|------------|
@@ -217,13 +219,17 @@ Set `temp_sensor` in config to one of the supported drivers:
 | `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
 | `stub` (default) | None | — | — |
 
-Sensor readings are published to RuntimeStore and visible on the `/status` page: `temp_c` (string including `°C`, e.g. `22.5°C`, formatted per `temp_decimals`), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders.
+Examples: `sensors=bme280` (single) or `sensors=bme280,scd4x` (BME280 for temp/humidity/pressure, SCD4X for CO2, polled in turn).
 
-**What scrolls, and how** — `temp_display` is an ordered comma list of `temp`, `humidity`, `pressure`, `co2` (e.g. `humidity,temp` shows humidity first). Measurements the sensor cannot provide are skipped with a one-time log line; an empty list disables scrolling entirely while placeholders keep updating. `temp_decimals` (`0`/`1`) sets the temperature precision on the display. `temp_show_interval` decouples display from polling: `0` scrolls after every poll wake (~30 s), otherwise the readouts appear at most once per that many seconds — useful to poll fast (pressure trend) but scroll rarely. `temp_hold_s` keeps each reading parked on the matrix instead of flashing for ~2 s. All four keys are re-read live, no reboot needed; the `/actions` page has a Sensor display card for them.
+**Consolidation** — all sensors write to the *same* RuntimeStore keys, whichever was polled last in the round is the one reflected: `temp_c` (string including `°C`, e.g. `22.5°C`, always one decimal place), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders. When two sensors report the same measurement (e.g. both a BME280 and an SCD4X report temperature) the display bounces between their values as the round progresses — for ambient sensors that differ by <0.5 °C this is invisible. Per-measurement calibration is handled by the offset keys below, not by picking a "primary" sensor.
+
+**Offsets** — `temp_offset` (°C), `humidity_offset` (%RH), `pressure_offset` (hPa) and `co2_offset` (ppm) are added to each reading at write time (defaults 0). They apply in single- and multi-sensor setups alike. The barometric trend is computed from the *un-offset* pressure so a calibration offset doesn't shift the slope.
+
+**What scrolls, and how** — `sensor_display` is an ordered comma list of `temp`, `humidity`, `pressure`, `co2` (e.g. `humidity,temp` shows humidity first). An item scrolls if **any** sensor in the list can provide it (capability is the union across sensors); items no sensor provides are skipped with a one-time log line. An empty list disables scrolling entirely while placeholders keep updating. `sensor_readout_interval` decouples display from polling: `0` scrolls after every poll wake, otherwise the readouts appear at most once per that many seconds — useful to poll fast (pressure trend) but scroll rarely. `sensor_hold_s` keeps each reading parked on the matrix instead of flashing for ~2 s. All these keys are re-read live, no reboot needed; the `/actions` page has a Sensor display card for them.
 
 Sensors with pressure also get a **barometric trend**: the pressure readout on the display is prefixed with a trend arrow glyph (single/double up or down arrows, or → for steady), and RuntimeStore publishes `pressure_trend` (`rising fast`/`rising`/`steady`/`falling`/`falling fast`) and `pressure_rate` (hPa/hour). The trend is a least-squares slope over recent readings — it needs about 30 minutes of samples after boot before the arrow appears.
 
-To add a new sensor, implement the `Sensor` interface in a new header and add an entry to `createSensor()` in `include/sensor_factory.hpp`.
+To add a new sensor, implement the `Sensor` interface in a new header and add an entry to `createSensorForType()` in `include/sensor_factory.hpp`, then add its type to the `sensors` list in config.
 
 ## Custom messages
 
@@ -296,7 +302,7 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 ```bash
 mosquitto_pub -h <broker> -t infoclock32/push -m "Hello!"
 mosquitto_pub -h <broker> -t infoclock32/brightness -m "12"
-mosquitto_pub -h <broker> -t infoclock32/config -m "temp_interval=60"
+mosquitto_pub -h <broker> -t infoclock32/config -m "sensor_interval=60"
 ```
 
 ### Home Assistant discovery
@@ -339,7 +345,7 @@ infoclock32/
 ├── include/
 │   ├── pins.hpp                  # Board-specific pin definitions
 │   ├── sensor.hpp                # Sensor abstract base (temp/humidity/pressure/CO2) + StubSensor
-│   ├── sensor_factory.hpp        # createSensor() — picks driver from config
+│   ├── sensor_factory.hpp        # createSensorList() — builds sensor list from `sensors` config
 │   ├── *_sensor.hpp              # Concrete sensor implementations
 │   ├── resource_manager.hpp      # Display arbiter (priority lane, RAII guard, force handover)
 │   ├── task_registry.hpp         # Self-registering task list (watchdog + /status)

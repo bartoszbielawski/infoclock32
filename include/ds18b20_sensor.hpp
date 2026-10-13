@@ -5,7 +5,7 @@
 #include <sensor.hpp>
 
 // DS18B20 1-Wire temperature sensor.
-// Config key: temp_sensor=ds18b20
+// Config key: sensors=ds18b20  (comma-separated list; see sensor_factory.hpp)
 // Pin config:  ds18b20_pin  (default 4)
 //
 // Connect data pin to GPIO with a 4.7 kΩ pull-up to 3.3 V.

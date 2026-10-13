@@ -50,19 +50,19 @@ int main()
     CHECK(!itemAvailable(TDI_CO2, true, true, false), "co2 needs hasCo2");
     CHECK(itemAvailable(TDI_CO2, false, false, true), "co2 ok");
 
-    // Temperature formatting (LED degree glyph)
-    expect_line(formatTempLine(22.5f, 1), std::string("22.5\xF7" "C"), "temp 1 decimal");
-    expect_line(formatTempLine(23.4f, 0), std::string("23\xF7" "C"), "temp 0 decimals");
-    expect_line(formatTempLine(-5.2f, 1), std::string("-5.2\xF7" "C"), "temp negative");
-    expect_line(formatTempLine(0.0f, 0), std::string("0\xF7" "C"), "temp zero 0 decimals");
+    // Temperature formatting (LED degree glyph) — always one fractional digit
+    expect_line(formatTempLine(22.5f), std::string("22.5\xF7" "C"), "temp 1 decimal");
+    expect_line(formatTempLine(23.4f), std::string("23.4\xF7" "C"), "temp rounds to 1");
+    expect_line(formatTempLine(-5.2f), std::string("-5.2\xF7" "C"), "temp negative");
+    expect_line(formatTempLine(0.0f), std::string("0.0\xF7" "C"), "temp zero");
 
     // RuntimeStore format: same value, UTF-8 degree
     {
         char buf[32];
-        snprintf(buf, sizeof(buf), runtimeTempFormat(1), 22.5f);
+        snprintf(buf, sizeof(buf), runtimeTempFormat(), 22.5f);
         expect_line(buf, std::string("22.5\xC2\xB0" "C"), "runtime temp 1 decimal");
-        snprintf(buf, sizeof(buf), runtimeTempFormat(0), 22.6f);
-        expect_line(buf, std::string("23\xC2\xB0" "C"), "runtime temp 0 decimals");
+        snprintf(buf, sizeof(buf), runtimeTempFormat(), 22.6f);
+        expect_line(buf, std::string("22.6\xC2\xB0" "C"), "runtime temp rounds");
     }
 
     // Humidity, pressure and CO2

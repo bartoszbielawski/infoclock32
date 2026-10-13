@@ -15,7 +15,7 @@ CXXFLAGS="-std=c++17 -Wall -Wextra -Wno-unused-parameter -g -pthread \
   -I $ROOT/include"
 
 FW_TASKS="clock_task weather_forecast_task lhc_status_task mqtt_task \
-  temp_sensor_task custom_message_task night_mode_task sun_times_task \
+  sensor_task custom_message_task night_mode_task sun_times_task \
   game_of_life_task resto_menu_task watchdog_task http_server_task"
 
 FW_UTIL="logger graphic_utils http_utils screen_wipe_task \

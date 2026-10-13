@@ -4,7 +4,7 @@
 #include <sensor.hpp>
 
 // AHT10 / AHT20 I2C temperature + humidity sensor (Aosong).
-// Config key: temp_sensor=aht10  or  temp_sensor=aht20
+// Config key: sensors=aht10  or  sensors=aht20  (comma-separated list; see sensor_factory.hpp)
 // Both variants share I2C address 0x38 (fixed, not configurable).
 //
 // AHT20 adds a factory-calibrated humidity element and is generally preferred.

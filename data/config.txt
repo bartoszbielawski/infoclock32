@@ -83,9 +83,9 @@ enable_mqtt_discovery=1
 # UDP syslog destination IP (port 514). Leave blank to disable.
 syslog_server=
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Temperature sensor Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Poll interval in seconds
-temp_interval=30
+# Ã¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬Ã Sensors Ã¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬ÃÃ¢â€â‚¬Ã
+# Poll interval in seconds (per sensor). With N sensors the full round takes N*interval.
+sensor_interval=30
 #
 # I2C pin assignments (SDA / SCL) by board:
 #   ESP32-C3 SuperMini : SDA=GPIO1,  SCL=GPIO0
@@ -93,47 +93,54 @@ temp_interval=30
 #   ESP32-S3 DevKitC-1 : SDA=GPIO8,  SCL=GPIO9
 #   ESP32 DevKit v1    : SDA=GPIO21, SCL=GPIO22
 #
-# Set temp_sensor to one of the supported drivers (default: stub = disabled).
-# Uncomment the block that matches your hardware.
+# Set sensors to a comma-separated list of supported drivers (max 4; default: stub = disabled).
+# Duplicates are removed. Uncomment / edit to match your hardware.
 #
 # BMP180 (I2C, fixed address 0x77, temperature + pressure):
-#temp_sensor=bmp180
+#sensors=bmp180
 #
-# BMP280 (I2C, temperature + pressure Ã¢â‚¬â€ no humidity):
-temp_sensor=bmp280
+# BMP280 (I2C, temperature + pressure - no humidity):
+sensors=bmp280
 #bmp280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # BME280 (I2C, temperature + humidity + pressure):
-#temp_sensor=bme280
+#sensors=bme280
 #bme280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # SHT31 (I2C, temperature + humidity):
-#temp_sensor=sht31
+#sensors=sht31
 #sht31_addr=68      # decimal for 0x44; use 69 for 0x45
 #
 # AHT10 / AHT20 (I2C, temperature + humidity, fixed address 0x38):
-#temp_sensor=aht10
-#temp_sensor=aht20
+#sensors=aht10
+#sensors=aht20
 #
 # DS18B20 (1-Wire, temperature only):
-#temp_sensor=ds18b20
+#sensors=ds18b20
 #ds18b20_pin=4      # GPIO pin connected to the data line (default GPIO4)
 #
-# Temperature correction in degrees C, added to every reading (default 0)
-#temp_offset=0
+# SCD4X (I2C, fixed address 0x62, temperature + humidity + CO2):
+#sensors=scd4x
 #
-# What scrolls on the display: ordered comma list of temp / humidity /
-# pressure (empty = nothing scrolls; placeholders still update).
-temp_display=temp,pressure
+# Multiple sensors - comma-separated, polled round-robin, consolidated onto the
+# same {temp_c} / {temp_rh} / {temp_hpa} / {temp_co2} keys (last-polled wins):
+#sensors=bme280,scd4x
 #
-# Temperature decimal places on the display (0 or 1)
-temp_decimals=1
+# Calibration offsets added to each reading (defaults 0):
+#temp_offset=0        # degrees C
+#humidity_offset=0    # %RH
+#pressure_offset=0    # hPa
+#co2_offset=0         # ppm
+#
+# What scrolls on the display: ordered comma list of temp / humidity / pressure / co2
+# (empty = nothing scrolls; placeholders still update).
+sensor_display=temp,pressure
 #
 # Seconds between scrolls (0 = after every poll wake)
-temp_show_interval=0
+sensor_readout_interval=0
 #
 # Seconds each reading stays centered on screen (0 = quick ~2 s flash)
-temp_hold_s=6
+sensor_hold_s=6
 
 # Ã¢â€â‚¬Ã¢â€â‚¬ Sun widget & Game of Life Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 # Sunrise/sunset line (offline solar math; needs a position, blank = disabled)

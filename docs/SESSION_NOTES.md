@@ -54,7 +54,7 @@ test/                   PlatformIO test dir (effectively unused)
 | LHCStatusTask | `lhc_status_task` (lhc_status_task.cpp) | LHC beam status | `enable_lhc` | set in file |
 | MQTTTask | `mqtt_task` (mqtt_task.cpp) | MQTT client | `enable_mqtt` | 90 s |
 | WebServerTask | `web_server_task` (http_server_task.cpp) | all HTTP routes (single task) | always | set in file |
-| TempSensorTask | `temp_sensor_task` (temp_sensor_task.cpp) | reads sensor, RuntimeStore + display | always (sensor via `temp_sensor` key + factory) | set in file |
+| TempSensorTask | `sensor_task` (sensor_task.cpp) | round-robin sensor list, RuntimeStore + display | always (list via `sensors` key + `createSensorList()`) | set in file |
 | CustomMessageTask | `custom_message_task` (custom_message_task.cpp) | message slots, date windows/countdowns | always | set in file |
 | NightModeTask | `night_mode_task` (night_mode_task.cpp) | brightness by HH:MM window | always | 120 s |
 | OTATask | `ota_task` (ota_task.cpp) | ArduinoOTA | `ota_password` set | — |
@@ -278,6 +278,32 @@ enable_*, intervals, sensor type, SPI/I2C pins, mqtt_*, web_password, …).
 15. ⬜ Build `tests/host/prototype/` in `run.sh` (or CI) so the FreeRTOS shim can't
     silently drift from `resource_manager.hpp`; it already has a hang-injection hook
     (`host_set_hang`) suitable for watchdog/wedge tests.
+
+## Recent changes (2026-10 session)
+
+- **Multi-sensor support** (`include/sensor_factory.hpp`, `src/sensor_task.cpp`,
+  `src/main.cpp`): the `sensors` config key is now a comma-separated list of
+  drivers (max 4, duplicates removed, unknown types warned + skipped). The
+  sensor task polls the list **round-robin** — one `read()` per `sensor_interval`,
+  index always advances so a dead sensor doesn't stall the round. All sensors
+  consolidate onto the *same* flat RuntimeStore keys (`temp_c`/`temp_rh`/
+  `temp_hpa`/`temp_co2`); whichever was polled last is reflected. Display items
+  scroll on the **capability union** (an item shows if any sensor provides it).
+- **Config hard break**: `temp_sensor`/`temp_interval`/`temp_display`/
+  `temp_decimals`/`temp_show_interval`/`temp_hold_s` are gone, replaced by
+  `sensors`/`sensor_interval`/`sensor_display`/`sensor_readout_interval`/
+  `sensor_hold_s`. `temp_decimals` removed — temperature is always 1 fractional
+  digit. New per-measurement calibration: `humidity_offset`, `pressure_offset`,
+  `co2_offset` (plus existing `temp_offset`); offsets applied at write time,
+  pressure trend computed from the un-offset reading.
+- `createSensor()` → `createSensorList()`/`createSensorForType()`/
+  `parseSensorTypes()` (pure, host-tested). Task now takes a
+  `std::vector<Sensor*>` it owns (deletes all on exit).
+- Web `/actions` "Sensor display" card: action renamed `tempdisplay`→`sensor`,
+  decimals control removed, inputs renamed to `sensor_*`.
+- Host test: new `tests/host/sensor_factory_check.cpp` (list parser).
+- `data/config.txt`, `config.example.txt`, prototype `fs/config.txt`, README
+  updated to the new key names.
 
 ## Recent changes (2026-09 session)
 

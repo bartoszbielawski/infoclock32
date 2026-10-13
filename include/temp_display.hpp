@@ -27,23 +27,26 @@ enum TempDisplayItem
 // Default value of the temp_display key: what scrolled before the key existed.
 static const char kTempDisplayDefault[] = "temp,pressure";
 
+// Temperature is always shown with one fractional digit — the temp_decimals
+// config key was removed in the multi-sensor rework.
+//
 // LED-font degree glyph (Adafruit 5x7 font, code 0xF7). The string literals
 // keep the hex escape from swallowing the following 'C'.
-inline const char* ledTempFormat(int decimals)
+inline const char* ledTempFormat()
 {
-    return decimals == 0 ? "%.0f\xF7" "C" : "%.1f\xF7" "C";
+    return "%.1f\xF7" "C";
 }
 
 // RuntimeStore / {temp_c} placeholder format (UTF-8 degree sign).
-inline const char* runtimeTempFormat(int decimals)
+inline const char* runtimeTempFormat()
 {
-    return decimals == 0 ? "%.0f\xC2\xB0" "C" : "%.1f\xC2\xB0" "C";
+    return "%.1f\xC2\xB0" "C";
 }
 
-inline std::string formatTempLine(float tempC, int decimals)
+inline std::string formatTempLine(float tempC)
 {
     char buf[16];
-    snprintf(buf, sizeof(buf), ledTempFormat(decimals), tempC);
+    snprintf(buf, sizeof(buf), ledTempFormat(), tempC);
     return buf;
 }
 

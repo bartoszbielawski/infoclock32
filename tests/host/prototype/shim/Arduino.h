@@ -64,7 +64,17 @@ extern SerialClass Serial;
 #define degrees(rad) ((rad)*RAD_TO_DEG)
 
 typedef bool boolean;
-typedef uint8_t byte;
+
+// On the real ESP32 Arduino core, `byte` is a global typedef (uint8_t) and is
+// the only `byte` in scope. On the host (libc++, C++17), <cstddef>/<cstdint>
+// leak `std::byte` into unqualified name lookup, which makes the firmware's
+// unqualified `byte` (e.g. `byte *payload` in mqtt_task.cpp) ambiguous.
+// We can't rename the firmware usages (the prototype never modifies firmware
+// sources), so we back the shim's `byte` with a *macro* expanding to uint8_t.
+// Macro substitution happens before name lookup, so unqualified `byte` becomes
+// `uint8_t` and can never collide with std::byte. (In the firmware, `byte` is
+// only ever used as a type, never as an identifier, so the macro is safe.)
+#define byte uint8_t
 
 int strlcpy_host(char* dst, const char* src, size_t size);
 #if defined(__APPLE__)

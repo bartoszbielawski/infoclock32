@@ -111,9 +111,9 @@ void handle_actions()
             logPrintf("WEB", "night mode %s-%s brightness %d via /actions",
                       start.c_str(), end.c_str(), nbr);
         }
-        else if (action == "tempdisplay")
+        else if (action == "sensor")
         {
-            // Checkboxes build the ordered temp_display list; unchecked boxes
+            // Checkboxes build the ordered sensor_display list; unchecked boxes
             // are simply absent from the POST body.
             std::string list;
             auto addItem = [&list](bool on, const char* name) {
@@ -126,26 +126,23 @@ void handle_actions()
             addItem(server.hasArg("show_pressure"), "pressure");
             addItem(server.hasArg("show_co2"),      "co2");
 
-            int dec = server.arg("temp_decimals").toInt();
-            if (dec != 0) dec = 1;
-            long showS = server.arg("temp_show_interval").toInt();
+            long showS = server.arg("sensor_readout_interval").toInt();
             if (showS < 0) showS = 0;
             if (showS > 86400) showS = 86400;
-            long holdS = server.arg("temp_hold_s").toInt();
+            long holdS = server.arg("sensor_hold_s").toInt();
             if (holdS < 0) holdS = 0;
             if (holdS > 30) holdS = 30;
 
             auto& ds = DataStore::getInstance();
-            ds.set_value("temp_display", list);
-            ds.set_value("temp_decimals", std::to_string(dec));
-            ds.set_value("temp_show_interval", std::to_string(showS));
-            ds.set_value("temp_hold_s", std::to_string(holdS));
+            ds.set_value("sensor_display", list);
+            ds.set_value("sensor_readout_interval", std::to_string(showS));
+            ds.set_value("sensor_hold_s", std::to_string(holdS));
             ds.save_to_file("/config.txt");
             result = "&#10003; Sensor display saved.";
             if (list.empty())
                 result += " Readings no longer scroll &mdash; placeholders keep updating.";
-            logPrintf("WEB", "sensor display '%s', decimals %d, show every %ld s, hold %ld s via /actions",
-                      list.c_str(), dec, showS, holdS);
+            logPrintf("WEB", "sensor display '%s', show every %ld s, hold %ld s via /actions",
+                      list.c_str(), showS, holdS);
         }
         else if (action == "clockstyle")
         {
@@ -240,14 +237,12 @@ void handle_actions()
     char   nBrStr[4];
     snprintf(nBrStr, sizeof(nBrStr), "%d", ds.get_value<int>("night_brightness", 1));
 
-    String curTempDisplay = ds.get_value("temp_display", kTempDisplayDefault).c_str();
-    char decStr[2], showIntStr[8], holdStr[4];
-    snprintf(decStr, sizeof(decStr), "%d",
-             ds.get_value<int>("temp_decimals", 1) == 0 ? 0 : 1);
+    String curTempDisplay = ds.get_value("sensor_display", kTempDisplayDefault).c_str();
+    char showIntStr[8], holdStr[4];
     snprintf(showIntStr, sizeof(showIntStr), "%d",
-             ds.get_value<int>("temp_show_interval", 0));
+             ds.get_value<int>("sensor_readout_interval", 0));
     snprintf(holdStr, sizeof(holdStr), "%d",
-             ds.get_value<int>("temp_hold_s", 0));
+             ds.get_value<int>("sensor_hold_s", 0));
 
     String curClockStyle = ds.get_value("clock_style", "hhmmss").c_str();
 
@@ -326,7 +321,7 @@ void handle_actions()
                                "Polling and the {temp_c} / {temp_rh} / {temp_hpa} placeholders "
                                "keep working regardless &mdash; no reboot needed.</p>"
                                "<form method='POST'>"
-                               "<input type='hidden' name='action' value='tempdisplay'>"
+                               "<input type='hidden' name='action' value='sensor'>"
                                "<div style='display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:.9rem;color:#1e293b'>"
                                "<label><input type='checkbox' name='show_temp'"));
     if (curTempDisplay.indexOf("temp") >= 0) server.sendContent_P(PSTR(" checked"));
@@ -342,24 +337,15 @@ void handle_actions()
     server.sendContent_P(PSTR("> CO2 (ppm, only with a CO2 sensor)</label>"
                                "</div>"
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
-                               "<label style='font-size:.9rem'>Decimals</label>"
-                               "<select name='temp_decimals' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
-                               "<option value='0'"));
-    if (decStr[0] == '0') server.sendContent_P(PSTR(" selected"));
-    server.sendContent_P(PSTR(">0</option>"
-                               "<option value='1'"));
-    if (decStr[0] == '1') server.sendContent_P(PSTR(" selected"));
-    server.sendContent_P(PSTR(">1</option>"
-                               "</select>"
                                "<label style='font-size:.9rem'>Show every</label>"
-                               "<input type='number' name='temp_show_interval' min='0' max='86400' value='"));
+                               "<input type='number' name='sensor_readout_interval' min='0' max='86400' value='"));
     server.sendContent(showIntStr);
     server.sendContent_P(PSTR("' style='width:80px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<span style='font-size:.85rem;color:#64748b'>s (0 = after every poll)</span>"
                                "</div>"
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
                                "<label style='font-size:.9rem'>Hold each reading</label>"
-                               "<input type='number' name='temp_hold_s' min='0' max='30' value='"));
+                               "<input type='number' name='sensor_hold_s' min='0' max='30' value='"));
     server.sendContent(holdStr);
     server.sendContent_P(PSTR("' style='width:80px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<span style='font-size:.85rem;color:#64748b'>s on screen (0 = quick ~2 s flash)</span>"

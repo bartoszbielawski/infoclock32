@@ -116,21 +116,26 @@ enable_mqtt_discovery=1
 #
 # 1-Wire (DS18B20) Ã¢â‚¬â€ see ds18b20_pin under Temperature sensor below
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Temperature sensor Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Sensor type. Supported values:
-#   bmp180   Ã¢â‚¬â€ BMP180 via I2C, fixed address 0x77 (temp + pressure)
-#   bme280   Ã¢â‚¬â€ BME280 via I2C (temp + humidity + pressure)
-#   bmp280   Ã¢â‚¬â€ BMP280 via I2C (temp + pressure)
-#   sht31    Ã¢â‚¬â€ SHT31 via I2C (temp + humidity)
-#   aht10    Ã¢â‚¬â€ AHT10 via I2C, fixed address 0x38 (temp + humidity)
-#   aht20    Ã¢â‚¬â€ AHT20 via I2C, fixed address 0x38 (temp + humidity)
-#   ds18b20  Ã¢â‚¬â€ DS18B20 via 1-Wire (temp only)
-#   scd4x    Ã¢â‚¬â€ Sensirion SCD4x/SCD40/SCD30 via I2C, fixed address 0x62
-#              (CO2 + temp + humidity)
-#   stub     Ã¢â‚¬â€ disabled / no hardware (default)
-temp_sensor=bme280
+# Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€  Sensors Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ 
+# Comma-separated list of sensor types to poll round-robin (max 4, duplicates
+# removed). All sensors share the same {temp_c}/{temp_rh}/{temp_hpa}/{temp_co2}
+# keys - whichever was polled last is reflected there. Default: stub (disabled).
+#   bmp180   BMP180 via I2C, fixed address 0x77 (temp + pressure)
+#   bme280   BME280 via I2C (temp + humidity + pressure)
+#   bmp280   BMP280 via I2C (temp + pressure)
+#   sht31    SHT31 via I2C (temp + humidity)
+#   aht10    AHT10 via I2C, fixed address 0x38 (temp + humidity)
+#   aht20    AHT20 via I2C, fixed address 0x38 (temp + humidity)
+#   ds18b20  DS18B20 via 1-Wire (temp only)
+#   scd4x    Sensirion SCD4x/SCD40/SCD30 via I2C, fixed address 0x62
+#            (CO2 + temp + humidity)
+#   stub     disabled / no hardware (default)
+# Single sensor:
+sensors=bme280
+# Multiple sensors (comma-separated, polled round-robin):
+#sensors=bme280,scd4x
 
-# I2C address in decimal. Most breakout boards ship with SDO/CSB low Ã¢â€ â€™ 0x76.
+# I2C address in decimal. Most breakout boards ship with SDO/CSB low - 0x76.
 # Pull SDO/CSB high to use the alternate address 0x77.
 # (bme280_addr, bmp280_addr, sht31_addr follow the same pattern)
 bme280_addr=118
@@ -140,25 +145,26 @@ bme280_addr=118
 # Pin number for DS18B20 data line (1-Wire). Ignored for I2C sensors.
 #ds18b20_pin=4
 
-# Temperature correction in degrees C, added to every reading. Default: 0
-#temp_offset=0
+# Calibration offsets added to each reading. Defaults: 0
+#temp_offset=0        # degrees C
+#humidity_offset=0    # %RH
+#pressure_offset=0    # hPa
+#co2_offset=0         # ppm
 
-# How often to poll the sensor (seconds). Code default: 300
-temp_interval=30
+# How often to poll each sensor (seconds). With N sensors the full round takes
+# N*interval. Code default: 300
+sensor_interval=30
 
 # What scrolls on the display: ordered comma list of temp / humidity /
 # pressure / co2. Empty = nothing scrolls (placeholders still update).
 # Default: temp,pressure
-#temp_display=temp,pressure
-
-# Temperature decimal places on the display (0 or 1, default 1)
-#temp_decimals=1
+#sensor_display=temp,pressure
 
 # Seconds between scrolls (0 = after every poll wake; default 0)
-#temp_show_interval=0
+#sensor_readout_interval=0
 
 # Seconds each reading stays centered on screen (0 = quick ~2 s flash)
-#temp_hold_s=0
+#sensor_hold_s=0
 
 # Ã¢â€â‚¬Ã¢â€â‚¬ Sun widget & Game of Life Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 # Sunrise/sunset widget Ã¢â‚¬â€ pure offline solar math, only needs a position.

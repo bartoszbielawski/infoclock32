@@ -4,7 +4,7 @@
 #include <sensor.hpp>
 
 // BME280 I2C temperature + humidity + pressure sensor (Bosch).
-// Config key: temp_sensor=bme280
+// Config key: sensors=bme280  (comma-separated list; see sensor_factory.hpp)
 // Address:    bme280_addr  (default 0x76; 0x77 if SDO pulled high)
 //
 // Drop-in upgrade from BMP280 — same pinout, adds humidity measurement.

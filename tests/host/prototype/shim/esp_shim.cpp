@@ -1,5 +1,6 @@
 // Host shim implementation: ESP system functions.
 #include "esp_system.h"
+#include "esp_timer.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -22,3 +23,11 @@ uint32_t esp_random() { return rng(); }
 
 uint32_t esp_get_free_heap_size() { return 180000; }
 uint32_t esp_get_minimum_free_heap_size() { return 120000; }
+
+int64_t esp_timer_get_time()
+{
+    // Microseconds since an arbitrary host epoch; monotonic and good enough
+    // for the firmware's uptime-style deltas.
+    using namespace std::chrono;
+    return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+}

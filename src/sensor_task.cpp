@@ -11,29 +11,64 @@
 #include <pressure_history.hpp>
 #include <temp_display.hpp>
 #include <string>
+#include <vector>
 
-// Default display update interval in seconds
+// Default poll interval in seconds (per sensor). With N sensors the full
+// round takes N * interval.
 static constexpr int DEFAULT_INTERVAL_S = 300;
 
-// Config keys
-static const char CFG_INTERVAL[]      = "temp_interval";
+// Config keys (multi-sensor rework: the old temp_* display/poll keys are gone;
+// see README "Sensors" for the new surface).
+static const char CFG_INTERVAL[]      = "sensor_interval";
 static const char CFG_TEMP_OFFSET[]   = "temp_offset";
-static const char CFG_DISPLAY[]       = "temp_display";
-static const char CFG_DECIMALS[]      = "temp_decimals";
-static const char CFG_SHOW_INTERVAL[] = "temp_show_interval";
-static const char CFG_HOLD[]          = "temp_hold_s";
+static const char CFG_RH_OFFSET[]     = "humidity_offset";
+static const char CFG_PRESS_OFFSET[]  = "pressure_offset";
+static const char CFG_CO2_OFFSET[]    = "co2_offset";
+static const char CFG_DISPLAY[]       = "sensor_display";
+static const char CFG_SHOW_INTERVAL[] = "sensor_readout_interval";
+static const char CFG_HOLD[]          = "sensor_hold_s";
+
+// The task parameter is a heap-allocated std::vector<Sensor*> built by
+// createSensorList() in main(). The task owns it and deletes every sensor on
+// exit (both the normal exit and the init-failure exit).
+static void sensorListExit(std::vector<Sensor*>* list)
+{
+    for (Sensor* s : *list) delete s;
+    delete list;
+    task_mark_exited();   // stop watchdog supervision before leaving the task
+}
 
 void sensor_task(void* parameter)
 {
     registerTask("Sensor", 4096, 60000);
-    Sensor* sensor = static_cast<Sensor*>(parameter);
+    std::vector<Sensor*>* list = static_cast<std::vector<Sensor*>*>(parameter);
+    const size_t N = list->size();
 
-    logPrintf("TMP", "starting with sensor '%s'", sensor->name());
-
-    if (!sensor->begin())
+    if (N == 0)
     {
-        logPrintf("TMP", "sensor '%s' failed to initialize, task exiting", sensor->name());
-        task_mark_exited();   // stop watchdog supervision before deleting the task
+        logPrintf("TMP", "no sensors configured (sensors=?) — task exiting");
+        sensorListExit(list);
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    // Initialise every sensor up front. A single bad bus read (e.g. a missing
+    // I2C chip) must not take the whole round down — begin() failures log and
+    // continue; only if all sensors fail do we give up.
+    size_t okCount = 0;
+    for (size_t i = 0; i < N; i++)
+    {
+        if (list->at(i)->begin())
+            okCount++;
+        else
+            logPrintf("TMP", "sensor '%s' failed to initialize — will be skipped in the round",
+                      list->at(i)->name());
+    }
+    logPrintf("TMP", "starting with %zu sensor(s)", okCount);
+    if (okCount == 0)
+    {
+        logPrintf("TMP", "all sensors failed to initialize, task exiting");
+        sensorListExit(list);
         vTaskDelete(nullptr);
         return;
     }
@@ -41,18 +76,29 @@ void sensor_task(void* parameter)
     auto& rmd = ResourceManager<LMDS>::getInstance();
     time_t last_update = 0;
     time_t last_display = 0;
+    size_t rr_index = 0;
 
     float temp = 0.0f;
     float pressure = 0.0f;
     float humidity = 0.0f;
     int co2 = 0;
 
-    // Pressure trend (valid only when the sensor provides pressure)
+    // Pressure trend (valid only when a sensor in the round provides pressure)
     bool haveTrend = false;
     TrendKind trendKind = TREND_STEADY;
     float trendRate = 0.0f;
 
     bool read_success = false;
+
+    // Capability union across the whole round: a display item is shown if ANY
+    // sensor provides it, so the filter is computed once here.
+    bool anyHumidity = false, anyPressure = false, anyCo2 = false;
+    for (size_t i = 0; i < N; i++)
+    {
+        anyHumidity  = anyHumidity  || list->at(i)->hasHumidity();
+        anyPressure  = anyPressure  || list->at(i)->hasPressure();
+        anyCo2       = anyCo2       || list->at(i)->hasCo2();
+    }
 
     // Complaints about requested-but-unavailable measurements: once per item
     bool unavailableLogged[TDI_COUNT] = {};
@@ -64,10 +110,11 @@ void sensor_task(void* parameter)
         int interval_s = DataStore::getInstance().get_value(CFG_INTERVAL, DEFAULT_INTERVAL_S);
         if (interval_s < 5) interval_s = DEFAULT_INTERVAL_S;
 
-        float temp_offset = DataStore::getInstance().get_value(CFG_TEMP_OFFSET, 0.0f);
-
-        int decimals = DataStore::getInstance().get_value<int>(CFG_DECIMALS, 1);
-        if (decimals < 0 || decimals > 1) decimals = 1;
+        // Calibration offsets applied at write time, per measurement.
+        float tempOffset    = DataStore::getInstance().get_value(CFG_TEMP_OFFSET, 0.0f);
+        float rhOffset      = DataStore::getInstance().get_value(CFG_RH_OFFSET, 0.0f);
+        float pressOffset   = DataStore::getInstance().get_value(CFG_PRESS_OFFSET, 0.0f);
+        float co2Offset     = DataStore::getInstance().get_value(CFG_CO2_OFFSET, 0.0f);
 
         // Display cadence, decoupled from the poll interval: 0 = every wake
         int show_interval_s = DataStore::getInstance().get_value<int>(CFG_SHOW_INTERVAL, 0);
@@ -83,16 +130,16 @@ void sensor_task(void* parameter)
         std::vector<TempDisplayItem> items = parseDisplayList(
             DataStore::getInstance().get_value(CFG_DISPLAY, kTempDisplayDefault));
 
-        // Drop measurements this sensor cannot provide (log once per item)
+        // Drop measurements no sensor in the round can provide (log once per item)
         for (auto it = items.begin(); it != items.end();)
         {
-            if (!itemAvailable(*it, sensor->hasHumidity(), sensor->hasPressure(), sensor->hasCo2()))
+            if (!itemAvailable(*it, anyHumidity, anyPressure, anyCo2))
             {
                 if (!unavailableLogged[*it])
                 {
                     unavailableLogged[*it] = true;
-                    logPrintf("TMP", "'%s' requested but sensor '%s' does not provide it",
-                              tempDisplayName(*it), sensor->name());
+                    logPrintf("TMP", "'%s' requested but no configured sensor provides it",
+                              tempDisplayName(*it));
                 }
                 it = items.erase(it);
             }
@@ -104,23 +151,32 @@ void sensor_task(void* parameter)
 
         time_t now = time(nullptr);
 
-        // Refresh reading when interval has elapsed
+        // Round-robin: refresh one sensor per interval. The index always
+        // advances so a dead sensor doesn't stall the round.
         if (difftime(now, last_update) >= interval_s)
         {
-            read_success = sensor->read();
+            Sensor* s = list->at(rr_index);
+            rr_index = (rr_index + 1) % N;
+
+            read_success = s->read();
             if (read_success)
             {
                 last_update = now;
                 auto& rs = RuntimeStore::getInstance();
-                temp = sensor->temperature() + temp_offset;
-                rs.set("temp_c", temp, runtimeTempFormat(decimals));
-                if (sensor->hasPressure())
+
+                temp = s->temperature() + tempOffset;
+                rs.set("temp_c", temp, runtimeTempFormat());
+
+                if (s->hasPressure())
                 {
-                    pressure = sensor->pressure();
+                    pressure = s->pressure() + pressOffset;
                     rs.set("temp_hpa", pressure, "%.0f");
 
-                    // Feed the trend history and refresh the trend placeholders
-                    PressureHistoryStore::getInstance().add(now, pressure);
+                    // Feed the trend history and refresh the trend placeholders.
+                    // The trend is computed from the un-offset reading so the
+                    // calibration offset doesn't shift the slope.
+                    float rawPressure = s->pressure();
+                    PressureHistoryStore::getInstance().add(now, rawPressure);
                     haveTrend = PressureHistoryStore::getInstance().trend(now, trendKind, trendRate);
                     if (haveTrend)
                     {
@@ -129,15 +185,15 @@ void sensor_task(void* parameter)
                     }
                 }
 
-                if (sensor->hasHumidity())
+                if (s->hasHumidity())
                 {
-                    humidity = sensor->humidity();
+                    humidity = s->humidity() + rhOffset;
                     rs.set("temp_rh", humidity, "%.0f");
                 }
 
-                if (sensor->hasCo2())
+                if (s->hasCo2())
                 {
-                    co2 = sensor->co2Concentration();
+                    co2 = (int)(s->co2Concentration() + co2Offset);
                     rs.set("temp_co2", co2, "%d");
                 }
             }
@@ -145,7 +201,7 @@ void sensor_task(void* parameter)
 
         if (not read_success)
         {
-            logPrintf("TMP", "failed to read from sensor '%s'", sensor->name());
+            logPrintf("TMP", "failed to read from sensor (round index %zu)", rr_index);
             vTaskDelay(30000 / portTICK_PERIOD_MS);
             continue;
         }
@@ -166,7 +222,7 @@ void sensor_task(void* parameter)
                     switch (items[i])
                     {
                         case TDI_TEMP:
-                            showMessage(formatTempLine(temp, decimals), display, holdMs);
+                            showMessage(formatTempLine(temp), display, holdMs);
                             break;
                         case TDI_HUMIDITY:
                             showMessage(formatHumidityLine(humidity), display, holdMs);

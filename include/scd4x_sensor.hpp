@@ -4,7 +4,7 @@
 // I2C measurement of CO2 concentration, temperature and relative humidity.
 // Fixed I2C address: 0x62 (all SCD4x models).
 //
-// Config key: temp_sensor=scd4x
+// Config key: sensors=scd4x  (comma-separated list; see sensor_factory.hpp)
 //
 // Reference library: SensirionI2cScd4x (Sensirion, arduino)
 // https://github.com/Sensirion/arduino-i2c-scd4x
