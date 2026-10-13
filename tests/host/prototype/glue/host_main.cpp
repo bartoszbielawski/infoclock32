@@ -20,7 +20,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <screen_wipe_task.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 #include <watchdog_task.h>
 
 #include "display.hpp"

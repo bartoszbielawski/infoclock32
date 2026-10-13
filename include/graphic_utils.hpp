@@ -6,6 +6,9 @@
 #include <Adafruit_GFX.h>
 #include <LMDS.hpp>
 #include <stdint.h>
+#include <string>
+
+using namespace std;
 
 // Minimum slice every display hold keeps before a waiting priority-lane
 // request (clock, user push) can cut it short — config key
