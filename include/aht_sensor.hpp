@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Adafruit_AHTX0.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 
 // AHT10 / AHT20 I2C temperature + humidity sensor (Aosong).
 // Config key: temp_sensor=aht10  or  temp_sensor=aht20
@@ -10,9 +10,9 @@
 // AHT20 adds a factory-calibrated humidity element and is generally preferred.
 // The Adafruit AHTX0 library handles both transparently.
 // Wire.begin() must be called before begin().
-class AhtTempSensor : public TempSensor {
+class AhtSensor : public Sensor {
 public:
-    explicit AhtTempSensor(bool isAht20)
+    explicit AhtSensor(bool isAht20)
         : _name(isAht20 ? "AHT20" : "AHT10"), _temp(0.0f), _hum(0.0f) {}
 
     bool begin() override {

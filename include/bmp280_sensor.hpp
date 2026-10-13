@@ -1,13 +1,13 @@
 #pragma once
 
 #include <Adafruit_BMP280.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 
-// BMP280 implementation of TempSensor (I2C).
+// BMP280 implementation of Sensor (I2C).
 // Default I2C address is 0x76; pass 0x77 if SDO is pulled high.
-class Bmp280TempSensor : public TempSensor {
+class Bmp280Sensor : public Sensor {
 public:
-    explicit Bmp280TempSensor(uint8_t addr = BMP280_ADDRESS_ALT)
+    explicit Bmp280Sensor(uint8_t addr = BMP280_ADDRESS_ALT)
         : _addr(addr), _temp(0.0f), _pressure(0.0f) {}
 
     bool begin() override {

@@ -7,7 +7,7 @@
 #include <pressure_trend.hpp>
 
 // Mutex-protected singleton holding recent pressure readings for trend
-// computation. temp_sensor_task writes a sample on every successful read;
+// computation. sensor_task writes a sample on every successful read;
 // the same task reads the trend back to pick a display glyph, and publishes
 // pressure_trend / pressure_rate placeholders to RuntimeStore.
 class PressureHistoryStore

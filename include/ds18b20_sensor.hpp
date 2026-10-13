@@ -2,7 +2,7 @@
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 
 // DS18B20 1-Wire temperature sensor.
 // Config key: temp_sensor=ds18b20
@@ -10,9 +10,9 @@
 //
 // Connect data pin to GPIO with a 4.7 kΩ pull-up to 3.3 V.
 // Multiple sensors on the same bus are supported; index 0 is always used.
-class Ds18b20TempSensor : public TempSensor {
+class Ds18b20Sensor : public Sensor {
 public:
-    explicit Ds18b20TempSensor(uint8_t pin)
+    explicit Ds18b20Sensor(uint8_t pin)
         : _ow(pin), _dt(&_ow), _temp(0.0f) {}
 
     bool begin() override {

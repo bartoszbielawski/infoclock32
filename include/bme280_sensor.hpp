@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Adafruit_BME280.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 
 // BME280 I2C temperature + humidity + pressure sensor (Bosch).
 // Config key: temp_sensor=bme280
@@ -9,9 +9,9 @@
 //
 // Drop-in upgrade from BMP280 — same pinout, adds humidity measurement.
 // Wire.begin() must be called before begin().
-class Bme280TempSensor : public TempSensor {
+class Bme280Sensor : public Sensor {
 public:
-    explicit Bme280TempSensor(uint8_t addr = 0x76)
+    explicit Bme280Sensor(uint8_t addr = 0x76)
         : _addr(addr), _temp(0.0f), _pressure(0.0f), _hum(0.0f) {}
 
     bool begin() override {

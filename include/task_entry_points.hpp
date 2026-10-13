@@ -4,7 +4,7 @@
 // header are re-exported so any code that starts tasks (main.cpp on device,
 // host prototype glue) needs exactly one include.
 
-#include <temp_sensor_task.h>
+#include <sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <resto_menu_task.h>

@@ -16,9 +16,10 @@
 #include <version.hpp>
 #include <watchdog_task.h>
 #include <Wire.h>
-#include <temp_sensor.hpp>
-#include <temp_sensor_factory.hpp>
-#include <temp_sensor_task.h>
+#include <sensor.hpp>
+#include <sensor_factory.hpp>
+#include <sensor.hpp>
+#include <sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <resto_menu_task.h>
@@ -164,8 +165,8 @@ void setup() {
   int i2cSda = dataStore.get_value<int>("i2c_sda", I2C_SDA_PIN);
   int i2cScl = dataStore.get_value<int>("i2c_scl", I2C_SCL_PIN);
   Wire.begin(i2cSda, i2cScl);
-  TempSensor* tempSensor = createTempSensor();  // sensor type from temp_sensor config key
-  xTaskCreate(temp_sensor_task, "TempSensorTask", 4096, tempSensor, 1, nullptr);
+  Sensor* sensor = createSensor();  // sensor type from temp_sensor config key
+  xTaskCreate(sensor_task, "SensorTask", 4096, sensor, 1, nullptr);
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 4096, nullptr, 1, nullptr);
 

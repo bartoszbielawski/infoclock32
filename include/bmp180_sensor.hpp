@@ -1,10 +1,10 @@
 #pragma once
 
 #include <Adafruit_BMP085.h>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 
-// BMP180 implementation of TempSensor (I2C, fixed address 0x77).
-class Bmp180TempSensor : public TempSensor {
+// BMP180 implementation of Sensor (I2C, fixed address 0x77).
+class Bmp180Sensor : public Sensor {
 public:
     bool begin() override { return _bmp.begin(); }
 

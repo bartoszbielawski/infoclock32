@@ -7,7 +7,7 @@
 #include <data_store.hpp>
 #include <runtime_store.hpp>
 #include <logger.hpp>
-#include <temp_sensor.hpp>
+#include <sensor.hpp>
 #include <pressure_history.hpp>
 #include <temp_display.hpp>
 #include <string>
@@ -23,10 +23,10 @@ static const char CFG_DECIMALS[]      = "temp_decimals";
 static const char CFG_SHOW_INTERVAL[] = "temp_show_interval";
 static const char CFG_HOLD[]          = "temp_hold_s";
 
-void temp_sensor_task(void* parameter)
+void sensor_task(void* parameter)
 {
-    registerTask("TempSensor", 4096, 60000);
-    TempSensor* sensor = static_cast<TempSensor*>(parameter);
+    registerTask("Sensor", 4096, 60000);
+    Sensor* sensor = static_cast<Sensor*>(parameter);
 
     logPrintf("TMP", "starting with sensor '%s'", sensor->name());
 
@@ -45,6 +45,7 @@ void temp_sensor_task(void* parameter)
     float temp = 0.0f;
     float pressure = 0.0f;
     float humidity = 0.0f;
+    int co2 = 0;
 
     // Pressure trend (valid only when the sensor provides pressure)
     bool haveTrend = false;
@@ -85,7 +86,7 @@ void temp_sensor_task(void* parameter)
         // Drop measurements this sensor cannot provide (log once per item)
         for (auto it = items.begin(); it != items.end();)
         {
-            if (!itemAvailable(*it, sensor->hasHumidity(), sensor->hasPressure()))
+            if (!itemAvailable(*it, sensor->hasHumidity(), sensor->hasPressure(), sensor->hasCo2()))
             {
                 if (!unavailableLogged[*it])
                 {
@@ -133,6 +134,12 @@ void temp_sensor_task(void* parameter)
                     humidity = sensor->humidity();
                     rs.set("temp_rh", humidity, "%.0f");
                 }
+
+                if (sensor->hasCo2())
+                {
+                    co2 = sensor->co2Concentration();
+                    rs.set("temp_co2", co2, "%d");
+                }
             }
         }
 
@@ -171,6 +178,9 @@ void temp_sensor_task(void* parameter)
                                         formatPressureLine(pressure), display, holdMs);
                             break;
                         }
+                        case TDI_CO2:
+                            showMessage(formatCo2Line(co2), display, holdMs);
+                            break;
                         default:
                             break;
                     }
