@@ -12,9 +12,14 @@ cd "$(dirname "$0")"
 SLOW=0
 [ "${1:-}" = "--slow" ] && SLOW=1
 
-./build.sh prototype >/dev/null 2>&1 || { echo "FAIL: prototype build"; exit 1; }
-
 WORK=$(mktemp -d)
+if ! ./build.sh prototype > "$WORK/build.log" 2>&1; then
+    echo "FAIL: prototype build (last 60 lines of compiler output)"
+    tail -n 60 "$WORK/build.log"
+    rm -rf "$WORK"
+    exit 1
+fi
+
 PIDS=""
 trap 'for p in $PIDS; do kill $p 2>/dev/null; done; rm -rf "$WORK"' EXIT INT TERM
 
@@ -146,4 +151,14 @@ if [ $SLOW -eq 1 ]; then
     expect_metric    flaky temp_c 20
 fi
 
-if [ $FAILED -eq 0 ]; then echo "all scenario checks passed"; else echo "$FAILED scenario check(s) FAILED"; exit 1; fi
+if [ $FAILED -eq 0 ]; then
+    echo "all scenario checks passed"
+else
+    # Show what each prototype printed so a CI failure is diagnosable.
+    for f in "$WORK"/*.log; do
+        echo "── $(basename "$f") (last 25 lines) ──"
+        tail -n 25 "$f"
+    done
+    echo "$FAILED scenario check(s) FAILED"
+    exit 1
+fi
