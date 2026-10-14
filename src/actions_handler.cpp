@@ -12,13 +12,13 @@
 #include <night_mode_task.h>
 #include <sensor_display.hpp>
 
-// â”€â”€ /push â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── /push ─────────────────────────────────────────────────────────────────────
 // Simple JSON endpoint for scripted / programmatic message display.
 //
 //   GET  /push?msg=Hello+World
 //   POST /push   (body: msg=Hello+World)
 //
-// Optional: &speed=<ms>  â€” scroll delay in ms, 10â€“500 (default 50).
+// Optional: &speed=<ms>  — scroll delay in ms, 10–500 (default 50).
 // Returns: {"ok":true} or {"ok":false,"error":"..."}
 // No authentication required.
 
@@ -51,9 +51,9 @@ void handle_push()
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
     // Bounded priority wait: fail with "display busy" instead of blocking the
-    // single web-server task forever. The clock holds the display 7â€“9 s at a
+    // single web-server task forever. The clock holds the display 7–9 s at a
     // time (it cuts the extra seconds when anyone is queued), so the wait must
-    // span one full fast-lane cycle â€”
+    // span one full fast-lane cycle —
     // shorter timeouts make dashboard pushes fail most of the time.
     if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
     {
@@ -68,7 +68,7 @@ void handle_push()
     }
 }
 
-// â”€â”€ /actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── /actions ──────────────────────────────────────────────────────────────────
 
 void handle_actions()
 {

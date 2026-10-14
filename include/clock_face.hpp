@@ -5,12 +5,12 @@
 #include <stdint.h>
 
 // Pure layout helpers for the clock faces driven by the `clock_style` config
-// key. No Arduino/FreeRTOS â€” unit tested on the host
+// key. No Arduino/FreeRTOS — unit tested on the host
 // (see tests/host/clock_face_check.cpp). The draw functions take any
-// display-like object with setPixel(x, y, bool) â€” LMDS on device, a fake
+// display-like object with setPixel(x, y, bool) — LMDS on device, a fake
 // pixel grid in tests.
 
-// â”€â”€ Thick digit font â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Thick digit font ──────────────────────────────────────────────────────────
 // Hand-tuned 6x8 digit bitmaps for the `thick` clock face: 2 px strokes, real
 // glyph shapes (not a 7-seg emulation), drawn with drawThickTime().
 
@@ -75,7 +75,7 @@ inline void drawThickTime(D& d, int h, int m, bool colonOn, int x0, int y0)
     drawThickDigit(d, m % 10, x0 + 24, y0);
 }
 
-// â”€â”€ BCD (binary) clock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── BCD (binary) clock ───────────────────────────────────────────────────────
 // Four dot columns (hours tens/units, minutes tens/units), bit i at
 // (bottom - i): bit 0 on the bottom row.
 
@@ -87,7 +87,7 @@ inline uint8_t bcdColumnBits(int value, int bits)
     return mask;
 }
 
-// Column pitch 3 px: HT HU : MT MU â†’ x offsets 0, 3, 6, 9, 12.
+// Column pitch 3 px: HT HU : MT MU → x offsets 0, 3, 6, 9, 12.
 static const int kBCDFaceWidth = 13;
 
 template<class D>
@@ -109,7 +109,7 @@ inline void drawBCDTime(D& d, int h, int m, bool colonOn, int x0, int y0)
     for (int i = 0; i < 4; i++) if (mu & (1 << i)) d.setPixel(x0 + 12, bottom - i, true);
 }
 
-// â”€â”€ Seconds sweep â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Seconds sweep ────────────────────────────────────────────────────────────
 // One pixel racing along the bottom row: 0 s at the left edge, 59 s at maxX.
 // The WiFi indicator owns the very last column, so callers pass
 // maxX = display width - 2 (62 on a 64 px display).

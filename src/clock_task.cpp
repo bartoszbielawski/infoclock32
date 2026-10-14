@@ -81,7 +81,7 @@ void displayClock(void *parameter)
       }
 
       // Show the time face last, so the clock face is what the hold leaves behind
-      // (the Life task seeds itself from the display â€” see life_seed_display).
+      // (the Life task seeds itself from the display — see life_seed_display).
       // After the first 5 frames keep ticking for up to kIdleFrames more while
       // nobody else is queued: releasing into an idle display would leave the
       // last frame frozen on screen until the next round.
