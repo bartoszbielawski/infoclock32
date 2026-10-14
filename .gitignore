@@ -18,6 +18,7 @@ tests/host/sim_sensor_check
 tests/host/secret_keys_check
 tests/host/config_utils_check
 tests/host/security_utils_check
+tests/host/message_utils_check
 tests/host/clock_face_check
 tests/host/wdt_check
 tests/host/uptime_check

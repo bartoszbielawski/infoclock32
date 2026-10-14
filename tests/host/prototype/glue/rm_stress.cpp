@@ -153,6 +153,40 @@ static void waiter_task(void*)
     vTaskDelete(nullptr);
 }
 
+// ── phase 3: drop logging is rate limited, drops are still counted ───────────
+
+static ResourceManager<FakeDisplay> smallRm;   // 1 normal slot, so it fills fast
+static std::atomic<int> hammerFails{0};
+static std::atomic<bool> hammerDone{false};
+
+static void small_holder_task(void*)
+{
+    if (auto d = smallRm.acquire())
+        vTaskDelay(pdMS_TO_TICKS(2500));
+    vTaskDelete(nullptr);
+}
+
+static void small_waiter_task(void*)
+{
+    vTaskDelay(pdMS_TO_TICKS(200));          // after the holder has the display
+    if (auto d = smallRm.acquire(pdMS_TO_TICKS(5000)))
+        vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelete(nullptr);
+}
+
+static void hammer_task(void*)
+{
+    vTaskDelay(pdMS_TO_TICKS(600));          // holder + waiter are in place
+    for (int i = 0; i < 40; i++)
+    {
+        if (!smallRm.make_access_request(pdMS_TO_TICKS(1), false))
+            hammerFails++;
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    hammerDone = true;
+    vTaskDelete(nullptr);
+}
+
 int main()
 {
     logger_init();
@@ -198,6 +232,33 @@ int main()
     fprintf(stderr, "[rm_stress] contention: %d workers finished, %d violations, "
                     "%d grants, %d hook releases\n",
             workersDone.load(), violations.load(), grants.load(), hookReleases.load());
+
+    // ── phase 3 ──────────────────────────────────────────────────────────
+    static FakeDisplay smallDisplay;
+    smallRm.initialize(&smallDisplay, 1, 1);
+    const uint32_t seqBefore = getLogSeq();
+    xTaskCreate(small_holder_task, "stressD", 4096, nullptr, 1, nullptr);
+    xTaskCreate(small_waiter_task, "stressE", 4096, nullptr, 1, nullptr);
+    xTaskCreate(hammer_task,       "stressF", 4096, nullptr, 1, nullptr);
+    deadline = nowMs() + 20000;
+    while (!hammerDone && nowMs() < deadline)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    if (!hammerDone)
+        fail("drop-log hammer did not finish");
+
+    std::vector<LogEntry> entries;
+    copyLogEntriesSince(seqBefore, entries);
+    int dropLines = 0;
+    for (const auto& e : entries)
+        if (e.line.indexOf("queue full") >= 0) dropLines++;
+    fprintf(stderr, "[rm_stress] drop logging: %d failed requests, %u counted, %d log lines\n",
+            hammerFails.load(), (unsigned)smallRm.getDropCount(), dropLines);
+    if (hammerFails < 30)
+        fail("hammer did not produce enough drops");
+    if ((int)smallRm.getDropCount() < hammerFails)
+        fail("drops were not all counted");
+    if (dropLines > 2)
+        fail("drop log lines are not rate limited");
 
     if (violations == 0)
     {

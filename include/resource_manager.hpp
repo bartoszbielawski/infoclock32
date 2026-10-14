@@ -50,6 +50,12 @@ template<class R>
 class ResourceManager
 {
 public:
+    static constexpr uint16_t kDefaultQueueLength     = 8;
+    static constexpr uint16_t kDefaultFastQueueLength = 4;
+    // The manager logs on its own stack (force-handover path), and logPrintf
+    // keeps ~800 B of buffers plus vsnprintf/UDP internals: 2 KB was marginal.
+    static constexpr uint32_t kManagerStackWords      = 4096;
+
     ResourceManager()
         : resource(nullptr), current_task(nullptr),
           request_queue(nullptr), fast_queue(nullptr), manager_task(nullptr),
@@ -71,7 +77,8 @@ public:
 
     // `fast_queue` is the priority lane: requests queued there (clock, user
     // pushes) are always served before requests waiting in `request_queue`.
-    void initialize(R* res, uint16_t queue_length = 3, uint16_t fast_queue_length = 2)
+    void initialize(R* res, uint16_t queue_length = kDefaultQueueLength,
+                    uint16_t fast_queue_length = kDefaultFastQueueLength)
     {
         resource = res;
         taskENTER_CRITICAL(&pend_mux_);
@@ -80,7 +87,7 @@ public:
         taskEXIT_CRITICAL(&pend_mux_);
         request_queue = xQueueCreate(queue_length, sizeof(DisplayRequest));
         fast_queue    = xQueueCreate(fast_queue_length, sizeof(DisplayRequest));
-        xTaskCreate(manager_task_function, "ResourceManager", 2048, this, 1, &manager_task);
+        xTaskCreate(manager_task_function, "ResourceManager", kManagerStackWords, this, 1, &manager_task);
     }
 
     static void manager_task_function(void* parameter)
@@ -167,7 +174,7 @@ public:
         if (!registerPending(requester, gen))
         {
             drop_count_++;
-            logPrintf("RES", "%s: pending table full", pcTaskGetName(requester));
+            logDropLimited(pcTaskGetName(requester), "pending table full");
             return false;
         }
 
@@ -178,13 +185,13 @@ public:
         {
             drop_count_++;
             removePending(requester, gen);
-            logPrintf("RES", "%s: queue full", pcTaskGetName(requester));
+            logDropLimited(pcTaskGetName(requester), "queue full");
             return false;
         }
         if (ulTaskNotifyTake(pdTRUE, timeout) == 0)
         {
             drop_count_++;
-            logPrintf("RES", "%s: timed out waiting for display", pcTaskGetName(requester));
+            logDropLimited(pcTaskGetName(requester), "timed out waiting for display");
             // Mark the attempt dead so the manager skips it if it is still
             // queued. If the manager had already claimed the grant, end its
             // release wait from here: swallow a late-delivered grant (it
@@ -269,9 +276,33 @@ private:
         PendState    state;
     };
 
-    static constexpr int      kMaxPending      = 8;
+    static constexpr int      kMaxPending      = 12;
+    // About ten tasks use the display (clock, sensor, weather, LHC, resto,
+    // messages, sun, life, MQTT push, web push); sizing the lanes to that
+    // keeps normal contention from producing "queue full" drops.
+    static constexpr uint32_t kDropLogIntervalMs = 10000;   // rate limit for drop logs
     static constexpr uint32_t kGiveUpCatchMs   = 100;    // late-grant swallow window
     static constexpr uint32_t kForceHandoverMs = 30000;  // max hold without progress
+
+    // At most one drop line per kDropLogIntervalMs; the line says how many
+    // were swallowed since the last one. Every drop is still counted in
+    // drop_count_ (exposed on /metrics).
+    void logDropLimited(const char* who, const char* what)
+    {
+        const uint32_t now  = (uint32_t)millis();
+        const uint32_t last = last_drop_log_ms_.load();
+        if (last != 0 && now - last < kDropLogIntervalMs)
+        {
+            drop_logs_suppressed_++;
+            return;
+        }
+        last_drop_log_ms_ = now ? now : 1;
+        const uint32_t n = drop_logs_suppressed_.exchange(0);
+        if (n)
+            logPrintf("RES", "%s: %s (+%lu similar suppressed)", who, what, (unsigned long)n);
+        else
+            logPrintf("RES", "%s: %s", who, what);
+    }
 
     PendingRequest* findByTaskLocked(TaskHandle_t task)
     {
@@ -358,6 +389,8 @@ private:
     void                      (*pre_release_hook)(R&);
     std::atomic<uint32_t>     drop_count_;
     std::atomic<uint32_t>     last_progress_ms_{0};   // last renewHold()/grant
+    std::atomic<uint32_t>     last_drop_log_ms_{0};
+    std::atomic<uint32_t>     drop_logs_suppressed_{0};
     std::atomic<uint32_t>     force_handovers_{0};
     std::atomic<uint32_t>     last_force_handover_ms_{0};
     PendingRequest            pending_[kMaxPending] = {};

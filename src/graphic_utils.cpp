@@ -1,6 +1,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include "graphic_utils.hpp"
+#include <message_utils.hpp>
 #include <resource_manager.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
@@ -115,6 +116,7 @@ static void drawIcon(GFXcanvas1& canvas, const uint8_t* icon, int iconWidth, int
 
 void showMessage(std::string message, LMDS& display, int holdMs)
 {
+  message = clampMessage(message);
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
 
   logPrintf("DISP", "showing '%s' for %d ms", message.c_str(), holdMs);
@@ -127,6 +129,7 @@ void showMessage(std::string message, LMDS& display, int holdMs)
 
 void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int holdMs)
 {
+  message = clampMessage(message);
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
   static const int ICON_GAP = 1;   //space between icon and text
 
@@ -144,6 +147,7 @@ void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LM
 
 void scrollMessage(std::string message, LMDS& display, int speed, int steps)
 {
+  message = clampMessage(message);
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
 
   logPrintf("DISP", "scrolling '%s'", message.c_str());
@@ -156,6 +160,7 @@ void scrollMessage(std::string message, LMDS& display, int speed, int steps)
 
 void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps)
 {
+  message = clampMessage(message);
   static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
   static const int ICON_GAP = 1;   //space between icon and text
 
