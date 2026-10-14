@@ -223,6 +223,10 @@ void resto_menu_task(void* pvParameters) {
                 RestaurantMenu menu = fetchMenu(code, fetchDate, lang);
                 if (!menu.dishes.empty()) cachedMenus.push_back(menu);
             }
+            // Nothing fetched (network not ready, API error, weekend): retry
+            // in 5 minutes instead of waiting out the full fetch interval.
+            if (cachedMenus.empty() && currentTime > 3600)
+                lastFetch = currentTime - (time_t)(kFetchIntervalMs / 1000) + 300;
         }
 
         // ── display ───────────────────────────────────────────────────────

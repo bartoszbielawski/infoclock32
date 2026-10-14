@@ -158,7 +158,11 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        if (difftime(time(nullptr), last_weather_update) > 30*60) // update weather every 30 minutes
+        // update weather every 30 minutes; the first fetch must not wait for
+        // the wall clock (it reads ~uptime until NTP syncs, so the age check
+        // alone would delay the first fetch by up to 30 min after boot)
+        if (last_weather_update == 0 ||
+            difftime(time(nullptr), last_weather_update) > 30*60)
         {
             auto newWeather = readWeatherFromOWM(iconIndex);
             if (not newWeather.empty())

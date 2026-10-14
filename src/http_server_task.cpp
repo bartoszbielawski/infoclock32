@@ -11,6 +11,7 @@
 #include <logger.hpp>
 #include <version.hpp>
 #include <mqtt_task.h>
+#include <mqtt_discovery.hpp>
 #include <web_ui.hpp>
 #include <task_registry.hpp>
 #include <esp_timer.h>
@@ -441,7 +442,19 @@ void handle_file_edit()
             char buf[256];
             while (file.available()) {
                 int n = file.readBytes(buf, sizeof(buf));
-                if (n > 0) server.sendContent(buf, n);
+                // Escape: a "</textarea>" in a value must not break out of
+                // the editor (config values can come from MQTT / messages).
+                String esc;
+                esc.reserve(n + 16);
+                for (int i = 0; i < n; i++) {
+                    switch (buf[i]) {
+                        case '&': esc += "&amp;";  break;
+                        case '<': esc += "&lt;";   break;
+                        case '>': esc += "&gt;";   break;
+                        default:  esc += buf[i];   break;
+                    }
+                }
+                if (esc.length()) server.sendContent(esc);
             }
             file.close();
         }
@@ -553,22 +566,19 @@ void handle_api_runtime()
 
     auto rtSnap = RuntimeStore::getInstance().snapshot();
 
-    char json[1024];
-    size_t pos = 0;
-    pos += snprintf(json + pos, sizeof(json) - pos, "{\"entries\":{");
-
+    // Built as a std::string with JSON escaping: values come from remote
+    // sources (weather description, MQTT) and may contain quotes or be long.
+    std::string json = "{\"entries\":{";
     bool first = true;
     for (const auto& kv : rtSnap) {
-        if (sizeof(json) - pos < 300) break;
-        pos += snprintf(json + pos, sizeof(json) - pos,
-                        "%s\"%s\":\"%s\"",
-                        first ? "" : ",",
-                        kv.first.c_str(), kv.second.c_str());
+        if (!first) json += ',';
         first = false;
+        json += '"' + ha_discovery::json_escape(kv.first) + "\":\"" +
+                ha_discovery::json_escape(kv.second) + '"';
     }
-    snprintf(json + pos, sizeof(json) - pos, "}}");
+    json += "}}";
 
-    server.send(200, "application/json", json);
+    server.send(200, "application/json", json.c_str());
 }
 
 // ── /metrics (Prometheus scrape format, unauthenticated like / and /status) ───

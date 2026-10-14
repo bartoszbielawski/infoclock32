@@ -71,6 +71,10 @@ start stubonly   "sensors=stub"
 # offsets are applied at write time
 start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5" "humidity_offset=-5"
 
+# web: runtime JSON stays valid, /edit cannot be broken out of via a value,
+# secrets never reach /api/runtime
+start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_api_key=TOPSECRET"
+
 if [ $SLOW -eq 1 ]; then
     # lone sensor dies after 2 good reads: reading is dropped after the stale window
     start dead       "sensors=sim" "sim_temp=20" "sim_fail_after=2"
@@ -98,6 +102,16 @@ expect_no_metric stubonly temp_c
 
 expect_metric    offsets temp_c  21.5
 expect_metric    offsets temp_rh 35
+
+eval "p=\$PORT_web"
+if curl -s --max-time 3 "http://127.0.0.1:$p/api/runtime" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null
+then ok "web: /api/runtime is valid JSON"; else fail "web: /api/runtime is not valid JSON"; fi
+page=$(curl -s --max-time 3 "http://127.0.0.1:$p/edit")
+case "$page" in
+    *"&lt;/textarea&gt;"*) ok "web: /edit escapes </textarea>" ;;
+    *) fail "web: /edit does not escape </textarea>" ;;
+esac
+if grep -aq "TOPSECRET" "$WORK/web.log"; then fail "web: secret value found in log"; else ok "web: secret value not logged"; fi
 
 if [ $SLOW -eq 1 ]; then
     echo "── slow cases (waiting for the stale window) ──"

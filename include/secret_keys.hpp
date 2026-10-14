@@ -15,7 +15,7 @@ inline bool isSecretKey(const std::string& key)
     k.reserve(key.size());
     for (char c : key) k += (char)tolower((unsigned char)c);
 
-    static const char* const contains[] = { "password", "passwd", "secret", "token", "api_key", "apikey" };
+    static const char* const contains[] = { "password", "passwd", "secret", "token", "api_key", "apikey", "appid" };
     for (const char* needle : contains)
         if (k.find(needle) != std::string::npos) return true;
 

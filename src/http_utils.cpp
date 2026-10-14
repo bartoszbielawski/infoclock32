@@ -14,6 +14,7 @@
   #define HAS_WIFI_CLIENT_SECURE
 #endif
 #include <logger.hpp>
+#include <config_utils.hpp>
 
 namespace HttpUtils {
 
@@ -50,7 +51,7 @@ int httpGet(const String &url, String &outBody, bool insecure,
     }
 
     if (!ok) {
-        logPrintf("HTTP", "http.begin() failed for %s", url.c_str());
+        logPrintf("HTTP", "http.begin() failed for %s", redactUrl(url.c_str()).c_str());
         return -1;
     }
 
@@ -64,10 +65,10 @@ int httpGet(const String &url, String &outBody, bool insecure,
             // Log URL + first 100 chars of the body so 4xx/5xx errors are
             // immediately visible in the web log without a serial monitor.
             logPrintf("HTTP", "GET %s -> %d: %.100s",
-                      url.c_str(), httpCode, outBody.c_str());
+                      redactUrl(url.c_str()).c_str(), httpCode, outBody.c_str());
         }
     } else {
-        logPrintf("HTTP", "GET %s -> err %d", url.c_str(), httpCode);
+        logPrintf("HTTP", "GET %s -> err %d", redactUrl(url.c_str()).c_str(), httpCode);
     }
 
     http.end();

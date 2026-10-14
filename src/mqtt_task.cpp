@@ -206,7 +206,7 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         String value = line.substring(sep + 1);
 
         // Block sensitive keys
-        if (isSecretKey(key.c_str()))
+        if (!isValidConfigKey(key.c_str()) || isSecretKey(key.c_str()))
         {
             logPrintf("MQT", "/config blocked sensitive key '%s'", key.c_str());
             return;
@@ -226,8 +226,8 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         std::string clientId = ds.get_value("mqtt_client_id", "infoclock32");
         std::string varName(buf);
 
-        if (varName.find("assword") != std::string::npos)
-            return;
+        if (isSecretKey(varName))
+            return;   // never publish passwords / API keys / tokens
 
         // DeviceStore (WiFi/system) → RuntimeStore (sensors) → DataStore (config)
         std::string response = DeviceStore::getInstance().get(varName);

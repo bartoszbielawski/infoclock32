@@ -10,6 +10,7 @@
 #include <parse_utils.hpp>
 #include <LittleFS.h>
 #include <secret_keys.hpp>
+#include <config_utils.hpp>
 #include <Arduino.h>
 
 class DataStore
@@ -93,8 +94,12 @@ public:
 
     void set_value(const std::string& key, const std::string& value)
     {
+        // Keys that cannot round-trip through config.txt are refused, and line
+        // breaks in values are folded to spaces (see config_utils.hpp).
+        if (!isValidConfigKey(key)) return;
+        std::string clean = sanitizeConfigValue(value);
         std::lock_guard<std::mutex> lock(data_mutex_);
-        data[key] = value;
+        data[key] = clean;
     }
 
     void remove_value(const std::string& key)
