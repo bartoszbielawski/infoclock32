@@ -74,6 +74,15 @@ typedef bool boolean;
 // Macro substitution happens before name lookup, so unqualified `byte` becomes
 // `uint8_t` and can never collide with std::byte. (In the firmware, `byte` is
 // only ever used as a type, never as an identifier, so the macro is safe.)
+// libstdc++ (GCC/Linux) spells std::byte as `enum class byte` inside its own
+// headers, which the macro below would mangle. Pull every standard header in
+// *before* the macro exists; later includes are then no-ops (include guards).
+#if defined(__has_include)
+#  if __has_include(<bits/stdc++.h>)
+#    include <bits/stdc++.h>
+#  endif
+#endif
+
 #define byte uint8_t
 
 int strlcpy_host(char* dst, const char* src, size_t size);
