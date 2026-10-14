@@ -123,7 +123,7 @@ sensors=bmp280
 #sensors=scd4x
 #
 # Multiple sensors - comma-separated, polled round-robin, consolidated onto the
-# same {temp_c} / {temp_rh} / {temp_hpa} / {temp_co2} keys (last-polled wins):
+# same {temp_c} / {temp_rh} / {temp_hpa} / {temp_co2} keys (first listed sensor providing a value wins):
 #sensors=bme280,scd4x
 #
 # Calibration offsets added to each reading (defaults 0):

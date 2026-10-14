@@ -10,6 +10,8 @@
 #include <sensor.hpp>
 #include <pressure_history.hpp>
 #include <temp_display.hpp>
+#include <sensor_merge.hpp>
+#include <esp_timer.h>
 #include <string>
 #include <vector>
 
@@ -38,69 +40,77 @@ static void sensorListExit(std::vector<Sensor*>* list)
     task_mark_exited();   // stop watchdog supervision before leaving the task
 }
 
+// Monotonic seconds since boot. Used for polling cadence and staleness so an
+// NTP step can't make a reading look ancient (or delay the first poll while
+// the wall clock is still near 1970). Wall time is kept only for the pressure
+// history.
+static int64_t monoSeconds()
+{
+    return esp_timer_get_time() / 1000000LL;
+}
+
+static const char* const kMeasurementKey[MEAS_COUNT] =
+    { "temp_c", "temp_rh", "temp_hpa", "temp_co2" };
+
 void sensor_task(void* parameter)
 {
     registerTask("Sensor", 4096, 60000);
     std::vector<Sensor*>* list = static_cast<std::vector<Sensor*>*>(parameter);
-    const size_t N = list->size();
-
-    if (N == 0)
-    {
-        logPrintf("TMP", "no sensors configured (sensors=?) — task exiting");
-        sensorListExit(list);
-        vTaskDelete(nullptr);
-        return;
-    }
 
     // Initialise every sensor up front. A single bad bus read (e.g. a missing
-    // I2C chip) must not take the whole round down — begin() failures log and
-    // continue; only if all sensors fail do we give up.
-    size_t okCount = 0;
-    for (size_t i = 0; i < N; i++)
+    // I2C chip) must not take the whole round down: sensors whose begin()
+    // fails are dropped from the round (not polled), and stubs are dropped as
+    // soon as a real sensor is present. If nothing is left, the task exits.
+    std::vector<bool> initOk;
+    for (size_t i = 0; i < list->size(); i++)
     {
-        if (list->at(i)->begin())
-            okCount++;
-        else
-            logPrintf("TMP", "sensor '%s' failed to initialize — will be skipped in the round",
+        bool ok = list->at(i)->begin();
+        initOk.push_back(ok);
+        if (!ok)
+            logPrintf("TMP", "sensor '%s' failed to initialize — dropped from the round",
                       list->at(i)->name());
     }
-    logPrintf("TMP", "starting with %zu sensor(s)", okCount);
-    if (okCount == 0)
+    pruneSensors(*list, initOk);
+
+    const size_t N = list->size();
+    if (N == 0)
     {
-        logPrintf("TMP", "all sensors failed to initialize, task exiting");
+        logPrintf("TMP", "no usable sensors (sensors=? stub/failed) — task exiting");
         sensorListExit(list);
         vTaskDelete(nullptr);
         return;
     }
+    logPrintf("TMP", "starting with %zu sensor(s)", N);
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    time_t last_update = 0;
-    time_t last_display = 0;
     size_t rr_index = 0;
+
+    // Monotonic schedule (seconds). 0 => first poll happens immediately.
+    int64_t nextPollAt = 0;
+    int64_t lastDisplay = -1;
 
     float temp = 0.0f;
     float pressure = 0.0f;
     float humidity = 0.0f;
     int co2 = 0;
 
-    // Pressure trend (valid only when a sensor in the round provides pressure)
+    // One slot per measurement: who wrote it and when (see sensor_merge.hpp).
+    MeasurementSlot slots[MEAS_COUNT];
+    int owner[MEAS_COUNT];
+    for (int m = 0; m < MEAS_COUNT; m++)
+        owner[m] = firstProvider(*list, (Measurement)m);
+
+    // Pressure trend (valid only while a pressure reading is fresh)
     bool haveTrend = false;
     TrendKind trendKind = TREND_STEADY;
     float trendRate = 0.0f;
 
-    bool read_success = false;
+    // Capability union across the round, used only to decide whether a
+    // requested display item can ever be shown (log once per item).
+    bool anyHumidity = owner[MEAS_HUMIDITY] >= 0;
+    bool anyPressure = owner[MEAS_PRESSURE] >= 0;
+    bool anyCo2      = owner[MEAS_CO2] >= 0;
 
-    // Capability union across the whole round: a display item is shown if ANY
-    // sensor provides it, so the filter is computed once here.
-    bool anyHumidity = false, anyPressure = false, anyCo2 = false;
-    for (size_t i = 0; i < N; i++)
-    {
-        anyHumidity  = anyHumidity  || list->at(i)->hasHumidity();
-        anyPressure  = anyPressure  || list->at(i)->hasPressure();
-        anyCo2       = anyCo2       || list->at(i)->hasCo2();
-    }
-
-    // Complaints about requested-but-unavailable measurements: once per item
     bool unavailableLogged[TDI_COUNT] = {};
 
     while (true)
@@ -149,35 +159,53 @@ void sensor_task(void* parameter)
             }
         }
 
-        time_t now = time(nullptr);
+        int64_t now = monoSeconds();
+        bool newData = false;   // a poll succeeded in this wake
+        const int64_t staleAfter = staleAfterSeconds(N, interval_s);
 
         // Round-robin: refresh one sensor per interval. The index always
         // advances so a dead sensor doesn't stall the round.
-        if (difftime(now, last_update) >= interval_s)
+        if (now >= nextPollAt)
         {
-            Sensor* s = list->at(rr_index);
+            const size_t idx = rr_index;
+            Sensor* s = list->at(idx);
             rr_index = (rr_index + 1) % N;
 
-            read_success = s->read();
-            if (read_success)
+            if (s->read())
             {
-                last_update = now;
+                nextPollAt = now + interval_s;
+                newData = true;
                 auto& rs = RuntimeStore::getInstance();
+                time_t wall = time(nullptr);
 
-                temp = s->temperature() + tempOffset;
-                rs.set("temp_c", temp, runtimeTempFormat());
+                auto accepts = [&](Measurement m) {
+                    return sensorProvides(*s, m) &&
+                           slotAccepts(slots[m], (int)idx, owner[m], now, staleAfter);
+                };
+                auto stamp = [&](Measurement m) {
+                    slots[m].have = true;
+                    slots[m].source = (int)idx;
+                    slots[m].stamp = now;
+                };
 
-                if (s->hasPressure())
+                if (accepts(MEAS_TEMP))
+                {
+                    temp = s->temperature() + tempOffset;
+                    rs.set("temp_c", temp, runtimeTempFormat());
+                    stamp(MEAS_TEMP);
+                }
+
+                if (accepts(MEAS_PRESSURE))
                 {
                     pressure = s->pressure() + pressOffset;
                     rs.set("temp_hpa", pressure, "%.0f");
+                    stamp(MEAS_PRESSURE);
 
                     // Feed the trend history and refresh the trend placeholders.
                     // The trend is computed from the un-offset reading so the
                     // calibration offset doesn't shift the slope.
-                    float rawPressure = s->pressure();
-                    PressureHistoryStore::getInstance().add(now, rawPressure);
-                    haveTrend = PressureHistoryStore::getInstance().trend(now, trendKind, trendRate);
+                    PressureHistoryStore::getInstance().add(wall, s->pressure());
+                    haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
                     if (haveTrend)
                     {
                         rs.set("pressure_trend", pressureTrendName(trendKind));
@@ -185,29 +213,70 @@ void sensor_task(void* parameter)
                     }
                 }
 
-                if (s->hasHumidity())
+                if (accepts(MEAS_HUMIDITY))
                 {
                     humidity = s->humidity() + rhOffset;
                     rs.set("temp_rh", humidity, "%.0f");
+                    stamp(MEAS_HUMIDITY);
                 }
 
-                if (s->hasCo2())
+                if (accepts(MEAS_CO2))
                 {
-                    co2 = (int)(s->co2Concentration() + co2Offset);
+                    int v = (int)(s->co2Concentration() + co2Offset);
+                    co2 = v < 0 ? 0 : v;
                     rs.set("temp_co2", co2, "%d");
+                    stamp(MEAS_CO2);
+                }
+            }
+            else
+            {
+                logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
+                          s->name(), idx);
+                // Retry the next sensor sooner than a full interval.
+                nextPollAt = now + (interval_s < 30 ? interval_s : 30);
+            }
+        }
+
+        // Drop readings whose provider has gone quiet: the placeholders and
+        // MQTT state disappear instead of repeating the last value forever.
+        {
+            auto& rs = RuntimeStore::getInstance();
+            for (int m = 0; m < MEAS_COUNT; m++)
+            {
+                if (!slotStale(slots[m], now, staleAfter)) continue;
+                slots[m].have = false;
+                logPrintf("TMP", "%s stale (no update for %lld s) — dropped",
+                          kMeasurementKey[m], (long long)(now - slots[m].stamp));
+                rs.remove(kMeasurementKey[m]);
+                if (m == MEAS_PRESSURE)
+                {
+                    haveTrend = false;
+                    rs.remove("pressure_trend");
+                    rs.remove("pressure_rate");
                 }
             }
         }
 
-        if (not read_success)
+        // Scroll only measurements that currently have a fresh value.
+        for (auto it = items.begin(); it != items.end();)
         {
-            logPrintf("TMP", "failed to read from sensor (round index %zu)", rr_index);
-            vTaskDelay(30000 / portTICK_PERIOD_MS);
-            continue;
+            bool fresh = true;
+            switch (*it)
+            {
+                case TDI_TEMP:     fresh = slots[MEAS_TEMP].have;     break;
+                case TDI_HUMIDITY: fresh = slots[MEAS_HUMIDITY].have; break;
+                case TDI_PRESSURE: fresh = slots[MEAS_PRESSURE].have; break;
+                case TDI_CO2:      fresh = slots[MEAS_CO2].have;      break;
+                default: break;
+            }
+            it = fresh ? it + 1 : items.erase(it);
         }
 
+        // show_interval 0 = once per successful poll; otherwise time-gated.
         bool showDue = !items.empty() &&
-                       (show_interval_s == 0 || difftime(now, last_display) >= show_interval_s);
+                       (show_interval_s == 0
+                            ? newData
+                            : (lastDisplay < 0 || (now - lastDisplay) >= show_interval_s));
         if (showDue)
         {
             // Blocking acquire: cover the worst-case wait + scroll holds, then
@@ -241,10 +310,15 @@ void sensor_task(void* parameter)
                             break;
                     }
                 }
-                last_display = time(nullptr);
+                lastDisplay = monoSeconds();
             }
         }
 
-        vTaskDelay(30000 / portTICK_PERIOD_MS);
+        // Sleep until the next poll or scroll is due (capped at 30 s so the
+        // watchdog heartbeat and config changes are picked up promptly).
+        now = monoSeconds();
+        int64_t untilShow = (show_interval_s > 0 && lastDisplay >= 0)
+                                ? (lastDisplay + show_interval_s - now) : -1;
+        vTaskDelay(wakeDelayMs(nextPollAt - now, untilShow) / portTICK_PERIOD_MS);
     }
 }

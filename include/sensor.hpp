@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <utility>
 
 // Abstract interface for a sensor that provides temperature, humidity,
@@ -31,6 +32,10 @@ public:
 
     // Short sensor name for log messages
     virtual const char* name() const = 0;
+
+    // True only for the no-hardware placeholder; the sensor task drops stubs
+    // from the polling round (and exits when nothing else is configured).
+    virtual bool isStub() const { return false; }
 };
 
 // Stub implementation — no hardware, read() always returns false.
@@ -41,4 +46,5 @@ public:
     float temperature() const override { return 0.0f; }
     int16_t co2Concentration() const override { return 0; }
     const char* name() const override { return "Stub"; }
+    bool isStub() const override { return true; }
 };

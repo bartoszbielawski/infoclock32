@@ -12,6 +12,7 @@ c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
 c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
 c++ $CXXFLAGS temp_display_check.cpp    -o temp_display_check
 c++ $CXXFLAGS sensor_factory_check.cpp  -o sensor_factory_check
+c++ $CXXFLAGS sensor_merge_check.cpp    -o sensor_merge_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
@@ -24,6 +25,7 @@ c++ $CXXFLAGS mqtt_discovery_check.cpp -o mqtt_discovery_check
 ./pressure_trend_check
 ./temp_display_check
 ./sensor_factory_check
+./sensor_merge_check
 ./clock_face_check
 ./wdt_check
 ./uptime_check
