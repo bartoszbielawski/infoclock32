@@ -98,6 +98,61 @@ int main()
     CHECK(wakeDelayMs(300, 12) == 12000, "scroll sooner than poll");
     CHECK(wakeDelayMs(8, 12) == 8000, "poll sooner than scroll");
 
+    // ── MeasurementSet: round-robin merge with scripted sensors ───────────
+    {
+        struct Scripted : FakeSensor {
+            float t, hum, press; int co2v;
+            Scripted(float t, bool h, float hum, bool p, float press, bool c, int co2v)
+                : FakeSensor(h, p, c), t(t), hum(hum), press(press), co2v(co2v) {}
+            float temperature() const override { return t; }
+            float humidity() const override { return hum; }
+            float pressure() const override { return press; }
+            int16_t co2Concentration() const override { return (int16_t)co2v; }
+        };
+        Scripted bme(21.0f, true, 40.0f, true, 1013.0f, false, 0);
+        Scripted scd(23.0f, true, 55.0f, false, 0.0f, true, 800);
+        std::vector<Sensor*> l = { &bme, &scd };
+
+        MeasurementSet d;
+        d.setOwners(l);
+        CHECK(d.owner[MEAS_TEMP] == 0 && d.owner[MEAS_CO2] == 1, "owners resolved");
+
+        SensorOffsets off; off.temp = 0.5f; off.pressure = -2.0f; off.co2 = -1000.0f;
+        const int64_t stale = staleAfterSeconds(2, 300);
+
+        unsigned got = d.ingest(bme, 0, 0, stale, off);
+        CHECK(got == (measurementBit(MEAS_TEMP) | measurementBit(MEAS_HUMIDITY) | measurementBit(MEAS_PRESSURE)),
+              "bme provides temp/hum/press (mask %u)", got);
+        CHECK(d.temp == 21.5f && d.pressure == 1011.0f && d.rawPressure == 1013.0f,
+              "offsets applied, raw pressure kept (%.1f %.1f %.1f)", d.temp, d.pressure, d.rawPressure);
+
+        got = d.ingest(scd, 1, 300, stale, off);
+        CHECK(got == measurementBit(MEAS_CO2), "scd fills only CO2 while bme is fresh (mask %u)", got);
+        CHECK(d.humidity == 40.0f && d.temp == 21.5f, "temp/humidity stay with first provider");
+        CHECK(d.co2 == 0, "negative co2 clamped to 0 (%d)", d.co2);
+
+        // bme goes quiet; scd keeps reading and takes over after the window
+        got = d.ingest(scd, 1, 900, stale, off);
+        CHECK(!(got & measurementBit(MEAS_TEMP)), "scd must not take temp while bme still fresh");
+        got = d.ingest(scd, 1, 1900, stale, off);
+        CHECK((got & measurementBit(MEAS_TEMP)) && d.temp == 23.5f, "scd takes over stale temp (%.1f)", d.temp);
+        CHECK(d.slots[MEAS_TEMP].source == 1, "source recorded");
+        got = d.ingest(scd, 1, 2200, stale, off);
+        CHECK(got & measurementBit(MEAS_TEMP), "fallback keeps updating its own slot");
+
+        // bme recovers and reclaims ownership immediately
+        got = d.ingest(bme, 0, 2500, stale, off);
+        CHECK((got & measurementBit(MEAS_TEMP)) && d.temp == 21.5f, "owner reclaims");
+
+        // everything goes quiet -> swept
+        unsigned dropped = d.sweepStale(2500 + stale + 1, stale);
+        CHECK(dropped == (measurementBit(MEAS_TEMP) | measurementBit(MEAS_HUMIDITY) |
+                          measurementBit(MEAS_PRESSURE) | measurementBit(MEAS_CO2)),
+              "stale sweep drops readings (mask %u)", dropped);
+        CHECK(!d.have(MEAS_TEMP) && !d.have(MEAS_PRESSURE), "dropped readings unavailable");
+        CHECK(d.sweepStale(2500 + stale + 2, stale) == 0, "sweep reports each drop once");
+    }
+
     if (failures) { printf("%d sensor merge check(s) FAILED\n", failures); return 1; }
     printf("all sensor merge checks passed\n");
     return 0;

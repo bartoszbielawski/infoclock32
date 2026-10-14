@@ -9,7 +9,7 @@
 #include <logger.hpp>
 #include <sensor.hpp>
 #include <pressure_history.hpp>
-#include <temp_display.hpp>
+#include <sensor_display.hpp>
 #include <sensor_merge.hpp>
 #include <esp_timer.h>
 #include <string>
@@ -89,16 +89,9 @@ void sensor_task(void* parameter)
     int64_t nextPollAt = 0;
     int64_t lastDisplay = -1;
 
-    float temp = 0.0f;
-    float pressure = 0.0f;
-    float humidity = 0.0f;
-    int co2 = 0;
-
-    // One slot per measurement: who wrote it and when (see sensor_merge.hpp).
-    MeasurementSlot slots[MEAS_COUNT];
-    int owner[MEAS_COUNT];
-    for (int m = 0; m < MEAS_COUNT; m++)
-        owner[m] = firstProvider(*list, (Measurement)m);
+    // Consolidated values, who wrote them and when (see sensor_merge.hpp).
+    MeasurementSet data;
+    data.setOwners(*list);
 
     // Pressure trend (valid only while a pressure reading is fresh)
     bool haveTrend = false;
@@ -107,11 +100,11 @@ void sensor_task(void* parameter)
 
     // Capability union across the round, used only to decide whether a
     // requested display item can ever be shown (log once per item).
-    bool anyHumidity = owner[MEAS_HUMIDITY] >= 0;
-    bool anyPressure = owner[MEAS_PRESSURE] >= 0;
-    bool anyCo2      = owner[MEAS_CO2] >= 0;
+    bool anyHumidity = data.owner[MEAS_HUMIDITY] >= 0;
+    bool anyPressure = data.owner[MEAS_PRESSURE] >= 0;
+    bool anyCo2      = data.owner[MEAS_CO2] >= 0;
 
-    bool unavailableLogged[TDI_COUNT] = {};
+    bool unavailableLogged[SDI_COUNT] = {};
 
     while (true)
     {
@@ -137,8 +130,8 @@ void sensor_task(void* parameter)
         int holdMs = hold_s * 1000;
 
         // What to show, in what order; empty list = never scroll
-        std::vector<TempDisplayItem> items = parseDisplayList(
-            DataStore::getInstance().get_value(CFG_DISPLAY, kTempDisplayDefault));
+        std::vector<SensorDisplayItem> items = parseDisplayList(
+            DataStore::getInstance().get_value(CFG_DISPLAY, kSensorDisplayDefault));
 
         // Drop measurements no sensor in the round can provide (log once per item)
         for (auto it = items.begin(); it != items.end();)
@@ -149,7 +142,7 @@ void sensor_task(void* parameter)
                 {
                     unavailableLogged[*it] = true;
                     logPrintf("TMP", "'%s' requested but no configured sensor provides it",
-                              tempDisplayName(*it));
+                              sensorDisplayName(*it));
                 }
                 it = items.erase(it);
             }
@@ -178,54 +171,33 @@ void sensor_task(void* parameter)
                 auto& rs = RuntimeStore::getInstance();
                 time_t wall = time(nullptr);
 
-                auto accepts = [&](Measurement m) {
-                    return sensorProvides(*s, m) &&
-                           slotAccepts(slots[m], (int)idx, owner[m], now, staleAfter);
-                };
-                auto stamp = [&](Measurement m) {
-                    slots[m].have = true;
-                    slots[m].source = (int)idx;
-                    slots[m].stamp = now;
-                };
+                SensorOffsets off;
+                off.temp = tempOffset;
+                off.humidity = rhOffset;
+                off.pressure = pressOffset;
+                off.co2 = co2Offset;
+                unsigned got = data.ingest(*s, (int)idx, now, staleAfter, off);
 
-                if (accepts(MEAS_TEMP))
+                if (got & measurementBit(MEAS_TEMP))
+                    rs.set("temp_c", data.temp, runtimeTempFormat());
+                if (got & measurementBit(MEAS_HUMIDITY))
+                    rs.set("temp_rh", data.humidity, "%.0f");
+                if (got & measurementBit(MEAS_CO2))
+                    rs.set("temp_co2", data.co2, "%d");
+                if (got & measurementBit(MEAS_PRESSURE))
                 {
-                    temp = s->temperature() + tempOffset;
-                    rs.set("temp_c", temp, runtimeTempFormat());
-                    stamp(MEAS_TEMP);
-                }
-
-                if (accepts(MEAS_PRESSURE))
-                {
-                    pressure = s->pressure() + pressOffset;
-                    rs.set("temp_hpa", pressure, "%.0f");
-                    stamp(MEAS_PRESSURE);
+                    rs.set("temp_hpa", data.pressure, "%.0f");
 
                     // Feed the trend history and refresh the trend placeholders.
                     // The trend is computed from the un-offset reading so the
                     // calibration offset doesn't shift the slope.
-                    PressureHistoryStore::getInstance().add(wall, s->pressure());
+                    PressureHistoryStore::getInstance().add(wall, data.rawPressure);
                     haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
                     if (haveTrend)
                     {
                         rs.set("pressure_trend", pressureTrendName(trendKind));
                         rs.set("pressure_rate", trendRate, "%+.2f");
                     }
-                }
-
-                if (accepts(MEAS_HUMIDITY))
-                {
-                    humidity = s->humidity() + rhOffset;
-                    rs.set("temp_rh", humidity, "%.0f");
-                    stamp(MEAS_HUMIDITY);
-                }
-
-                if (accepts(MEAS_CO2))
-                {
-                    int v = (int)(s->co2Concentration() + co2Offset);
-                    co2 = v < 0 ? 0 : v;
-                    rs.set("temp_co2", co2, "%d");
-                    stamp(MEAS_CO2);
                 }
             }
             else
@@ -241,12 +213,12 @@ void sensor_task(void* parameter)
         // MQTT state disappear instead of repeating the last value forever.
         {
             auto& rs = RuntimeStore::getInstance();
+            unsigned dropped = data.sweepStale(now, staleAfter);
             for (int m = 0; m < MEAS_COUNT; m++)
             {
-                if (!slotStale(slots[m], now, staleAfter)) continue;
-                slots[m].have = false;
-                logPrintf("TMP", "%s stale (no update for %lld s) — dropped",
-                          kMeasurementKey[m], (long long)(now - slots[m].stamp));
+                if (!(dropped & measurementBit((Measurement)m))) continue;
+                logPrintf("TMP", "%s stale (no update for %lld s) - dropped",
+                          kMeasurementKey[m], (long long)(now - data.slots[m].stamp));
                 rs.remove(kMeasurementKey[m]);
                 if (m == MEAS_PRESSURE)
                 {
@@ -263,10 +235,10 @@ void sensor_task(void* parameter)
             bool fresh = true;
             switch (*it)
             {
-                case TDI_TEMP:     fresh = slots[MEAS_TEMP].have;     break;
-                case TDI_HUMIDITY: fresh = slots[MEAS_HUMIDITY].have; break;
-                case TDI_PRESSURE: fresh = slots[MEAS_PRESSURE].have; break;
-                case TDI_CO2:      fresh = slots[MEAS_CO2].have;      break;
+                case SDI_TEMP:     fresh = data.slots[MEAS_TEMP].have;     break;
+                case SDI_HUMIDITY: fresh = data.slots[MEAS_HUMIDITY].have; break;
+                case SDI_PRESSURE: fresh = data.slots[MEAS_PRESSURE].have; break;
+                case SDI_CO2:      fresh = data.slots[MEAS_CO2].have;      break;
                 default: break;
             }
             it = fresh ? it + 1 : items.erase(it);
@@ -290,21 +262,21 @@ void sensor_task(void* parameter)
                 {
                     switch (items[i])
                     {
-                        case TDI_TEMP:
-                            showMessage(formatTempLine(temp), display, holdMs);
+                        case SDI_TEMP:
+                            showMessage(formatTempLine(data.temp), display, holdMs);
                             break;
-                        case TDI_HUMIDITY:
-                            showMessage(formatHumidityLine(humidity), display, holdMs);
+                        case SDI_HUMIDITY:
+                            showMessage(formatHumidityLine(data.humidity), display, holdMs);
                             break;
-                        case TDI_PRESSURE:
+                        case SDI_PRESSURE:
                         {
                             const uint8_t* trendIcon = haveTrend ? trendIconFor(trendKind) : nullptr;
                             showMessage(trendIcon, kWeatherIconWidth,
-                                        formatPressureLine(pressure), display, holdMs);
+                                        formatPressureLine(data.pressure), display, holdMs);
                             break;
                         }
-                        case TDI_CO2:
-                            showMessage(formatCo2Line(co2), display, holdMs);
+                        case SDI_CO2:
+                            showMessage(formatCo2Line(data.co2), display, holdMs);
                             break;
                         default:
                             break;

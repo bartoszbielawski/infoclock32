@@ -1,6 +1,6 @@
 #pragma once
-#ifndef TEMP_DISPLAY_HPP
-#define TEMP_DISPLAY_HPP
+#ifndef SENSOR_DISPLAY_HPP
+#define SENSOR_DISPLAY_HPP
 
 #include <string>
 #include <vector>
@@ -10,22 +10,22 @@
 #include <pressure_trend.hpp>
 #include <weather_icons.hpp>
 
-// Display formatting for the sensor task: parse the temp_display
+// Display formatting for the sensor task: parse the sensor_display
 // config list and turn measurements into LED-matrix text. Pure C++ — no
 // Arduino/FreeRTOS — so it can be unit tested on the host
-// (see tests/host/temp_display_check.cpp).
+// (see tests/host/sensor_display_check.cpp).
 
-enum TempDisplayItem
+enum SensorDisplayItem
 {
-    TDI_TEMP = 0,
-    TDI_HUMIDITY,
-    TDI_PRESSURE,
-    TDI_CO2,
-    TDI_COUNT
+    SDI_TEMP = 0,
+    SDI_HUMIDITY,
+    SDI_PRESSURE,
+    SDI_CO2,
+    SDI_COUNT
 };
 
-// Default value of the temp_display key: what scrolled before the key existed.
-static const char kTempDisplayDefault[] = "temp,pressure";
+// Default value of the sensor_display key: what scrolled before the key existed.
+static const char kSensorDisplayDefault[] = "temp,pressure";
 
 // Temperature is always shown with one fractional digit — the temp_decimals
 // config key was removed in the multi-sensor rework.
@@ -72,32 +72,32 @@ inline std::string formatCo2Line(int ppm)
 }
 
 // True when the sensor described by its capability flags can provide the item.
-inline bool itemAvailable(TempDisplayItem item, bool hasHumidity, bool hasPressure, bool hasCo2)
+inline bool itemAvailable(SensorDisplayItem item, bool hasHumidity, bool hasPressure, bool hasCo2)
 {
     switch (item)
     {
-        case TDI_HUMIDITY: return hasHumidity;
-        case TDI_PRESSURE: return hasPressure;
-        case TDI_CO2:      return hasCo2;
+        case SDI_HUMIDITY: return hasHumidity;
+        case SDI_PRESSURE: return hasPressure;
+        case SDI_CO2:      return hasCo2;
         default:           return true;   // temperature is always there
     }
 }
 
 // Canonical name of a single item.
-inline const char* tempDisplayName(TempDisplayItem item)
+inline const char* sensorDisplayName(SensorDisplayItem item)
 {
-    static const char* names[TDI_COUNT] = { "temp", "humidity", "pressure", "co2" };
+    static const char* names[SDI_COUNT] = { "temp", "humidity", "pressure", "co2" };
     return names[item];
 }
 
 // Canonical comma-separated form of an item list (for the web UI round-trip).
-inline std::string displayListString(const std::vector<TempDisplayItem>& items)
+inline std::string displayListString(const std::vector<SensorDisplayItem>& items)
 {
     std::string out;
     for (size_t i = 0; i < items.size(); i++)
     {
         if (i) out += ',';
-        out += tempDisplayName(items[i]);
+        out += sensorDisplayName(items[i]);
     }
     return out;
 }
@@ -105,9 +105,9 @@ inline std::string displayListString(const std::vector<TempDisplayItem>& items)
 // Parse a comma-separated list ("temp, humidity", "humidity") into ordered
 // display items. Tokens are lowercased and trimmed; empty entries, unknown
 // tokens and duplicates are dropped (first occurrence wins).
-inline std::vector<TempDisplayItem> parseDisplayList(const std::string& list)
+inline std::vector<SensorDisplayItem> parseDisplayList(const std::string& list)
 {
-    std::vector<TempDisplayItem> out;
+    std::vector<SensorDisplayItem> out;
     size_t pos = 0;
     while (pos < list.size())
     {
@@ -121,12 +121,12 @@ inline std::vector<TempDisplayItem> parseDisplayList(const std::string& list)
         for (size_t i = 0; i < tok.size(); i++)
             tok[i] = (char)tolower((unsigned char)tok[i]);
 
-        TempDisplayItem item;
+        SensorDisplayItem item;
         bool known = true;
-        if (tok == "temp" || tok == "temperature")      item = TDI_TEMP;
-        else if (tok == "humidity" || tok == "rh")      item = TDI_HUMIDITY;
-        else if (tok == "pressure" || tok == "hpa")     item = TDI_PRESSURE;
-        else if (tok == "co2")                          item = TDI_CO2;
+        if (tok == "temp" || tok == "temperature")      item = SDI_TEMP;
+        else if (tok == "humidity" || tok == "rh")      item = SDI_HUMIDITY;
+        else if (tok == "pressure" || tok == "hpa")     item = SDI_PRESSURE;
+        else if (tok == "co2")                          item = SDI_CO2;
         else                                            known = false;
 
         if (known)
@@ -153,4 +153,4 @@ inline const uint8_t* trendIconFor(TrendKind kind)
     }
 }
 
-#endif // TEMP_DISPLAY_HPP
+#endif // SENSOR_DISPLAY_HPP

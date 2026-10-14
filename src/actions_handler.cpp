@@ -9,7 +9,7 @@
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
 #include <night_mode_task.h>
-#include <temp_display.hpp>
+#include <sensor_display.hpp>
 
 // â”€â”€ /push â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Simple JSON endpoint for scripted / programmatic message display.
@@ -237,7 +237,7 @@ void handle_actions()
     char   nBrStr[4];
     snprintf(nBrStr, sizeof(nBrStr), "%d", ds.get_value<int>("night_brightness", 1));
 
-    String curTempDisplay = ds.get_value("sensor_display", kTempDisplayDefault).c_str();
+    String curSensorDisplay = ds.get_value("sensor_display", kSensorDisplayDefault).c_str();
     char showIntStr[8], holdStr[4];
     snprintf(showIntStr, sizeof(showIntStr), "%d",
              ds.get_value<int>("sensor_readout_interval", 0));
@@ -324,16 +324,16 @@ void handle_actions()
                                "<input type='hidden' name='action' value='sensor'>"
                                "<div style='display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:.9rem;color:#1e293b'>"
                                "<label><input type='checkbox' name='show_temp'"));
-    if (curTempDisplay.indexOf("temp") >= 0) server.sendContent_P(PSTR(" checked"));
+    if (curSensorDisplay.indexOf("temp") >= 0) server.sendContent_P(PSTR(" checked"));
     server.sendContent_P(PSTR("> Temperature (&deg;C)</label>"
                                "<label><input type='checkbox' name='show_humidity'"));
-    if (curTempDisplay.indexOf("humidity") >= 0) server.sendContent_P(PSTR(" checked"));
+    if (curSensorDisplay.indexOf("humidity") >= 0) server.sendContent_P(PSTR(" checked"));
     server.sendContent_P(PSTR("> Humidity (%RH, only with a humidity sensor)</label>"
                                "<label><input type='checkbox' name='show_pressure'"));
-    if (curTempDisplay.indexOf("pressure") >= 0) server.sendContent_P(PSTR(" checked"));
+    if (curSensorDisplay.indexOf("pressure") >= 0) server.sendContent_P(PSTR(" checked"));
     server.sendContent_P(PSTR("> Pressure (hPa, with trend arrow)</label>"
                                "<label><input type='checkbox' name='show_co2'"));
-    if (curTempDisplay.indexOf("co2") >= 0) server.sendContent_P(PSTR(" checked"));
+    if (curSensorDisplay.indexOf("co2") >= 0) server.sendContent_P(PSTR(" checked"));
     server.sendContent_P(PSTR("> CO2 (ppm, only with a CO2 sensor)</label>"
                                "</div>"
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"

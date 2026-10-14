@@ -121,3 +121,82 @@ inline uint32_t wakeDelayMs(int64_t secsUntilPoll, int64_t secsUntilShow,
     int64_t ms = s * 1000;
     return ms > (int64_t)capMs ? capMs : (uint32_t)ms;
 }
+
+// Calibration offsets added at write time, one per measurement.
+struct SensorOffsets
+{
+    float temp = 0.0f, humidity = 0.0f, pressure = 0.0f, co2 = 0.0f;
+};
+
+inline unsigned measurementBit(Measurement m) { return 1u << (unsigned)m; }
+
+// Consolidated latest values + provenance for the whole round. The task feeds
+// every successful read through ingest() and sweeps with sweepStale(); the
+// returned bitmasks say which RuntimeStore keys to write / remove.
+struct MeasurementSet
+{
+    MeasurementSlot slots[MEAS_COUNT];
+    int owner[MEAS_COUNT];
+
+    float temp = 0.0f;
+    float humidity = 0.0f;
+    float pressure = 0.0f;      // offset applied
+    float rawPressure = 0.0f;   // un-offset: the trend must not see the offset
+    int   co2 = 0;
+
+    MeasurementSet() { for (int m = 0; m < MEAS_COUNT; m++) owner[m] = -1; }
+
+    void setOwners(const std::vector<Sensor*>& list)
+    {
+        for (int m = 0; m < MEAS_COUNT; m++)
+            owner[m] = firstProvider(list, (Measurement)m);
+    }
+
+    bool have(Measurement m) const { return slots[m].have; }
+
+    // Merge one successful read of sensor `idx`. Returns the bitmask of
+    // measurements that were accepted (and are now the current values).
+    unsigned ingest(const Sensor& s, int idx, int64_t now, int64_t staleAfter,
+                    const SensorOffsets& off)
+    {
+        unsigned accepted = 0;
+        auto take = [&](Measurement m) {
+            if (!sensorProvides(s, m)) return false;
+            if (!slotAccepts(slots[m], idx, owner[m], now, staleAfter)) return false;
+            slots[m].have = true;
+            slots[m].source = idx;
+            slots[m].stamp = now;
+            accepted |= measurementBit(m);
+            return true;
+        };
+
+        if (take(MEAS_TEMP))
+            temp = s.temperature() + off.temp;
+        if (take(MEAS_HUMIDITY))
+            humidity = s.humidity() + off.humidity;
+        if (take(MEAS_PRESSURE))
+        {
+            rawPressure = s.pressure();
+            pressure = rawPressure + off.pressure;
+        }
+        if (take(MEAS_CO2))
+        {
+            int v = (int)(s.co2Concentration() + off.co2);
+            co2 = v < 0 ? 0 : v;
+        }
+        return accepted;
+    }
+
+    // Mark stale measurements as unavailable; returns their bitmask.
+    unsigned sweepStale(int64_t now, int64_t staleAfter)
+    {
+        unsigned dropped = 0;
+        for (int m = 0; m < MEAS_COUNT; m++)
+        {
+            if (!slotStale(slots[m], now, staleAfter)) continue;
+            slots[m].have = false;
+            dropped |= measurementBit((Measurement)m);
+        }
+        return dropped;
+    }
+};

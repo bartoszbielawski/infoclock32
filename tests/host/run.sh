@@ -10,7 +10,7 @@ c++ $CXXFLAGS sun_times_check.cpp     -o sun_times_check
 c++ $CXXFLAGS life_step_check.cpp     -o life_step_check
 c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
 c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
-c++ $CXXFLAGS temp_display_check.cpp    -o temp_display_check
+c++ $CXXFLAGS sensor_display_check.cpp    -o sensor_display_check
 c++ $CXXFLAGS sensor_factory_check.cpp  -o sensor_factory_check
 c++ $CXXFLAGS sensor_merge_check.cpp    -o sensor_merge_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
@@ -18,12 +18,23 @@ c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 c++ $CXXFLAGS mqtt_discovery_check.cpp -o mqtt_discovery_check
 
+# Guard: the tracked data/config.txt is written back by the device, so make
+# sure no secret ever gets committed in it.
+for key in wifi_password ota_password web_password ow_api_key mqtt_password; do
+    val=$(grep -E "^${key}=" ../../data/config.txt | head -n1 | cut -d= -f2-)
+    if [ -n "$val" ]; then
+        echo "FAIL: data/config.txt has a non-empty $key - do not commit secrets"
+        exit 1
+    fi
+done
+echo "config secrets guard passed"
+
 ./custom_message_check
 ./sun_times_check
 ./life_step_check
 ./weather_icons_check
 ./pressure_trend_check
-./temp_display_check
+./sensor_display_check
 ./sensor_factory_check
 ./sensor_merge_check
 ./clock_face_check

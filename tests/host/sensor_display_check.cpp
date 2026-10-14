@@ -1,7 +1,7 @@
-// Host-side tests for include/temp_display.hpp.
+// Host-side tests for include/sensor_display.hpp.
 // Covers list parsing (order, aliases, unknown/duplicate/empty handling),
 // availability gating, formatters and round-trips.
-#include <temp_display.hpp>
+#include <sensor_display.hpp>
 #include <cstdio>
 
 static int failures = 0;
@@ -23,7 +23,7 @@ static void expect_line(const std::string& got, const std::string& want, const c
 int main()
 {
     // List parsing: default, order, aliases, case/whitespace
-    expect_list(kTempDisplayDefault, "temp,pressure");
+    expect_list(kSensorDisplayDefault, "temp,pressure");
     expect_list("CO2", "co2");
     expect_list("", "");
     expect_list("   ", "");
@@ -42,13 +42,13 @@ int main()
     expect_list("temp,,pressure,", "temp,pressure");
 
     // Availability gating
-    CHECK(itemAvailable(TDI_TEMP, false, false, false), "temp always available");
-    CHECK(!itemAvailable(TDI_HUMIDITY, false, true, false), "humidity needs hasHumidity");
-    CHECK(itemAvailable(TDI_HUMIDITY, true, false, false), "humidity ok");
-    CHECK(!itemAvailable(TDI_PRESSURE, true, false, false), "pressure needs hasPressure");
-    CHECK(itemAvailable(TDI_PRESSURE, false, true, false), "pressure ok");
-    CHECK(!itemAvailable(TDI_CO2, true, true, false), "co2 needs hasCo2");
-    CHECK(itemAvailable(TDI_CO2, false, false, true), "co2 ok");
+    CHECK(itemAvailable(SDI_TEMP, false, false, false), "temp always available");
+    CHECK(!itemAvailable(SDI_HUMIDITY, false, true, false), "humidity needs hasHumidity");
+    CHECK(itemAvailable(SDI_HUMIDITY, true, false, false), "humidity ok");
+    CHECK(!itemAvailable(SDI_PRESSURE, true, false, false), "pressure needs hasPressure");
+    CHECK(itemAvailable(SDI_PRESSURE, false, true, false), "pressure ok");
+    CHECK(!itemAvailable(SDI_CO2, true, true, false), "co2 needs hasCo2");
+    CHECK(itemAvailable(SDI_CO2, false, false, true), "co2 ok");
 
     // Temperature formatting (LED degree glyph) — always one fractional digit
     expect_line(formatTempLine(22.5f), std::string("22.5\xF7" "C"), "temp 1 decimal");
@@ -74,10 +74,10 @@ int main()
 
     // Round-trip: canonical string parses back to the same items
     {
-        std::vector<TempDisplayItem> items = parseDisplayList("pressure,temp,humidity");
+        std::vector<SensorDisplayItem> items = parseDisplayList("pressure,temp,humidity");
         CHECK(displayListString(items) == "pressure,temp,humidity", "round-trip");
-        CHECK(items.size() == 3 && items[0] == TDI_PRESSURE &&
-              items[1] == TDI_TEMP && items[2] == TDI_HUMIDITY, "round-trip order");
+        CHECK(items.size() == 3 && items[0] == SDI_PRESSURE &&
+              items[1] == SDI_TEMP && items[2] == SDI_HUMIDITY, "round-trip order");
     }
 
     // Trend icons: distinct, non-null
