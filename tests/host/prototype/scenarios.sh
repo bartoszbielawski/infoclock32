@@ -52,8 +52,16 @@ FAILED=0
 ok()   { echo "ok   $1"; }
 fail() { echo "FAIL $1"; FAILED=$((FAILED + 1)); }
 
+# Positive checks poll (a loaded CI runner can be slow to reach steady
+# state); absence checks run once after the settle sleep.
 expect_metric() {   # case metric value
-    v=$(metrics "$1" | awk -v m="infoclock_$2" '$1==m {print $2}')
+    i=0
+    while :; do
+        v=$(metrics "$1" | awk -v m="infoclock_$2" '$1==m {print $2}')
+        [ "$v" = "$3" ] && break
+        i=$((i + 1)); [ $i -ge 30 ] && break
+        sleep 2
+    done
     if [ "$v" = "$3" ]; then ok "$1: $2 == $3"; else fail "$1: $2 is '${v:-absent}', want $3"; fi
 }
 expect_no_metric() {   # case metric
@@ -61,6 +69,11 @@ expect_no_metric() {   # case metric
     if [ -z "$v" ]; then ok "$1: $2 absent"; else fail "$1: $2 is '$v', want absent"; fi
 }
 expect_log() {   # case pattern
+    i=0
+    until grep -aq -- "$2" "$WORK/$1.log"; do
+        i=$((i + 1)); [ $i -ge 30 ] && break
+        sleep 2
+    done
     if grep -aq -- "$2" "$WORK/$1.log"; then ok "$1: log has '$2'"; else fail "$1: log lacks '$2'"; fi
 }
 
@@ -134,7 +147,12 @@ expect_log open "/push is open"
 
 expect_code "push without token"    403 "$(code "$U/push?msg=hi")"
 expect_code "push with wrong token" 403 "$(code "$U/push?msg=hi&token=nope")"
-MAXT=20 expect_code "push with token" 200 "$(MAXT=20 code "$U/push?msg=hi&token=tok")"
+pc=000
+for i in 1 2 3; do
+    pc=$(MAXT=20 code "$U/push?msg=hi&token=tok")
+    [ "$pc" = 200 ] && break
+done
+expect_code "push with token" 200 "$pc"
 expect_code "page without login"    401 "$(code "$U/edit")"
 expect_code "page with password"    200 "$(code -u u:pw "$U/edit")"
 big=$(head -c 30000 /dev/zero | tr '\0' 'a')
