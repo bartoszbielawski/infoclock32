@@ -609,9 +609,12 @@ void handle_metrics()
 
     std::string out;
     out.reserve(1536);
+    // The fixed system block below is ~1.2 KB of HELP/TYPE text; a 192-byte
+    // buffer silently cut /metrics off after the first few lines.
+    char sys[1536];
     char line[192];
 
-    snprintf(line, sizeof(line),
+    snprintf(sys, sizeof(sys),
              "# HELP infoclock_build_info Firmware build metadata.\n"
              "# TYPE infoclock_build_info gauge\n"
              "infoclock_build_info{version=\"" APP_VERSION "\",chip=\"%s\"} 1\n"
@@ -646,7 +649,7 @@ void handle_metrics()
              (unsigned long)rmd.getForceHandoverCount(),
              (unsigned)rmd.getQueueDepth(true),
              (unsigned)rmd.getQueueDepth(false));
-    out += line;
+    out += sys;
 
     std::string mqttServer = DataStore::getInstance().get_value("mqtt_server", "");
     if (!mqttServer.empty())

@@ -133,6 +133,12 @@ case "$page" in
     *"&lt;/textarea&gt;"*) ok "web: /edit escapes </textarea>" ;;
     *) fail "web: /edit does not escape </textarea>" ;;
 esac
+# /metrics must not be cut short (the system block was once truncated at 191 B)
+if metrics web | grep -q 'infoclock_display_queue_depth{lane="normal"}'; then
+    ok "web: /metrics complete"
+else
+    fail "web: /metrics truncated ($(metrics web | wc -c | tr -d ' ') bytes)"
+fi
 if grep -aq "TOPSECRET" "$WORK/web.log"; then fail "web: secret value found in log"; else ok "web: secret value not logged"; fi
 
 code() { curl -s -o /dev/null -w '%{http_code}' --max-time "${MAXT:-5}" "$@"; }
