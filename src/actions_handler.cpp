@@ -318,7 +318,7 @@ void handle_actions()
                                "&#127777; Sensor display</h3>"
                                "<p style='font-size:.85rem;color:#64748b;margin-bottom:12px'>"
                                "Choose which sensor readings scroll on the matrix. "
-                               "Polling and the {temp_c} / {temp_rh} / {temp_hpa} placeholders "
+                               "Polling and the {temp_c} / {temp_rh} / {temp_hpa} / {temp_co2} placeholders "
                                "keep working regardless &mdash; no reboot needed.</p>"
                                "<form method='POST'>"
                                "<input type='hidden' name='action' value='sensor'>"

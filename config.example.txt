@@ -1,9 +1,9 @@
-# infoclock32 Ã¢â‚¬â€ example configuration file
+# infoclock32 - example configuration file
 # Copy relevant lines to /config.txt on the device (via the /edit page).
 # Lines starting with '#' are ignored. Format is key=value, one per line.
 # All keys are optional unless marked (required).
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ WiFi Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- WiFi ----------------------------------------------------------------------
 # (required) Network credentials. Connection is managed by WiFiManager:
 # these values are tried first, then credentials saved in the setup portal.
 # If no connection can be made at boot, an AP named <hostname>-setup opens
@@ -14,7 +14,7 @@ wifi_ssid=MyNetwork
 wifi_password=secret
 #wifi_portal_timeout_s=180
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Device identity Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Device identity -----------------------------------------------------------
 # Hostname used for DHCP, mDNS (<hostname>.local), and the setup AP name.
 # Allowed characters: letters, digits, hyphens. Default: infoclock32
 hostname=infoclock32
@@ -23,16 +23,16 @@ hostname=infoclock32
 # Leave unset to disable authentication and keep all routes open.
 web_password=
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ OTA updates Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- OTA updates --------------------------------------------------------------
 # Set a password to enable ArduinoOTA firmware updates. Leave blank (default)
 # to disable OTA entirely. The first flash must always be wired.
 #ota_password=
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Display Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# MAX7219 intensity. Range 0 (dim) Ã¢â‚¬â€œ 15 (full). Default: 7
+# -- Display -------------------------------------------------------------------
+# MAX7219 intensity. Range 0 (dim) - 15 (full). Default: 7
 brightness=7
 
-# POSIX TZ string Ã¢â‚¬â€ controls how UTC is converted to local time for the clock.
+# POSIX TZ string - controls how UTC is converted to local time for the clock.
 # Pick the string for your zone; examples below:
 #   UTC0
 #   CET-1CEST,M3.5.0,M10.5.0/3     (Central Europe)
@@ -41,22 +41,22 @@ brightness=7
 timezone=CET-1CEST,M3.5.0,M10.5.0/3
 
 # Time face shown between the other widgets:
-#   hhmmss Ã¢â‚¬â€ hh:mm:ss with ticking seconds (default)
-#   hhmm   Ã¢â‚¬â€ hh:mm with a blinking colon
-#   sweep  Ã¢â‚¬â€ hh:mm plus a seconds pixel racing along the bottom row
+#   hhmmss - hh:mm:ss with ticking seconds (default)
+#   hhmm   - hh:mm with a blinking colon
+#   sweep  - hh:mm plus a seconds pixel racing along the bottom row
 #   thick  - hh:mm drawn with a thick 6x8 digit font
-#   bcd    Ã¢â‚¬â€ hh:mm as binary dots (BCD)
+#   bcd    - hh:mm as binary dots (BCD)
 #clock_style=hhmmss
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Night mode Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Night mode ----------------------------------------------------------------
 # Dims the display between two wall-clock times. Leave both blank to disable.
-# Time format: HH:MM (24-hour). Wraps midnight correctly (e.g. 23:00 Ã¢â‚¬â€œ 06:00).
+# Time format: HH:MM (24-hour). Wraps midnight correctly (e.g. 23:00 - 06:00).
 night_start=23:00
 night_end=06:30
 # Brightness level used during night hours. Default: 1
 night_brightness=1
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Feature toggles Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Feature toggles -----------------------------------------------------------
 # Set to 0 to disable a task entirely. Default for all: 1 (enabled),
 # except enable_life (default 0, off).
 enable_weather=1
@@ -64,14 +64,14 @@ enable_lhc=1
 enable_mqtt=1
 enable_resto=1
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Weather (OpenWeatherMap) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Weather (OpenWeatherMap) ---------------------------------------------------
 # Requires enable_weather=1.
 # Get a free API key at https://openweathermap.org/api
 # City ID: find yours at https://openweathermap.org/find
 ow_api_key=your_api_key_here
 ow_city_id=2988507
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Restaurant menu (CERN Novae) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Restaurant menu (CERN Novae) ---------------------------------------------
 # Requires enable_resto=1. Scrolls lunch (midi) menus of the configured
 # CERN restaurants between resto_start_hour and resto_end_hour (end exclusive,
 # window wraps midnight). Menus refresh hourly.
@@ -89,9 +89,9 @@ resto_end_hour=14
 # Test override: fetch menus for this date (YYYY-MM-DD) and bypass the window.
 #resto_test_date=2026-09-21
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ MQTT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- MQTT ----------------------------------------------------------------------
 # Requires enable_mqtt=1.
-# mqtt_client_id is also the MQTT topic prefix: <clientId>/push, /brightness Ã¢â‚¬Â¦
+# mqtt_client_id is also the MQTT topic prefix: <clientId>/push, /brightness ...
 mqtt_server=192.168.1.10
 mqtt_client_id=infoclock32
 mqtt_user=
@@ -100,7 +100,7 @@ mqtt_password=
 # under one device card in HA. States refresh on the 60 s MQTT heartbeat.
 enable_mqtt_discovery=1
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Pin overrides Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Pin overrides ------------------------------------------------------------
 # Override the compile-time pin defaults from pins.hpp. Useful when wiring
 # differs from the board definition without requiring a recompile.
 # Changes take effect on the next reboot.
@@ -114,9 +114,9 @@ enable_mqtt_discovery=1
 #i2c_sda=1
 #i2c_scl=0
 #
-# 1-Wire (DS18B20) Ã¢â‚¬â€ see ds18b20_pin under Temperature sensor below
+# 1-Wire (DS18B20) - see ds18b20_pin under Temperature sensor below
 
-# Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€  Sensors Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ Ã¢â‚¬â€ 
+# - - - - - - - - - - - - - - - -  Sensors - - - - - - - - - - - - - - - - 
 # Comma-separated list of sensor types to poll round-robin (max 4, duplicates
 # removed). All sensors share the same {temp_c}/{temp_rh}/{temp_hpa}/{temp_co2}
 # keys - the first listed sensor that provides a measurement owns it. Default: stub (disabled).
@@ -166,30 +166,30 @@ sensor_interval=30
 # Seconds each reading stays centered on screen (0 = quick ~2 s flash)
 #sensor_hold_s=0
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Sun widget & Game of Life Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Sunrise/sunset widget Ã¢â‚¬â€ pure offline solar math, only needs a position.
+# -- Sun widget & Game of Life -------------------------------------------------
+# Sunrise/sunset widget - pure offline solar math, only needs a position.
 # Task is not started while sun_lat/sun_lon are blank.
 enable_sun=1
 sun_lat=48.8566
 sun_lon=2.3522
-# How often to scroll the sun line (minutes, 5Ã¢â‚¬â€œ720)
+# How often to scroll the sun line (minutes, 5-720)
 #sun_interval_min=30
 
-# Conway's Game of Life idle animation Ã¢â‚¬â€ short bursts between clock cycles,
+# Conway's Game of Life idle animation - short bursts between clock cycles,
 # skipped during the night window. Off by default; enable explicitly.
 enable_life=0
-# Seconds between bursts (30Ã¢â‚¬â€œ3600) / burst length (5Ã¢â‚¬â€œ120). Defaults: 300 / 30
+# Seconds between bursts (30-3600) / burst length (5-120). Defaults: 300 / 30
 #life_interval_s=300
 #life_burst_s=30
 # Seed each new board from whatever is on the matrix (0 = random soup)
 #life_seed_display=1
-# Random cells (percent, 0Ã¢â‚¬â€œ50) added around an image seed so thin strokes survive
+# Random cells (percent, 0-50) added around an image seed so thin strokes survive
 #life_fuel_pct=18
 # Guaranteed slice (seconds) a burst keeps before the clock may preempt it;
 # defaults to display_min_hold_s, 0 yields at once
 #life_min_hold_s=10
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Display scheduling & wipes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Display scheduling & wipes ------------------------------------------------
 # Minimum seconds a long hold (scroll, Life burst) keeps the display before a
 # waiting priority request (clock, user push) may preempt it. Default: 10
 #display_min_hold_s=10
@@ -198,25 +198,25 @@ enable_life=0
 # interval (minutes). 0 disables. Default: 10
 #wipe_interval=10
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Custom messages Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Named message slots Ã¢â‚¬â€ define as many as you like. Names may use letters,
+# -- Custom messages -----------------------------------------------------------
+# Named message slots - define as many as you like. Names may use letters,
 # digits, _ and - (the /messages web page enforces this for slots edited there).
 # A slot is active when its _text key exists and today falls within [start, end].
 #
-# How often to cycle through active messages (seconds, 10Ã¢â‚¬â€œ3600). Default: 60
+# How often to cycle through active messages (seconds, 10-3600). Default: 60
 msg_interval=60
 #
 # Slot format:
-#   message_<name>_text      Ã¢â‚¬â€ text to scroll (required to activate the slot)
-#   message_<name>_start     Ã¢â‚¬â€ YYYY-MM-DD Ã¢â‚¬â€ hide before this date (optional)
-#   message_<name>_end       Ã¢â‚¬â€ YYYY-MM-DD Ã¢â‚¬â€ hide after this date (optional)
-#   message_<name>_countdown Ã¢â‚¬â€ YYYY-MM-DD Ã¢â‚¬â€ appends ": 45d" ("today!" on the
+#   message_<name>_text      - text to scroll (required to activate the slot)
+#   message_<name>_start     - YYYY-MM-DD - hide before this date (optional)
+#   message_<name>_end       - YYYY-MM-DD - hide after this date (optional)
+#   message_<name>_countdown - YYYY-MM-DD - appends ": 45d" ("today!" on the
 #                              day, "+Nd" after) unless the text contains {}
 #
 # {} in the text is replaced by the countdown number.
 # A countdown hides itself from the day after its target unless _end is set later.
-# {key} placeholders insert RuntimeStore values (temp_c, weather_id, Ã¢â‚¬Â¦),
-# DeviceStore values (ip, hostname, heap, uptime, Ã¢â‚¬Â¦) or DataStore config keys.
+# {key} placeholders insert RuntimeStore values (temp_c, weather_id, ...),
+# DeviceStore values (ip, hostname, heap, uptime, ...) or DataStore config keys.
 # Example: always-on greeting
 message_1_text=Hello, world!
 #
@@ -229,6 +229,6 @@ message_1_text=Hello, world!
 #message_3_text=Launch {}
 #message_3_countdown=2026-12-31
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Logging / diagnostics Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# -- Logging / diagnostics -----------------------------------------------------
 # IP address of a UDP syslog server (RFC 3164, port 514). Leave blank to disable.
 syslog_server=

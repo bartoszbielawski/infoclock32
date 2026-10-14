@@ -42,12 +42,32 @@ public:
             char buffer[128];
             size_t bytesRead = file.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
             buffer[bytesRead] = '\0';
+
+            // A line longer than the buffer would otherwise have its tail
+            // parsed as a fresh line (and could be taken for a key=value).
+            // Discard the remainder; a truncated key=value is not stored.
+            bool truncated = false;
+            if (bytesRead == sizeof(buffer) - 1)
+            {
+                while (file.available())
+                {
+                    int c = file.read();
+                    if (c == '\n') break;
+                    truncated = true;
+                }
+            }
             std::string line(buffer);
             // split into key and value separated by '=' and store in a map
             if (line.empty())
                 continue;
             if (line[0] == '#') // skip comments
                 continue;
+            if (truncated)
+            {
+                Serial.printf("Config line too long (>%u chars), ignored: %.24s...\n",
+                              (unsigned)(sizeof(buffer) - 1), line.c_str());
+                continue;
+            }
 
             auto delimiterPos = line.find('=');
             if (delimiterPos == std::string::npos)

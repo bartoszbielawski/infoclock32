@@ -167,8 +167,21 @@ void setup() {
   Wire.begin(i2cSda, i2cScl);
   // Sensor list from the `sensors` config key (comma-separated types). The
   // task owns the vector and its Sensor objects.
+  // Config keys removed by the multi-sensor rework: warn instead of silently
+  // falling back to the disabled `stub` sensor.
+  for (const char* legacy : {"temp_sensor", "temp_interval", "temp_display",
+                             "temp_decimals", "temp_show_interval", "temp_hold_s"})
+    if (dataStore.has_key(legacy))
+      logPrintf("SYS", "config key '%s' is obsolete and ignored - see sensors / sensor_* in config.example.txt", legacy);
+
   auto* sensors = new std::vector<Sensor*>(createSensorList());
-  xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr);
+  if (xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr) != pdPASS)
+  {
+    // The task never started, so it can't free what it owns.
+    logPrintf("SYS", "failed to create SensorTask (out of memory)");
+    for (Sensor* s : *sensors) delete s;
+    delete sensors;
+  }
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
   xTaskCreate(night_mode_task, "NightModeTask", 4096, nullptr, 1, nullptr);
 
