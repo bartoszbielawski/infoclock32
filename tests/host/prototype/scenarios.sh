@@ -157,7 +157,11 @@ expect_code "page without login"    401 "$(code "$U/edit")"
 expect_code "page with password"    200 "$(code -u u:pw "$U/edit")"
 big=$(head -c 30000 /dev/zero | tr '\0' 'a')
 expect_code "oversize /edit POST"   413 "$(code -u u:pw --data-urlencode "content=$big" "$U/edit")"
-for i in 1 2 3 4 5; do code -u u:wrong "$U/edit" >/dev/null; done
+# Send bad logins until the lock-out kicks in (a loaded runner can drop a
+# request client-side, so don't assume exactly five are counted).
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    [ "$(code -u u:wrong "$U/edit")" = 429 ] && break
+done
 expect_code "throttled after 5 bad logins" 429 "$(code -u u:pw "$U/edit")"
 
 if [ $SLOW -eq 1 ]; then

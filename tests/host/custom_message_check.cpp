@@ -26,7 +26,9 @@ static CustomMessage slot(const char* text, time_t cd, time_t end = -1)
 
 int main()
 {
-    setenv("TZ", "Europe/Warsaw", 1);
+    // POSIX rule equivalent to Europe/Warsaw: no tzdata needed (minimal
+    // containers don't ship it), so the DST cases run the same everywhere.
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
     tzset();
     const time_t NOW = mk(2026, 9, 15, 14);
 
