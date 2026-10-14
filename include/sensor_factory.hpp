@@ -21,6 +21,7 @@
 //   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4)
 //   scd4x     | Scd4xSensor   | — (address 0x62, fixed; adds CO2)
 //   stub      | StubSensor    | — (no hardware)
+//   sim[N]    | SimSensor     | sim_temp, sim_humidity, ... (virtual, see sim_sensor.hpp)
 //   <other>   | (skipped)     | unknown types are warned about and dropped
 //
 // Duplicates are removed (first occurrence wins) and the list is capped at
@@ -41,6 +42,7 @@
 #include <aht_sensor.hpp>
 #include <ds18b20_sensor.hpp>
 #include <scd4x_sensor.hpp>
+#include <sim_sensor.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
 
@@ -69,6 +71,8 @@ inline Sensor* createSensorForType(const std::string& type)
         return new Scd4xSensor();
     if (type == "stub")
         return new StubSensor();
+    if (isSimType(type))   // sim, sim2, ... : virtual sensor, see sim_sensor.hpp
+        return new SimSensor(simParamsFromStore(ds, type), "Sim");
     return nullptr;
 }
 

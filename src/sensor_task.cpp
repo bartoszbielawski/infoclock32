@@ -11,6 +11,7 @@
 #include <pressure_history.hpp>
 #include <sensor_display.hpp>
 #include <sensor_merge.hpp>
+#include <sensor_round.hpp>
 #include <esp_timer.h>
 #include <string>
 #include <vector>
@@ -83,15 +84,11 @@ void sensor_task(void* parameter)
     logPrintf("TMP", "starting with %zu sensor(s)", N);
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
-    size_t rr_index = 0;
+    // Poll scheduling + merging live in SensorRound (host-tested).
+    SensorRound round(*list);
+    MeasurementSet& data = round.data;
 
-    // Monotonic schedule (seconds). 0 => first poll happens immediately.
-    int64_t nextPollAt = 0;
     int64_t lastDisplay = -1;
-
-    // Consolidated values, who wrote them and when (see sensor_merge.hpp).
-    MeasurementSet data;
-    data.setOwners(*list);
 
     // Pressure trend (valid only while a pressure reading is fresh)
     bool haveTrend = false;
@@ -154,58 +151,45 @@ void sensor_task(void* parameter)
 
         int64_t now = monoSeconds();
         bool newData = false;   // a poll succeeded in this wake
-        const int64_t staleAfter = staleAfterSeconds(N, interval_s);
 
         // Round-robin: refresh one sensor per interval. The index always
         // advances so a dead sensor doesn't stall the round.
-        if (now >= nextPollAt)
+        SensorOffsets off;
+        off.temp = tempOffset;
+        off.humidity = rhOffset;
+        off.pressure = pressOffset;
+        off.co2 = co2Offset;
+        SensorRound::Result res = round.step(now, interval_s, off);
+        newData = res.ok;
+        if (res.polled && !res.ok)
+            logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
+                      list->at(res.index)->name(), res.index);
+        if (res.ok)
         {
-            const size_t idx = rr_index;
-            Sensor* s = list->at(idx);
-            rr_index = (rr_index + 1) % N;
+            auto& rs = RuntimeStore::getInstance();
+            time_t wall = time(nullptr);
+            unsigned got = res.accepted;
 
-            if (s->read())
+            if (got & measurementBit(MEAS_TEMP))
+                rs.set("temp_c", data.temp, runtimeTempFormat());
+            if (got & measurementBit(MEAS_HUMIDITY))
+                rs.set("temp_rh", data.humidity, "%.0f");
+            if (got & measurementBit(MEAS_CO2))
+                rs.set("temp_co2", data.co2, "%d");
+            if (got & measurementBit(MEAS_PRESSURE))
             {
-                nextPollAt = now + interval_s;
-                newData = true;
-                auto& rs = RuntimeStore::getInstance();
-                time_t wall = time(nullptr);
+                rs.set("temp_hpa", data.pressure, "%.0f");
 
-                SensorOffsets off;
-                off.temp = tempOffset;
-                off.humidity = rhOffset;
-                off.pressure = pressOffset;
-                off.co2 = co2Offset;
-                unsigned got = data.ingest(*s, (int)idx, now, staleAfter, off);
-
-                if (got & measurementBit(MEAS_TEMP))
-                    rs.set("temp_c", data.temp, runtimeTempFormat());
-                if (got & measurementBit(MEAS_HUMIDITY))
-                    rs.set("temp_rh", data.humidity, "%.0f");
-                if (got & measurementBit(MEAS_CO2))
-                    rs.set("temp_co2", data.co2, "%d");
-                if (got & measurementBit(MEAS_PRESSURE))
+                // Feed the trend history and refresh the trend placeholders.
+                // The trend is computed from the un-offset reading so the
+                // calibration offset doesn't shift the slope.
+                PressureHistoryStore::getInstance().add(wall, data.rawPressure);
+                haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
+                if (haveTrend)
                 {
-                    rs.set("temp_hpa", data.pressure, "%.0f");
-
-                    // Feed the trend history and refresh the trend placeholders.
-                    // The trend is computed from the un-offset reading so the
-                    // calibration offset doesn't shift the slope.
-                    PressureHistoryStore::getInstance().add(wall, data.rawPressure);
-                    haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
-                    if (haveTrend)
-                    {
-                        rs.set("pressure_trend", pressureTrendName(trendKind));
-                        rs.set("pressure_rate", trendRate, "%+.2f");
-                    }
+                    rs.set("pressure_trend", pressureTrendName(trendKind));
+                    rs.set("pressure_rate", trendRate, "%+.2f");
                 }
-            }
-            else
-            {
-                logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
-                          s->name(), idx);
-                // Retry the next sensor sooner than a full interval.
-                nextPollAt = now + (interval_s < 30 ? interval_s : 30);
             }
         }
 
@@ -213,7 +197,7 @@ void sensor_task(void* parameter)
         // MQTT state disappear instead of repeating the last value forever.
         {
             auto& rs = RuntimeStore::getInstance();
-            unsigned dropped = data.sweepStale(now, staleAfter);
+            unsigned dropped = res.dropped;
             for (int m = 0; m < MEAS_COUNT; m++)
             {
                 if (!(dropped & measurementBit((Measurement)m))) continue;
@@ -291,6 +275,6 @@ void sensor_task(void* parameter)
         now = monoSeconds();
         int64_t untilShow = (show_interval_s > 0 && lastDisplay >= 0)
                                 ? (lastDisplay + show_interval_s - now) : -1;
-        vTaskDelay(wakeDelayMs(nextPollAt - now, untilShow) / portTICK_PERIOD_MS);
+        vTaskDelay(wakeDelayMs(round.nextPollAt() - now, untilShow) / portTICK_PERIOD_MS);
     }
 }

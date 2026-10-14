@@ -218,6 +218,7 @@ Set `sensors` in config to a **comma-separated list** of supported drivers (max 
 | `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
 | `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
 | `stub` (default) | None | — | — |
+| `sim`, `sim2`, ... | None (virtual) | — | `sim_temp`, `sim_humidity`, `sim_pressure`, `sim_co2`, `sim_drift`, `sim_fail_every`, `sim_fail_after`/`sim_fail_count`, `sim_begin_fail` (prefix = the type name) — for development and tests; see `include/sim_sensor.hpp` |
 
 Examples: `sensors=bme280` (single) or `sensors=bme280,scd4x` (BME280 for temp/humidity/pressure, SCD4X for CO2, polled in turn).
 

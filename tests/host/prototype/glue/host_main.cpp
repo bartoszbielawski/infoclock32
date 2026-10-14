@@ -21,6 +21,8 @@
 #include <graphic_utils.hpp>
 #include <screen_wipe_task.h>
 #include <sensor.hpp>
+#include <sensor_types.hpp>
+#include <sim_sensor.hpp>
 #include <watchdog_task.h>
 
 #include "display.hpp"
@@ -104,7 +106,17 @@ int main(int argc, char** argv)
 // deletes its members on exit). The host shim has no Adafruit driver headers,
 // so we can't include sensor_factory.hpp here; a single StubSensor matches
 // both the old behaviour and the device default (`sensors` unset -> "stub").
-    auto* sensors = new std::vector<Sensor*>({new StubSensor()});
+    // `sensors` may list virtual sensors (sim, sim2, ...; see sim_sensor.hpp);
+    // anything else (real drivers) is not available on the host -> stub.
+    auto* sensors = new std::vector<Sensor*>();
+    for (const auto& type : parseSensorTypes(DataStore::getInstance().get_value("sensors", "stub")))
+    {
+        if (sensors->size() >= (size_t)kMaxSensors) break;
+        if (isSimType(type))
+            sensors->push_back(new SimSensor(simParamsFromStore(DataStore::getInstance(), type), "Sim"));
+    }
+    if (sensors->empty())
+        sensors->push_back(new StubSensor());
     xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr);
     xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
     xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);

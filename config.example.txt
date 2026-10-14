@@ -132,6 +132,13 @@ enable_mqtt_discovery=1
 #   stub     disabled / no hardware (default)
 # Single sensor:
 sensors=bme280
+# Virtual sensor for development/tests (also works in the host prototype):
+#sensors=sim,sim2
+#sim_temp=21
+#sim_humidity=45
+#sim2_co2=800
+#sim_fail_after=10    # sim dies after 10 good reads, so sim2 takes over
+#
 # Multiple sensors (comma-separated, polled round-robin):
 #sensors=bme280,scd4x
 

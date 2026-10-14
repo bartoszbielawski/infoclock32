@@ -13,6 +13,7 @@ c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
 c++ $CXXFLAGS sensor_display_check.cpp    -o sensor_display_check
 c++ $CXXFLAGS sensor_factory_check.cpp  -o sensor_factory_check
 c++ $CXXFLAGS sensor_merge_check.cpp    -o sensor_merge_check
+c++ $CXXFLAGS sim_sensor_check.cpp      -o sim_sensor_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
@@ -37,6 +38,7 @@ echo "config secrets guard passed"
 ./sensor_display_check
 ./sensor_factory_check
 ./sensor_merge_check
+./sim_sensor_check
 ./clock_face_check
 ./wdt_check
 ./uptime_check
