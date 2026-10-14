@@ -13,6 +13,7 @@
 #include <mqtt_task.h>
 #include <mqtt_discovery.hpp>
 #include <web_ui.hpp>
+#include <security_utils.hpp>
 #include <task_registry.hpp>
 #include <esp_timer.h>
 #include <cmath>
@@ -470,6 +471,11 @@ void handle_file_edit()
     if (server.method() == HTTP_POST)
     {
         if (!server.hasArg("content")) { server.send(400, "text/plain", "Bad Request"); return; }
+        if (bodyTooLarge(server.arg("content").length(), kMaxConfigBody))
+        {
+            server.send(413, "text/plain", "Config too large");
+            return;
+        }
 
         File file = LittleFS.open(FILENAME, "w");
         if (!file) { server.send(500, "text/plain", "Failed to open file for writing"); return; }

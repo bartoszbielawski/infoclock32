@@ -75,6 +75,10 @@ start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5"
 # secrets never reach /api/runtime
 start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_api_key=TOPSECRET"
 
+# sec: web password + push token, throttle, size cap, boot warnings
+start sec  "sensors=stub" "web_password=pw" "push_token=tok"
+start open "sensors=stub"
+
 if [ $SLOW -eq 1 ]; then
     # lone sensor dies after 2 good reads: reading is dropped after the stale window
     start dead       "sensors=sim" "sim_temp=20" "sim_fail_after=2"
@@ -112,6 +116,26 @@ case "$page" in
     *) fail "web: /edit does not escape </textarea>" ;;
 esac
 if grep -aq "TOPSECRET" "$WORK/web.log"; then fail "web: secret value found in log"; else ok "web: secret value not logged"; fi
+
+code() { curl -s -o /dev/null -w '%{http_code}' --max-time "${MAXT:-5}" "$@"; }
+expect_code() {   # label want got
+    if [ "$3" = "$2" ]; then ok "$1: HTTP $2"; else fail "$1: HTTP $3, want $2"; fi
+}
+eval "p=\$PORT_sec"; U="http://127.0.0.1:$p"
+
+if grep -aq "web UI has no password" "$WORK/sec.log"; then fail "sec: warns about a missing password although one is set"; else ok "sec: no password warning when set"; fi
+expect_log open "web UI has no password"
+expect_log open "/push is open"
+
+expect_code "push without token"    403 "$(code "$U/push?msg=hi")"
+expect_code "push with wrong token" 403 "$(code "$U/push?msg=hi&token=nope")"
+MAXT=20 expect_code "push with token" 200 "$(MAXT=20 code "$U/push?msg=hi&token=tok")"
+expect_code "page without login"    401 "$(code "$U/edit")"
+expect_code "page with password"    200 "$(code -u u:pw "$U/edit")"
+big=$(head -c 30000 /dev/zero | tr '\0' 'a')
+expect_code "oversize /edit POST"   413 "$(code -u u:pw --data-urlencode "content=$big" "$U/edit")"
+for i in 1 2 3 4 5; do code -u u:wrong "$U/edit" >/dev/null; done
+expect_code "throttled after 5 bad logins" 429 "$(code -u u:pw "$U/edit")"
 
 if [ $SLOW -eq 1 ]; then
     echo "── slow cases (waiting for the stale window) ──"

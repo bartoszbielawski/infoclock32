@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include <data_store.hpp>
+#include <security_utils.hpp>
 #include <logger.hpp>
 #include <runtime_store.hpp>
 #include <timezone_utils.hpp>
@@ -94,6 +95,8 @@ void setup() {
   // Logging and boot banner
   logger_init();
   logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
+  for (const auto& warning : securityWarnings(dataStore))
+    logPrintf("SEC", "%s", warning.c_str());
 
   // Watchdog culprit from the previous restart (RTC memory, consumed on read).
   char wdtCulprit[24] = "";

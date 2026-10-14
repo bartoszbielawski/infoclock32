@@ -178,6 +178,8 @@ Key config keys:
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
+| `push_token` | *(empty)* | When set, `/push` requires `?token=<value>`; empty keeps `/push` open |
+| `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
 | `sensors` | `stub` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
 | `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |

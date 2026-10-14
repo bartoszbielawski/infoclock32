@@ -197,6 +197,11 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
     }
     else if (topicStr.endsWith("/config"))
     {
+        if (DataStore::getInstance().get_value<int>("mqtt_config_writes", 1) == 0)
+        {
+            logPrintf("MQT", "/config ignored (mqtt_config_writes=0)");
+            return;
+        }
         String line(buf);
         int sep = line.indexOf('=');
         if (sep <= 0)

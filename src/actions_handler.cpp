@@ -5,6 +5,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <security_utils.hpp>
 #include <logger.hpp>
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
@@ -23,6 +24,16 @@
 
 void handle_push()
 {
+    // Optional shared secret (config key push_token); empty = open, as before.
+    if (!pushTokenOk(DataStore::getInstance().get_value("push_token", ""),
+                     server.arg("token").c_str()))
+    {
+        logPrintf("WEB", "push refused: bad or missing token");
+        server.send(403, "application/json",
+                    "{\"ok\":false,\"error\":\"forbidden\"}");
+        return;
+    }
+
     String msg = server.hasArg("msg") ? server.arg("msg") : server.arg("message");
     if (msg.isEmpty())
     {

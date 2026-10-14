@@ -2,6 +2,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <web_ui.hpp>
+#include <security_utils.hpp>
 #include <custom_message.hpp>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,6 +58,15 @@ void handle_messages()
 
     if (server.method() == HTTP_POST)
     {
+        size_t bodyBytes = 0;
+        for (int a = 0; a < server.args(); a++)
+            bodyBytes += server.arg(a).length();
+        if (bodyTooLarge(bodyBytes, kMaxMessagesBody))
+        {
+            server.send(413, "text/plain", "Request too large");
+            return;
+        }
+
         int ivVal = server.arg("interval").toInt();
         if (ivVal >= 10)
             ds.set_value("msg_interval", std::to_string(ivVal));

@@ -5,6 +5,7 @@
 #include <version.hpp>
 #include <web_ui.hpp>
 #include <uptime_utils.hpp>
+#include <security_utils.hpp>
 
 // ── Server instance ───────────────────────────────────────────────────────────
 
@@ -168,6 +169,9 @@ void sendRow(const char* label, const char* value)
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 // Cached password — avoids DataStore lookup + mbedtls decode on every request.
+static AuthThrottle s_throttle;   // 5 bad logins -> 60 s lock-out
+static int64_t nowSeconds() { return (int64_t)(millis() / 1000UL); }
+
 static std::string s_cachedPw;
 static bool        s_pwLoaded = false;
 
@@ -182,7 +186,8 @@ bool check_auth_header()
     const std::string& pw = s_cachedPw;
     if (pw.empty()) return true;   // no password set → open access
 
-    if (!server.hasHeader("Authorization")) return false;
+    if (!server.hasHeader("Authorization")) return false;   // first visit, not a failure
+    if (s_throttle.blocked(nowSeconds())) return false;     // too many bad logins
     String authHeader = server.header("Authorization");
     if (!authHeader.startsWith("Basic ")) return false;
 
@@ -198,12 +203,22 @@ bool check_auth_header()
     String credentials((char*)decoded);
     int colon = credentials.indexOf(':');
     String submitted = (colon != -1) ? credentials.substring(colon + 1) : credentials;
-    return submitted == pw.c_str();
+    bool ok = constantTimeEquals(std::string(submitted.c_str()), pw);
+    if (ok) s_throttle.recordSuccess();
+    else    s_throttle.recordFailure(nowSeconds());
+    return ok;
 }
 
 bool is_authenticated()
 {
     if (check_auth_header()) return true;
+    int retry = s_throttle.retryAfter(nowSeconds());
+    if (retry > 0)
+    {
+        server.sendHeader("Retry-After", String(retry));
+        server.send(429, "text/plain", "Too many failed logins - try again later");
+        return false;
+    }
     server.sendHeader("WWW-Authenticate", "Basic realm=\"infoclock32\"");
     server.send(401, "text/plain", "Unauthorized");
     return false;

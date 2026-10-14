@@ -53,6 +53,14 @@ public:
     // matters because String + int builds keys like "n0" without ambiguity.
     bool   hasArg(const String& name) const { return hasArg(name.c_str()); }
     String arg(const String& name) const { return arg(name.c_str()); }
+    // Device parity: indexed access to the parsed arguments.
+    int    args() const { return (int)args_.size(); }
+    String arg(int i) const {
+        int n = 0;
+        for (const auto& kv : args_)
+            if (n++ == i) return String(kv.second.c_str());
+        return String("");
+    }
     bool   hasHeader(const char* name) const;
     String header(const char* name) const;
 

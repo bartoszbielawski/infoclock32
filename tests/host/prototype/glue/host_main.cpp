@@ -22,6 +22,7 @@
 #include <screen_wipe_task.h>
 #include <sensor.hpp>
 #include <sensor_types.hpp>
+#include <security_utils.hpp>
 #include <sim_sensor.hpp>
 #include <watchdog_task.h>
 
@@ -70,6 +71,8 @@ int main(int argc, char** argv)
     LittleFS.begin(true);
     DataStore::getInstance().load_from_file("/config.txt");
     logger_init();
+    for (const auto& w : securityWarnings(DataStore::getInstance()))
+        logPrintf("SEC", "%s", w.c_str());
     apply_timezone();
 
     if (offline) host_set_http_transport(host_http_canned);
