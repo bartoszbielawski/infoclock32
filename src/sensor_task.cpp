@@ -175,7 +175,8 @@ void sensor_task(void* parameter)
             if (got & measurementBit(MEAS_HUMIDITY))
                 rs.set("temp_rh", data.humidity, "%.0f");
             if (got & measurementBit(MEAS_CO2))
-                rs.set("temp_co2", data.co2, "%d");
+                // std::string overload: the float overload with "%d" would be undefined behaviour
+                rs.set("temp_co2", std::to_string(data.co2));
             if (got & measurementBit(MEAS_PRESSURE))
             {
                 rs.set("temp_hpa", data.pressure, "%.0f");

@@ -206,9 +206,7 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         String value = line.substring(sep + 1);
 
         // Block sensitive keys
-        String keyLower = key;
-        keyLower.toLowerCase();
-        if (keyLower.indexOf("password") >= 0 || keyLower.indexOf("secret") >= 0)
+        if (isSecretKey(key.c_str()))
         {
             logPrintf("MQT", "/config blocked sensitive key '%s'", key.c_str());
             return;

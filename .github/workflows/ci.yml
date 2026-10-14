@@ -17,6 +17,13 @@ jobs:
       - name: Host tests (headers + ResourceManager stress)
         run: ./tests/host/run.sh
 
+  host-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Sensor scenarios (real tasks in the host prototype, virtual sensors)
+        run: ./tests/host/prototype/scenarios.sh --slow
+
   build:
     runs-on: ubuntu-latest
     strategy:

@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <parse_utils.hpp>
 #include <LittleFS.h>
+#include <secret_keys.hpp>
 #include <Arduino.h>
 
 class DataStore
@@ -85,7 +86,7 @@ public:
                 key.pop_back();
 
             data[key] = value;
-            Serial.printf("Loaded key: %s, value: %s\n", key.c_str(), value.c_str());
+            Serial.printf("Loaded key: %s, value: %s\n", key.c_str(), loggableValue(key, value));
         }
         file.close();
     }
