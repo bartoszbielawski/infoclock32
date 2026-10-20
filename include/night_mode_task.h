@@ -18,3 +18,11 @@ int current_display_brightness();
 // only shown, until the next day/night switch restores the configured level.
 // Returns true when the level was saved to the config.
 bool set_user_brightness(int level);
+
+// Latest ambient light reading (lx) from a light sensor. Called by the sensor
+// task; used by auto-brightness (config `auto_brightness=1`).
+void report_ambient_lux(float lux);
+
+// True while auto-brightness controls the display: enabled and a fresh lux
+// reading exists. Night mode only sets the brightness while this is false.
+bool auto_brightness_active();

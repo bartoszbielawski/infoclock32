@@ -11,6 +11,9 @@
 //   sim_humidity=45        base %RH; presence enables humidity
 //   sim_pressure=1013      base hPa; presence enables pressure
 //   sim_co2=600            base ppm; presence enables CO2
+//   sim_lux=200            base lux; presence enables ambient light
+//   sim_no_temp=1          no temperature (a light-only sensor)
+//   sim_poll_s=2           own poll period in seconds (0 = round-robin)
 //   sim_drift=1.5          +/- amplitude of a slow sine added to every value
 //   sim_drift_period=60    reads per drift cycle              (default 60)
 //   sim_fail_every=5       every 5th read attempt fails (intermittent)
@@ -34,6 +37,9 @@ struct SimParams
     bool  hasHumidity = false; float humidity = 45.0f;
     bool  hasPressure = false; float pressure = 1013.0f;
     bool  hasCo2 = false;      int   co2 = 600;
+    bool  hasLux = false;      float lux = 200.0f;
+    bool  hasTemp = true;
+    int   pollS = 0;
     float drift = 0.0f;
     int   driftPeriod = 60;
     int   failEvery = 0;      // 0 = never
@@ -65,6 +71,10 @@ SimParams simParamsFromStore(Store& ds, const std::string& type)
     if (sp.hasPressure) sp.pressure = ds.template get_value<float>(p + "pressure", sp.pressure);
     sp.hasCo2      = ds.has_key(p + "co2");
     if (sp.hasCo2) sp.co2 = ds.template get_value<int>(p + "co2", sp.co2);
+    sp.hasLux      = ds.has_key(p + "lux");
+    if (sp.hasLux) sp.lux = ds.template get_value<float>(p + "lux", sp.lux);
+    sp.hasTemp     = ds.template get_value<int>(p + "no_temp", 0) == 0;
+    sp.pollS       = ds.template get_value<int>(p + "poll_s", 0);
     sp.drift       = ds.template get_value<float>(p + "drift", 0.0f);
     sp.driftPeriod = ds.template get_value<int>(p + "drift_period", sp.driftPeriod);
     if (sp.driftPeriod < 2) sp.driftPeriod = 2;
@@ -102,6 +112,7 @@ public:
         rh_ = p_.humidity + wobble;
         hp_ = p_.pressure + wobble;
         co2_ = p_.co2 + (int)(wobble * 10.0f);
+        lux_ = p_.lux * (1.0f + 0.1f * wobble);
         good_++;
         return true;
     }
@@ -113,6 +124,10 @@ public:
     float pressure() const override { return hp_; }
     bool  hasCo2() const override { return p_.hasCo2; }
     int16_t co2Concentration() const override { return (int16_t)co2_; }
+    bool  hasTemperature() const override { return p_.hasTemp; }
+    bool  hasLux() const override { return p_.hasLux; }
+    float lux() const override { return lux_; }
+    int   pollIntervalS() const override { return p_.pollS; }
     const char* name() const override { return label_; }
 
     // Inspection for tests
@@ -125,4 +140,5 @@ private:
     int attempts_ = 0, good_ = 0, deadAttempts_ = 0;
     float t_ = 0, rh_ = 0, hp_ = 0;
     int co2_ = 0;
+    float lux_ = 0;
 };

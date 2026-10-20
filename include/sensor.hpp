@@ -15,8 +15,12 @@ public:
     // Trigger a new reading. Return true if data is valid.
     virtual bool read() = 0;
 
-    // Always available
-    virtual float temperature() const = 0;  // degrees Celsius
+    // Degrees Celsius. Meaningful only when hasTemperature() is true.
+    virtual float temperature() const = 0;
+
+    // Optional — override and return false for sensors that do not measure
+    // temperature (e.g. ambient light sensors), so they never own `temp_c`.
+    virtual bool hasTemperature() const { return true; }
 
     // Optional — override and return true if the sensor provides humidity
     virtual bool hasHumidity() const { return false; }
@@ -29,6 +33,15 @@ public:
     // Optional — override and return true if the sensor provides CO2
     virtual bool hasCo2() const { return false; }
     virtual int16_t co2Concentration() const { return 0; }   // ppm (0 = unavailable)
+
+    // Optional — override and return true if the sensor provides ambient light
+    virtual bool hasLux() const { return false; }
+    virtual float lux() const { return 0.0f; }   // lx
+
+    // Own poll period in seconds. 0 = polled round-robin at `sensor_interval`.
+    // A positive value takes the sensor out of the round: it is polled on its
+    // own timer (used for ambient light, which must track quickly).
+    virtual int pollIntervalS() const { return 0; }
 
     // Short sensor name for log messages
     virtual const char* name() const = 0;

@@ -27,6 +27,7 @@ enum Measurement
     MEAS_HUMIDITY,
     MEAS_PRESSURE,
     MEAS_CO2,
+    MEAS_LUX,
     MEAS_COUNT
 };
 
@@ -34,10 +35,11 @@ inline bool sensorProvides(const Sensor& s, Measurement m)
 {
     switch (m)
     {
-        case MEAS_TEMP:     return true;
+        case MEAS_TEMP:     return s.hasTemperature();
         case MEAS_HUMIDITY: return s.hasHumidity();
         case MEAS_PRESSURE: return s.hasPressure();
         case MEAS_CO2:      return s.hasCo2();
+        case MEAS_LUX:      return s.hasLux();
         default:            return false;
     }
 }
@@ -143,6 +145,7 @@ struct MeasurementSet
     float pressure = 0.0f;      // offset applied
     float rawPressure = 0.0f;   // un-offset: the trend must not see the offset
     int   co2 = 0;
+    float lux = 0.0f;           // no offset: consumed by auto-brightness
 
     MeasurementSet() { for (int m = 0; m < MEAS_COUNT; m++) owner[m] = -1; }
 
@@ -184,6 +187,8 @@ struct MeasurementSet
             int v = (int)(s.co2Concentration() + off.co2);
             co2 = v < 0 ? 0 : v;
         }
+        if (take(MEAS_LUX))
+            lux = s.lux();
         return accepted;
     }
 

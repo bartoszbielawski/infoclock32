@@ -33,6 +33,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Sensors (multiple drivers, round-robin) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
 | Night mode (auto-dim) | `night_start`, `night_end`, `night_brightness` |
+| Auto-brightness (VEML7700 light sensor) | `auto_brightness`, `ab_lux_max`, `ab_gamma`, `ab_min`, `ab_max`, `ab_tau_s`, `ab_pause_s` |
 | MQTT integration (incl. Home Assistant auto-discovery) | `enable_mqtt`, `enable_mqtt_discovery`, `mqtt_server`, `mqtt_client_id`, … |
 | Restaurant menu (CERN Novae) | `enable_resto`, `novae_codes`, `resto_restaurants`, `resto_start_hour`, `resto_end_hour` |
 | Sunrise/sunset widget (offline math) | `enable_sun`, `sun_lat`, `sun_lon`, `sun_interval_min` |
@@ -171,6 +172,12 @@ Key config keys:
 | `clock_style` | `hhmmss` | Time face: `hhmmss` (ticking seconds), `hhmm` (blinking colon), `sweep` (hh:mm + seconds bar), `thick` (thick 6x8 digit font), `bcd` (binary dots); re-read every clock round |
 | `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
 | `night_brightness` | `1` | Intensity during night hours. A brightness change made at night (MQTT, `/actions`) is temporary and does not touch `brightness` |
+| `auto_brightness` | `0` | `1` = follow the room's light (needs `veml7700` in `sensors`). While a light reading is fresh it replaces the night-mode schedule; if the sensor stops reporting for 3 minutes the schedule takes over again |
+| `ab_lux_max` | `1000` | Lux that maps to full brightness. Lower = brighter display at a given light level |
+| `ab_gamma` | `0.5` | Curve steepness: `level = (lux / ab_lux_max)^gamma × 16 − 0.5` (0.5 ≈ square root, matches the eye) |
+| `ab_min` / `ab_max` | `0` / `15` | Level limits for auto-brightness |
+| `ab_tau_s` | `10` | Smoothing time constant (s); the level also moves one step per second, with a dead band of 0.7 levels against flicker |
+| `ab_pause_s` | `600` | A manual brightness change (MQTT, `/actions`) pauses auto-brightness for this many seconds |
 | `web_password` | — | HTTP Basic Auth password (blank = open) |
 | `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
 | `syslog_server` | — | UDP syslog destination IP (port 514) |
@@ -219,8 +226,11 @@ Set `sensors` in config to a **comma-separated list** of supported drivers (max 
 | `aht10` / `aht20` | AHT10 / AHT20 | I2C 0x38 (fixed) | — |
 | `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
 | `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
+| `veml7700` | VEML7700 ambient light (Vishay) | I2C 0x10 (fixed) | — (lux only, no temperature; polled every 2 s on its own timer; drives `auto_brightness`, placeholder `{lux}`) |
 | `stub` (default) | None | — | — |
-| `sim`, `sim2`, ... | None (virtual) | — | `sim_temp`, `sim_humidity`, `sim_pressure`, `sim_co2`, `sim_drift`, `sim_fail_every`, `sim_fail_after`/`sim_fail_count`, `sim_begin_fail` (prefix = the type name) — for development and tests; see `include/sim_sensor.hpp` |
+| `sim`, `sim2`, ... | None (virtual) | — | `sim_temp`, `sim_humidity`, `sim_pressure`, `sim_co2`, `sim_lux`, `sim_no_temp`, `sim_poll_s`, `sim_drift`, `sim_fail_every`, `sim_fail_after`/`sim_fail_count`, `sim_begin_fail` (prefix = the type name) — for development and tests; see `include/sim_sensor.hpp` |
+
+Auto-brightness example: `sensors=bme280,veml7700` with `auto_brightness=1`. Mount the VEML7700 where the LED matrix does not shine on it, otherwise the display's own light feeds back into the reading.
 
 Examples: `sensors=bme280` (single) or `sensors=bme280,scd4x` (BME280 for temp/humidity/pressure, SCD4X for CO2, polled in turn).
 

@@ -22,6 +22,7 @@ c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 c++ $CXXFLAGS mqtt_discovery_check.cpp -o mqtt_discovery_check
+c++ $CXXFLAGS auto_brightness_check.cpp -o auto_brightness_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
@@ -51,6 +52,7 @@ echo "config secrets guard passed"
 ./wdt_check
 ./uptime_check
 ./mqtt_discovery_check
+./auto_brightness_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

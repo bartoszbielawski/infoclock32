@@ -56,6 +56,20 @@ night_end=06:30
 # Brightness level used during night hours. Default: 1
 night_brightness=1
 
+# -- Auto-brightness (VEML7700 light sensor) ------------------------------------
+# Needs sensors=...,veml7700 (see Sensors). While a light reading is fresh it
+# replaces the night-mode schedule above; without one, night mode applies.
+#   level = (lux / ab_lux_max) ^ ab_gamma * 16 - 0.5     (clamped to ab_min..ab_max)
+#auto_brightness=1
+#ab_lux_max=1000
+#ab_gamma=0.5
+#ab_min=0
+#ab_max=15
+# Smoothing time constant in seconds
+#ab_tau_s=10
+# A manual brightness change pauses auto-brightness for this many seconds
+#ab_pause_s=600
+
 # -- Feature toggles -----------------------------------------------------------
 # Set to 0 to disable a task entirely. Default for all: 1 (enabled),
 # except enable_life (default 0, off).
@@ -137,6 +151,8 @@ enable_mqtt_discovery=1
 #   ds18b20  DS18B20 via 1-Wire (temp only)
 #   scd4x    Sensirion SCD4x/SCD40/SCD30 via I2C, fixed address 0x62
 #            (CO2 + temp + humidity)
+#   veml7700 VEML7700 ambient light via I2C, fixed address 0x10 (lux only;
+#            drives auto_brightness)
 #   stub     disabled / no hardware (default)
 # Single sensor:
 sensors=bme280

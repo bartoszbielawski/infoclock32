@@ -12,6 +12,7 @@
 #include <sensor_display.hpp>
 #include <sensor_merge.hpp>
 #include <sensor_round.hpp>
+#include <night_mode_task.h>
 #include <esp_timer.h>
 #include <string>
 #include <vector>
@@ -51,7 +52,7 @@ static int64_t monoSeconds()
 }
 
 static const char* const kMeasurementKey[MEAS_COUNT] =
-    { "temp_c", "temp_rh", "temp_hpa", "temp_co2" };
+    { "temp_c", "temp_rh", "temp_hpa", "temp_co2", "lux" };
 
 void sensor_task(void* parameter)
 {
@@ -102,6 +103,7 @@ void sensor_task(void* parameter)
     bool anyCo2      = data.owner[MEAS_CO2] >= 0;
 
     bool unavailableLogged[SDI_COUNT] = {};
+    std::vector<bool> fastFailed(N, false);
 
     while (true)
     {
@@ -160,10 +162,24 @@ void sensor_task(void* parameter)
         off.pressure = pressOffset;
         off.co2 = co2Offset;
         SensorRound::Result res = round.step(now, interval_s, off);
-        newData = res.ok;
-        if (res.polled && !res.ok)
-            logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
-                      list->at(res.index)->name(), res.index);
+        // Fast sensors (ambient light) poll every couple of seconds: they must
+        // not retrigger the scroll, and their failures are logged once.
+        newData = res.ok && (res.accepted & ~measurementBit(MEAS_LUX)) != 0;
+        if (res.polled)
+        {
+            const bool fast = list->at(res.index)->pollIntervalS() > 0;
+            if (!fast && !res.ok)
+                logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
+                          list->at(res.index)->name(), res.index);
+            if (fast)
+            {
+                if (!res.ok && !fastFailed[res.index])
+                    logPrintf("TMP", "sensor '%s' read failing", list->at(res.index)->name());
+                if (res.ok && fastFailed[res.index])
+                    logPrintf("TMP", "sensor '%s' recovered", list->at(res.index)->name());
+                fastFailed[res.index] = !res.ok;
+            }
+        }
         if (res.ok)
         {
             auto& rs = RuntimeStore::getInstance();
@@ -174,6 +190,11 @@ void sensor_task(void* parameter)
                 rs.set("temp_c", data.temp, runtimeTempFormat());
             if (got & measurementBit(MEAS_HUMIDITY))
                 rs.set("temp_rh", data.humidity, "%.0f");
+            if (got & measurementBit(MEAS_LUX))
+            {
+                rs.set("lux", data.lux, "%.1f");
+                report_ambient_lux(data.lux);
+            }
             if (got & measurementBit(MEAS_CO2))
                 // std::string overload: the float overload with "%d" would be undefined behaviour
                 rs.set("temp_co2", std::to_string(data.co2));

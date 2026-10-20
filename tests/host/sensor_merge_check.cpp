@@ -153,6 +153,32 @@ int main()
         CHECK(d.sweepStale(2500 + stale + 2, stale) == 0, "sweep reports each drop once");
     }
 
+    // ── light sensors ─────────────────────────────────────────────────────
+    {
+        struct Lite : Sensor {
+            bool begin() override { return true; }
+            bool read() override { return true; }
+            float temperature() const override { return 0.0f; }
+            bool hasTemperature() const override { return false; }
+            bool hasLux() const override { return true; }
+            float lux() const override { return 123.5f; }
+            const char* name() const override { return "lite"; }
+        } lite;
+        FakeSensor bme(true);
+        CHECK(!sensorProvides(lite, MEAS_TEMP) && sensorProvides(lite, MEAS_LUX), "light sensor: lux, no temp");
+        CHECK(sensorProvides(bme, MEAS_TEMP) && !sensorProvides(bme, MEAS_LUX), "regular sensor: temp, no lux");
+
+        std::vector<Sensor*> l = { &lite, &bme };
+        CHECK(firstProvider(l, MEAS_TEMP) == 1, "temp owner skips the light sensor");
+        CHECK(firstProvider(l, MEAS_LUX) == 0, "lux owner");
+
+        MeasurementSet d; d.setOwners(l);
+        SensorOffsets off;
+        unsigned got = d.ingest(lite, 0, 100, 120, off);
+        CHECK(got == measurementBit(MEAS_LUX) && d.lux == 123.5f && !d.have(MEAS_TEMP),
+              "light sensor fills only lux (mask %u)", got);
+    }
+
     if (failures) { printf("%d sensor merge check(s) FAILED\n", failures); return 1; }
     printf("all sensor merge checks passed\n");
     return 0;

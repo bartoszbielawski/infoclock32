@@ -20,6 +20,7 @@
 //   aht20     | AhtSensor     | — (address 0x38, fixed)
 //   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4)
 //   scd4x     | Scd4xSensor   | — (address 0x62, fixed; adds CO2)
+//   veml7700  | Veml7700Sensor| — (address 0x10, fixed; lux only, feeds auto-brightness)
 //   stub      | StubSensor    | — (no hardware)
 //   sim[N]    | SimSensor     | sim_temp, sim_humidity, ... (virtual, see sim_sensor.hpp)
 //   <other>   | (skipped)     | unknown types are warned about and dropped
@@ -42,6 +43,7 @@
 #include <aht_sensor.hpp>
 #include <ds18b20_sensor.hpp>
 #include <scd4x_sensor.hpp>
+#include <veml7700_sensor.hpp>
 #include <sim_sensor.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
@@ -69,6 +71,8 @@ inline Sensor* createSensorForType(const std::string& type)
         return new Ds18b20Sensor((uint8_t)ds.get_value<int>("ds18b20_pin", 4));
     if (type == "scd4x")
         return new Scd4xSensor();
+    if (type == "veml7700")
+        return new Veml7700Sensor();
     if (type == "stub")
         return new StubSensor();
     if (isSimType(type))   // sim, sim2, ... : virtual sensor, see sim_sensor.hpp

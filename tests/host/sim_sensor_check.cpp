@@ -175,6 +175,40 @@ int main()
               "offsets applied (%.1f %.1f %.1f)", r.data.temp, r.data.pressure, r.data.rawPressure);
     }
 
+    // ── light sensor beside a slow sensor ────────────────────────────────
+    {
+        FakeStore ds;
+        ds.m["sim_temp"] = "20"; ds.m["sim_humidity"] = "40";
+        ds.m["sim2_lux"] = "300"; ds.m["sim2_no_temp"] = "1"; ds.m["sim2_poll_s"] = "2";
+        SimParams slow = simParamsFromStore(ds, "sim");
+        SimParams lite = simParamsFromStore(ds, "sim2");
+        CHECK(lite.hasLux && lite.lux == 300.0f && !lite.hasTemp && lite.pollS == 2, "lux params read");
+
+        std::vector<Sensor*> l = { new SimSensor(lite, "Light"), new SimSensor(slow) };
+        SensorRound r(l);
+        CHECK(r.data.owner[MEAS_TEMP] == 1, "light sensor never owns temperature (owner %d)", r.data.owner[MEAS_TEMP]);
+        CHECK(r.data.owner[MEAS_LUX] == 0, "light sensor owns lux");
+
+        Run run = drive(r, 0, 599, 300);   // slow interval 300 s, light every 2 s
+        CHECK(run.accepted[MEAS_LUX] >= 295 && run.accepted[MEAS_LUX] <= 300,
+              "lux refreshed every ~2 s (%d)", run.accepted[MEAS_LUX]);
+        CHECK(run.accepted[MEAS_TEMP] == 2, "slow sensor still polled at its interval (%d)", run.accepted[MEAS_TEMP]);
+        CHECK(run.accepted[MEAS_HUMIDITY] == 2, "humidity from the slow sensor (%d)", run.accepted[MEAS_HUMIDITY]);
+        CHECK(r.data.lux > 250.0f && r.data.lux < 350.0f, "lux value merged (%.1f)", r.data.lux);
+        for (auto* s : l) delete s;
+    }
+    {   // only a light sensor: round still runs and wakes on its own timer
+        SimParams lite; lite.hasLux = true; lite.hasTemp = false; lite.pollS = 2;
+        std::vector<Sensor*> l = { new SimSensor(lite) };
+        SensorRound r(l);
+        auto a = r.step(0, 300, kNoOffsets);
+        CHECK(a.polled && a.ok && a.accepted == measurementBit(MEAS_LUX), "lux-only first poll");
+        CHECK(r.nextPollAt() == 2, "next poll on the sensor's own timer (%lld)", (long long)r.nextPollAt());
+        auto b = r.step(1, 300, kNoOffsets);
+        CHECK(!b.polled, "not polled before its period");
+        delete l[0];
+    }
+
     if (failures) { printf("%d sim sensor check(s) FAILED\n", failures); return 1; }
     printf("all sim sensor checks passed\n");
     return 0;
