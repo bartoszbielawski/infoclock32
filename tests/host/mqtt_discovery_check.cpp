@@ -66,7 +66,7 @@ int main()
     CHECK(co2 != nullptr, "temp_co2 sensor topic");
     if (co2)
         CHECK(co2->payload.find("\"state_topic\":\"infoclock32/publish/temp_co2\"") != std::string::npos &&
-              co2->payload.find("\"device_class\":\"co2\"") != std::string::npos &&
+              co2->payload.find("\"device_class\":\"carbon_dioxide\"") != std::string::npos &&
               co2->payload.find("\"unit_of_measurement\":\"ppm\"") != std::string::npos,
               "temp_co2 reads publish/temp_co2, ppm");
 

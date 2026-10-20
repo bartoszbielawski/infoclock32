@@ -123,7 +123,7 @@ inline std::vector<DiscoveryMessage> build_discovery_messages(const std::string&
         ",\"state_class\":\"measurement\"");
     add("sensor", "temp_co2", "CO2",
         "\"state_topic\":\"" + pub("temp_co2") + "\""
-        ",\"device_class\":\"co2\""
+        ",\"device_class\":\"carbon_dioxide\""
         ",\"unit_of_measurement\":\"ppm\""
         ",\"state_class\":\"measurement\"");
     add("sensor", "heap", "Free heap",
