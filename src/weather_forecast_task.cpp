@@ -20,10 +20,11 @@
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <task_registry.hpp>
+#include <display_strings.hpp>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
-static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric";
-static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric";
+static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric&lang=%s";
+static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric&lang=%s";
 
 static std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
 {
@@ -70,8 +71,9 @@ static std::string readWeatherFromOWM(int& iconIndex)
     }
 
     // read current weather
-    char url[128];
-    snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str());
+    const char* lang = owm_lang(parse_lang(ds.get_value("language", "en")));
+    char url[160];
+    snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str(), lang);
 
     String output;
     auto response = HttpUtils::httpGet(url, output, true);
@@ -84,7 +86,7 @@ static std::string readWeatherFromOWM(int& iconIndex)
     auto currentWeather = parseJsonWithPredicate(output, weatherKeys);
 
     // read forecast
-    snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str());
+    snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str(), lang);
     response = HttpUtils::httpGet(url, output, true);
     if (response != 200)
     {
@@ -110,8 +112,9 @@ static std::string readWeatherFromOWM(int& iconIndex)
         return std::string();
     }
 
-    const std::string& cityName = forecastWeather["/root/city/name"];
-    const std::string& description = forecastWeather["/root/list/2/weather/0/description"];
+    // The matrix font is ASCII only; localized names/descriptions carry diacritics.
+    const std::string cityName = ascii_fold(forecastWeather["/root/city/name"].c_str());
+    const std::string description = ascii_fold(forecastWeather["/root/list/2/weather/0/description"].c_str());
     if (cityName.empty() || description.empty())
     {
         logPrintf("WTH", "missing city name or description in forecast response");

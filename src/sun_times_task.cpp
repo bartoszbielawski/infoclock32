@@ -13,10 +13,11 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <sun_times.hpp>
+#include <display_strings.hpp>
 
 static constexpr int DEFAULT_INTERVAL_MIN = 30;
 
-// Scrolls "Sunrise HH:MM  Sunset HH:MM" as a recurring display widget.
+// Scrolls "Sunrise HH:MM  Sunset HH:MM" (in the configured language) as a recurring display widget.
 // Disabled unless sun_lat and sun_lon are configured; recomputes when the
 // local date (or the configured position) changes.
 void sun_times_task(void* /*parameter*/)
@@ -28,7 +29,7 @@ void sun_times_task(void* /*parameter*/)
     // Let NTP and apply_timezone() settle before the first computation.
     vTaskDelay(20000 / portTICK_PERIOD_MS);
 
-    char line[48];
+    char line[64];
     int  computedDay = -1;
     double computedLat = NAN, computedLon = NAN;
     bool haveLine = false;
@@ -48,20 +49,21 @@ void sun_times_task(void* /*parameter*/)
         {
             SunTimes st = compute_sun_times(lat, lon,
                                             lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+            const DisplayStrings& tr = display_strings(parse_lang(ds.get_value("language", "en")));
             switch (st.kind)
             {
                 case SunTimes::Kind::Normal:
-                    snprintf(line, sizeof(line), "Sunrise %02d:%02d  Sunset %02d:%02d",
-                             st.sunrise_min / 60, st.sunrise_min % 60,
-                             st.sunset_min / 60, st.sunset_min % 60);
+                    snprintf(line, sizeof(line), "%s %02d:%02d  %s %02d:%02d",
+                             tr.sunrise, st.sunrise_min / 60, st.sunrise_min % 60,
+                             tr.sunset, st.sunset_min / 60, st.sunset_min % 60);
                     haveLine = true;
                     break;
                 case SunTimes::Kind::PolarDay:
-                    snprintf(line, sizeof(line), "Sun: polar day!");
+                    snprintf(line, sizeof(line), "%s", tr.polar_day);
                     haveLine = true;
                     break;
                 case SunTimes::Kind::PolarNight:
-                    snprintf(line, sizeof(line), "Sun: polar night!");
+                    snprintf(line, sizeof(line), "%s", tr.polar_night);
                     haveLine = true;
                     break;
             }

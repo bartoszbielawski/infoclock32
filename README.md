@@ -27,7 +27,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 
 | Feature | Config key(s) |
 |---------|--------------|
-| Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`), `timezone`, `clock_style` |
+| Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`/`it`/`es`/`pt`/`de`), `timezone`, `clock_style` |
 | Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Sensors (multiple drivers, round-robin) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
@@ -168,7 +168,7 @@ Key config keys:
 | `hostname` | `infoclock32` | DHCP name, mDNS `.local`, AP portal name |
 | `brightness` | `7` | Display intensity 0–15 |
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
-| `language` | `en` | Date labels: `en`, `fr`, `pl` |
+| `language` | `en` | Language of firmware-generated LED text (day names, sunrise/sunset, reboot and WiFi-setup messages) and of the weather description: `en`, `fr`, `pl`, `it`, `es`, `pt`, `de`. Text is ASCII-folded for the matrix font; the web UI stays English; the restaurant menu has only `en`/`fr` |
 | `clock_style` | `hhmmss` | Time face: `hhmmss` (ticking seconds), `hhmm` (blinking colon), `sweep` (hh:mm + seconds bar), `thick` (thick 6x8 digit font), `bcd` (binary dots); re-read every clock round |
 | `night_start` / `night_end` | — | Night mode window (HH:MM); blank to disable |
 | `night_brightness` | `1` | Intensity during night hours. A brightness change made at night (MQTT, `/actions`) is temporary and does not touch `brightness` |

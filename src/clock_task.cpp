@@ -8,19 +8,12 @@
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <clock_face.hpp>
+#include <display_strings.hpp>
 
-// Day-name table for the configured language (en/fr/pl), see "language" config key
+// Day name for the configured language, see "language" config key
 const char* localizedDayName(int wday)
 {
-  static const char* const kDayNamesEn[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
-  static const char* const kDayNamesFr[] = {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"};
-  static const char* const kDayNamesPl[] = {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"};
-
-  std::string lang = DataStore::getInstance().get_value("language", "en");
-  const char* const* dayNames = kDayNamesEn;
-  if (lang == "fr") dayNames = kDayNamesFr;
-  else if (lang == "pl") dayNames = kDayNamesPl;
-  return dayNames[wday];
+  return display_strings(parse_lang(DataStore::getInstance().get_value("language", "en"))).days[wday];
 }
 
 // While WiFi is down, light the bottom-right pixel of the clock face

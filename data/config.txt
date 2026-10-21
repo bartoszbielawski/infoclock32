@@ -22,7 +22,7 @@ brightness=7
 #   EST5EDT,M3.2.0,M11.1.0              (US Eastern)
 timezone=CET-1CEST,M3.5.0,M10.5.0/3
 
-# Display language for date labels: en, fr or pl
+# Language of LED text (days, sun times, reboot/setup messages, weather): en, fr, pl, it, es, pt or de
 language=en
 
 # Time face shown between the other widgets:

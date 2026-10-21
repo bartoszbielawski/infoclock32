@@ -28,6 +28,7 @@
 #include <screen_wipe_task.h>
 #include <task_entry_points.hpp>
 #include <task_registry.hpp>
+#include <display_strings.hpp>
 
 // Global configuration/data singleton
 DataStore& dataStore = DataStore::getInstance();
@@ -133,9 +134,10 @@ void setup() {
       snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
     scrollMessage(bootMsg, display, 30);
     if (wifi_is_ap_mode()) {
-      std::string apMsg = "WiFi setup: connect to "
+      const DisplayStrings& tr = display_strings(parse_lang(dataStore.get_value("language", "en")));
+      std::string apMsg = std::string(tr.ap_connect)
                           + dataStore.get_value("hostname", "infoclock32")
-                          + "-setup  then browse 192.168.4.1";
+                          + "-setup  " + tr.ap_browse + " 192.168.4.1";
       scrollMessage(apMsg, display, 40);
     }
     vTaskDelay(10000 / portTICK_PERIOD_MS);

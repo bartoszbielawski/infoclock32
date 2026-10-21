@@ -23,6 +23,7 @@ c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
 c++ $CXXFLAGS mqtt_discovery_check.cpp -o mqtt_discovery_check
 c++ $CXXFLAGS auto_brightness_check.cpp -o auto_brightness_check
+c++ $CXXFLAGS display_strings_check.cpp -o display_strings_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
@@ -37,6 +38,7 @@ echo "config secrets guard passed"
 
 ./custom_message_check
 ./sun_times_check
+./display_strings_check
 ./life_step_check
 ./weather_icons_check
 ./pressure_trend_check
