@@ -9,6 +9,8 @@
 //   sensors=bme280             single sensor
 //   sensors=bme280,scd4x       two sensors, polled round-robin
 //   sensors=stub               disabled (the default)
+//   sensors=auto               scan the I2C bus for known sensors (see i2c_detect.hpp)
+//   sensors=auto,ds18b20       detected I2C sensors plus a 1-Wire one (not detectable)
 //
 //   type      | Sensor class  | Extra config keys
 //   ----------|---------------|-----------------------------------
@@ -36,6 +38,9 @@
 #include <vector>
 #include <sensor.hpp>
 #include <sensor_types.hpp>
+#include <i2c_detect.hpp>
+#include <Wire.h>
+#include <map>
 #include <bmp180_sensor.hpp>
 #include <bmp280_sensor.hpp>
 #include <bme280_sensor.hpp>
@@ -48,21 +53,29 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 
+// Address for an I2C sensor: the autodetected one if given, else the config
+// key, else the chip's default.
+template <class Store>
+inline uint8_t i2cAddr(Store& ds, const char* key, int def, int override)
+{
+    return (uint8_t)(override >= 0 ? override : ds.template get_value<int>(key, def));
+}
+
 // Instantiate one sensor for a known type, reading its address/pin from the
 // matching config key. Returns nullptr for unknown types (the caller decides
 // whether to warn and skip).
-inline Sensor* createSensorForType(const std::string& type)
+inline Sensor* createSensorForType(const std::string& type, int addrOverride = -1)
 {
     auto& ds = DataStore::getInstance();
 
     if (type == "bmp180")
         return new Bmp180Sensor();
     if (type == "bmp280")
-        return new Bmp280Sensor((uint8_t)ds.get_value<int>("bmp280_addr", 0x76));
+        return new Bmp280Sensor(i2cAddr(ds, "bmp280_addr", 0x76, addrOverride));
     if (type == "bme280")
-        return new Bme280Sensor((uint8_t)ds.get_value<int>("bme280_addr", 0x76));
+        return new Bme280Sensor(i2cAddr(ds, "bme280_addr", 0x76, addrOverride));
     if (type == "sht31")
-        return new Sht31Sensor((uint8_t)ds.get_value<int>("sht31_addr", 0x44));
+        return new Sht31Sensor(i2cAddr(ds, "sht31_addr", 0x44, addrOverride));
     if (type == "aht10")
         return new AhtSensor(/*isAht20=*/false);
     if (type == "aht20")
@@ -80,6 +93,24 @@ inline Sensor* createSensorForType(const std::string& type)
     return nullptr;
 }
 
+// Wire-backed bus for detectI2cSensors().
+struct WireBus
+{
+    bool ack(uint8_t addr)
+    {
+        Wire.beginTransmission(addr);
+        return Wire.endTransmission() == 0;
+    }
+    int readReg(uint8_t addr, uint8_t reg)
+    {
+        Wire.beginTransmission(addr);
+        Wire.write(reg);
+        if (Wire.endTransmission(false) != 0) return -1;
+        if (Wire.requestFrom((int)addr, 1) != 1) return -1;
+        return Wire.read();
+    }
+};
+
 // Build the sensor list from the `sensors` config key. Unknown types are
 // logged and skipped; the list is capped at kMaxSensors. Returns an empty
 // vector only when `sensors` is empty / "stub" resolves to nothing usable.
@@ -90,6 +121,24 @@ inline std::vector<Sensor*> createSensorList()
     std::string list = DataStore::getInstance().get_value("sensors", "stub");
     std::vector<std::string> types = parseSensorTypes(list);
 
+    // `auto`: scan the bus once and use the addresses it found.
+    std::map<std::string, int> foundAddr;
+    if (listHasAuto(types))
+    {
+        WireBus bus;
+        std::vector<DetectedSensor> found = detectI2cSensors(bus);
+        std::vector<std::string> foundTypes;
+        for (const auto& d : found)
+        {
+            logPrintf("TMP", "autodetect: %s at 0x%02X", d.type.c_str(), d.addr);
+            foundTypes.push_back(d.type);
+            foundAddr[d.type] = d.addr;
+        }
+        if (found.empty())
+            logPrintf("TMP", "autodetect: no known I2C sensor found");
+        types = expandAutoTypes(types, foundTypes);
+    }
+
     std::vector<Sensor*> out;
     for (const auto& type : types)
     {
@@ -99,7 +148,8 @@ inline std::vector<Sensor*> createSensorList()
                       type.c_str(), kMaxSensors);
             continue;
         }
-        Sensor* s = createSensorForType(type);
+        auto fa = foundAddr.find(type);
+        Sensor* s = createSensorForType(type, fa != foundAddr.end() ? fa->second : -1);
         if (s == nullptr)
         {
             logPrintf("TMP", "unknown sensor type '%s' — skipped", type.c_str());

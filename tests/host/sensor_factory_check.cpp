@@ -63,6 +63,18 @@ int main()
     CHECK(kMaxSensors == 4, "kMaxSensors is 4");
     CHECK(parseSensorTypes("a,b,c,d,e").size() == 5, "parser returns all 5; caller caps");
 
+    // `auto` expansion
+    {
+        auto join = [](const std::vector<std::string>& v) { return joinList(v); };
+        std::vector<std::string> det = {"aht20", "bmp280"};
+        CHECK(join(expandAutoTypes(parseSensorTypes("auto"), det)) == "aht20,bmp280", "auto expands");
+        CHECK(join(expandAutoTypes(parseSensorTypes("auto,ds18b20"), det)) == "aht20,bmp280,ds18b20", "auto then extra");
+        CHECK(join(expandAutoTypes(parseSensorTypes("scd4x,auto"), {"aht20", "scd4x"})) == "scd4x,aht20", "explicit first, dup dropped");
+        CHECK(join(expandAutoTypes(parseSensorTypes("auto"), {})) == "", "nothing found -> empty");
+        CHECK(join(expandAutoTypes(parseSensorTypes("bme280"), det)) == "bme280", "no auto: unchanged");
+        CHECK(listHasAuto(parseSensorTypes("bme280, AUTO")) && !listHasAuto(parseSensorTypes("bme280")), "listHasAuto");
+    }
+
     if (failures == 0)
         printf("all sensor factory tests passed\n");
     return failures == 0 ? 0 : 1;

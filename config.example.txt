@@ -165,6 +165,10 @@ sensors=bme280
 #
 # Multiple sensors (comma-separated, polled round-robin):
 #sensors=bme280,scd4x
+# Or detect I2C sensors automatically at boot (SHT31, AHT20, BME280/BMP280/
+# BMP180, SCD4x, VEML7700); can be mixed with entries that cannot be detected:
+#sensors=auto
+#sensors=auto,ds18b20
 
 # I2C address in decimal. Most breakout boards ship with SDO/CSB low - 0x76.
 # Pull SDO/CSB high to use the alternate address 0x77.

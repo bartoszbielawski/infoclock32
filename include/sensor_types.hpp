@@ -45,3 +45,28 @@ inline std::vector<std::string> parseSensorTypes(const std::string& list)
     }
     return out;
 }
+// Replace the `auto` token of a parsed `sensors` list by `detected` (the types
+// found on the I2C bus, in report order), in place, then drop duplicates again
+// so `auto,ds18b20` or `bme280,auto` behave as expected. Without `auto` the
+// list is returned unchanged.
+inline std::vector<std::string> expandAutoTypes(const std::vector<std::string>& types,
+                                                const std::vector<std::string>& detected)
+{
+    std::vector<std::string> out;
+    auto push = [&](const std::string& t) {
+        for (size_t i = 0; i < out.size(); i++) if (out[i] == t) return;
+        out.push_back(t);
+    };
+    for (const auto& t : types)
+    {
+        if (t == "auto") for (const auto& d : detected) push(d);
+        else push(t);
+    }
+    return out;
+}
+
+inline bool listHasAuto(const std::vector<std::string>& types)
+{
+    for (const auto& t : types) if (t == "auto") return true;
+    return false;
+}
