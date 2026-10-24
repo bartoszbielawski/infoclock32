@@ -8,6 +8,9 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <task_registry.hpp>
+#include <resource_manager.hpp>
+#include <LMDS.hpp>
+#include <graphic_utils.hpp>
 
 static volatile bool s_ap_mode = false;   // true while not connected to any AP
 static std::string s_hostname = "infoclock32";
@@ -27,7 +30,8 @@ static void start_mdns()
 static void wifi_monitor_task(void* /*pv*/)
 {
     registerTask("WiFiMonitor", 4096, 90000);
-    bool wasConnected = false;
+    // Connected at boot: main.cpp already scrolls the network info after the banner.
+    bool wasConnected = WiFi.status() == WL_CONNECTED;
     for (;;)
     {
         task_heartbeat();
@@ -40,6 +44,15 @@ static void wifi_monitor_task(void* /*pv*/)
                 logPrintf("WIFI", "connected, IP=%s",
                           WiFi.localIP().toString().c_str());
                 start_mdns();
+                if (DataStore::getInstance().get_value<int>("show_ip_on_boot", 1))
+                {
+                    std::string msg = std::string(WiFi.SSID().c_str()) + "  " +
+                                      WiFi.localIP().toString().c_str() + "  " + s_hostname + ".local";
+                    task_heartbeat_grace(90000);   // FIFO wait + scroll
+                    if (auto display = ResourceManager<LMDS>::getInstance().acquire())
+                        scrollMessage(msg, display, 30);
+                    task_heartbeat();
+                }
             }
             vTaskDelay(5000 / portTICK_PERIOD_MS);
             continue;
