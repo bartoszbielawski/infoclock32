@@ -194,7 +194,8 @@ sensor_interval=30
 
 # What scrolls on the display: ordered comma list of temp / humidity /
 # pressure / co2. Empty = nothing scrolls (placeholders still update).
-# Default: temp,pressure
+# Default: auto = every measurement the attached sensors provide, in that
+# order; mixes with items, e.g. pressure,auto puts pressure first.
 #sensor_display=temp,pressure
 
 # Seconds between scrolls (0 = after every poll wake; default 0)

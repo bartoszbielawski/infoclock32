@@ -23,7 +23,14 @@ static void expect_line(const std::string& got, const std::string& want, const c
 int main()
 {
     // List parsing: default, order, aliases, case/whitespace
-    expect_list(kSensorDisplayDefault, "temp,pressure");
+    expect_list(kSensorDisplayDefault, "temp,humidity,pressure,co2");
+    expect_list("auto", "temp,humidity,pressure,co2");
+    expect_list("AUTO", "temp,humidity,pressure,co2");
+    expect_list("pressure,auto", "pressure,temp,humidity,co2");
+    expect_list("auto,pressure", "temp,humidity,pressure,co2");
+    expect_list("co2,auto,temp", "co2,temp,humidity,pressure");
+    CHECK(displayListHasAuto("auto") && displayListHasAuto("pressure, Auto") && !displayListHasAuto("temp,pressure")
+          && !displayListHasAuto(""), "displayListHasAuto");
     expect_list("CO2", "co2");
     expect_list("", "");
     expect_list("   ", "");

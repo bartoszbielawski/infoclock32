@@ -134,8 +134,9 @@ sensor_interval=30
 #co2_offset=0         # ppm
 #
 # What scrolls on the display: ordered comma list of temp / humidity / pressure / co2
-# (empty = nothing scrolls; placeholders still update).
-sensor_display=temp,pressure
+# (empty = nothing scrolls; placeholders still update). Default: auto = every
+# measurement the attached sensors provide (temp, humidity, pressure, co2).
+#sensor_display=temp,pressure
 #
 # Seconds between scrolls (0 = after every poll wake)
 sensor_readout_interval=0

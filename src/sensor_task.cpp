@@ -129,15 +129,18 @@ void sensor_task(void* parameter)
         int holdMs = hold_s * 1000;
 
         // What to show, in what order; empty list = never scroll
-        std::vector<SensorDisplayItem> items = parseDisplayList(
-            DataStore::getInstance().get_value(CFG_DISPLAY, kSensorDisplayDefault));
+        const std::string displayCfg =
+            DataStore::getInstance().get_value(CFG_DISPLAY, kSensorDisplayDefault);
+        std::vector<SensorDisplayItem> items = parseDisplayList(displayCfg);
+        const bool displayAuto = displayListHasAuto(displayCfg);
 
         // Drop measurements no sensor in the round can provide (log once per item)
         for (auto it = items.begin(); it != items.end();)
         {
             if (!itemAvailable(*it, anyHumidity, anyPressure, anyCo2))
             {
-                if (!unavailableLogged[*it])
+                // With `auto` an unavailable item is expected, not a misconfiguration.
+                if (!displayAuto && !unavailableLogged[*it])
                 {
                     unavailableLogged[*it] = true;
                     logPrintf("TMP", "'%s' requested but no configured sensor provides it",

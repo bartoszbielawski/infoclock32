@@ -24,8 +24,11 @@ enum SensorDisplayItem
     SDI_COUNT
 };
 
-// Default value of the sensor_display key: what scrolled before the key existed.
-static const char kSensorDisplayDefault[] = "temp,pressure";
+// Default value of the sensor_display key. `auto` stands for every measurement
+// (temp, humidity, pressure, co2 in that order); the sensor task then shows the
+// ones the attached sensors actually provide. It can be mixed with explicit
+// items, e.g. "pressure,auto" puts pressure first.
+static const char kSensorDisplayDefault[] = "auto";
 
 // Temperature is always shown with one fractional digit — the temp_decimals
 // config key was removed in the multi-sensor rework.
@@ -123,6 +126,19 @@ inline std::vector<SensorDisplayItem> parseDisplayList(const std::string& list)
 
         SensorDisplayItem item;
         bool known = true;
+        if (tok == "auto")
+        {
+            // Every item, in canonical order, skipping those already listed.
+            for (int i = 0; i < SDI_COUNT; i++)
+            {
+                bool dup = false;
+                for (size_t k = 0; k < out.size(); k++) dup = dup || out[k] == (SensorDisplayItem)i;
+                if (!dup) out.push_back((SensorDisplayItem)i);
+            }
+            pos = comma + 1;
+            continue;
+        }
+
         if (tok == "temp" || tok == "temperature")      item = SDI_TEMP;
         else if (tok == "humidity" || tok == "rh")      item = SDI_HUMIDITY;
         else if (tok == "pressure" || tok == "hpa")     item = SDI_PRESSURE;
@@ -138,6 +154,28 @@ inline std::vector<SensorDisplayItem> parseDisplayList(const std::string& list)
         pos = comma + 1;
     }
     return out;
+}
+
+// True when the list contains the `auto` token (unavailable items are then
+// skipped silently instead of logged as a misconfiguration).
+inline bool displayListHasAuto(const std::string& list)
+{
+    std::vector<std::string> toks;
+    size_t pos = 0;
+    while (pos < list.size())
+    {
+        size_t comma = list.find(',', pos);
+        if (comma == std::string::npos) comma = list.size();
+        size_t b = pos, e = comma;
+        while (b < e && isspace((unsigned char)list[b])) b++;
+        while (e > b && isspace((unsigned char)list[e - 1])) e--;
+        std::string tok = list.substr(b, e - b);
+        for (size_t i = 0; i < tok.size(); i++)
+            tok[i] = (char)tolower((unsigned char)tok[i]);
+        if (tok == "auto") return true;
+        pos = comma + 1;
+    }
+    return false;
 }
 
 // Barometric trend arrow glyph for the pressure readout.

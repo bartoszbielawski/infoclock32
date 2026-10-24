@@ -248,7 +248,9 @@ void handle_actions()
     char   nBrStr[4];
     snprintf(nBrStr, sizeof(nBrStr), "%d", ds.get_value<int>("night_brightness", 1));
 
-    String curSensorDisplay = ds.get_value("sensor_display", kSensorDisplayDefault).c_str();
+    // Resolve `auto` so the checkboxes show what is actually on.
+    String curSensorDisplay = displayListString(parseDisplayList(
+        ds.get_value("sensor_display", kSensorDisplayDefault))).c_str();
     char showIntStr[8], holdStr[4];
     snprintf(showIntStr, sizeof(showIntStr), "%d",
              ds.get_value<int>("sensor_readout_interval", 0));
