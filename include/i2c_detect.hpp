@@ -18,10 +18,15 @@
 //   0x10       veml7700   ack only
 //
 // A wrong guess is harmless: a sensor whose begin() fails is dropped from the
-// round. The result order is fixed — accurate humidity sensors first, so they
-// win temperature ownership over the pressure chips (first listed owns it).
-// At most one sensor per type is returned.
+// round. At most one sensor per type is returned.
+//
+// Order = accuracy. The sensor task gives each measurement to the first listed
+// sensor that provides it, so the result is sorted best-first by kAccuracy
+// (temperature accuracy is the sort key; every sensor but the light sensor
+// measures it). kAccuracy is checked in the host test so that the same order is
+// also best-first for humidity and pressure.
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -43,6 +48,52 @@ inline const char* bmeFamilyFromChipId(int id, uint8_t addr)
     return "";
 }
 
+// Typical datasheet accuracy, +/- (0 = does not measure it). Approximate: only
+// the ranking matters. SCD4x temperature is rated +/-0.8 degC but reads high
+// from self-heating, so it is ranked as a poor temperature source.
+struct SensorAccuracy
+{
+    const char* type;
+    float tempC;    // degC
+    float rh;       // %RH
+    float hpa;      // hPa
+};
+
+inline constexpr SensorAccuracy kAccuracy[] = {
+    // type        temp   rh    hPa
+    { "sht31",     0.2f,  2.0f, 0.0f },
+    { "aht20",     0.3f,  2.0f, 0.0f },
+    { "bme280",    0.5f,  3.0f, 1.0f },
+    { "bmp280",    1.0f,  0.0f, 1.0f },
+    { "bmp180",    1.0f,  0.0f, 1.5f },
+    { "scd4x",     3.0f,  6.0f, 0.0f },   // temp: self-heating, see above
+    { "veml7700",  0.0f,  0.0f, 0.0f },   // light only
+};
+
+inline const SensorAccuracy* accuracyFor(const std::string& type)
+{
+    for (const auto& a : kAccuracy)
+        if (type == a.type) return &a;
+    return nullptr;
+}
+
+// Sort key: temperature accuracy, with sensors that have none (light) last and
+// unknown types after everything.
+inline float temperatureRank(const std::string& type)
+{
+    const SensorAccuracy* a = accuracyFor(type);
+    if (!a) return 1000.0f;
+    return a->tempC > 0.0f ? a->tempC : 999.0f;
+}
+
+// Best-first, stable (equal accuracy keeps detection order).
+inline void sortByAccuracy(std::vector<DetectedSensor>& v)
+{
+    std::stable_sort(v.begin(), v.end(), [](const DetectedSensor& x, const DetectedSensor& y) {
+        return temperatureRank(x.type) < temperatureRank(y.type);
+    });
+}
+
 template <class Bus>
 std::vector<DetectedSensor> detectI2cSensors(Bus& bus)
 {
@@ -54,7 +105,7 @@ std::vector<DetectedSensor> detectI2cSensors(Bus& bus)
         out.push_back({type, addr});
     };
 
-    // Probe in report order.
+    // Probe order does not matter: the result is sorted by accuracy below.
     for (uint8_t a : {0x44, 0x45})
         if (bus.ack(a)) { add("sht31", a); break; }
 
@@ -76,5 +127,7 @@ std::vector<DetectedSensor> detectI2cSensors(Bus& bus)
 
     if (bus.ack(0x62)) add("scd4x", 0x62);
     if (bus.ack(0x10)) add("veml7700", 0x10);
+
+    sortByAccuracy(out);
     return out;
 }

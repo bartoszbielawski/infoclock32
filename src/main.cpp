@@ -170,6 +170,7 @@ void setup() {
   int i2cSda = dataStore.get_value<int>("i2c_sda", I2C_SDA_PIN);
   int i2cScl = dataStore.get_value<int>("i2c_scl", I2C_SCL_PIN);
   Wire.begin(i2cSda, i2cScl);
+  logI2cScan();
   // Sensor list from the `sensors` config key (comma-separated types). The
   // task owns the vector and its Sensor objects.
   // Config keys removed by the multi-sensor rework: warn instead of silently

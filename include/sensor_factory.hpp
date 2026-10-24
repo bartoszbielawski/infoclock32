@@ -39,6 +39,8 @@
 #include <sensor.hpp>
 #include <sensor_types.hpp>
 #include <i2c_detect.hpp>
+#include <i2c_scan.hpp>
+#include <runtime_store.hpp>
 #include <Wire.h>
 #include <map>
 #include <bmp180_sensor.hpp>
@@ -116,6 +118,18 @@ struct WireBus
 // vector when `sensors` is `auto` and nothing was found on the bus. `stub` is
 // a valid (no-hardware) entry — a single "stub" returns one StubSensor, which
 // disables the sensor task.
+// Scan the whole bus and log every device that answers (boot diagnostics; also
+// finds chips we have no driver for). Stores the addresses in the runtime value
+// `i2c_devices`. Call after Wire.begin().
+inline void logI2cScan()
+{
+    WireBus bus;
+    std::vector<uint8_t> found = scanI2c(bus);
+    for (const auto& line : formatScanLines(found))
+        logPrintf("I2C", "%s", line.c_str());
+    RuntimeStore::getInstance().set("i2c_devices", scanSummary(found));
+}
+
 inline std::vector<Sensor*> createSensorList()
 {
     std::string list = DataStore::getInstance().get_value("sensors", "auto");
