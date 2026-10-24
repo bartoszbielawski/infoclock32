@@ -149,7 +149,10 @@ void open_weather_map_task(void *parameter)
     registerTask("Weather", 8192, 120000);
     std::string messageToBeDisplayed;
     int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
-    time_t last_weather_update = 0;
+    // Fetch scheduling on millis(): the wall clock reads ~uptime until NTP
+    // syncs. nextFetchMs == 0 means "fetch now" (first pass after boot).
+    uint32_t nextFetchMs = 0;
+    uint32_t failures = 0;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
@@ -161,18 +164,28 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        // update weather every 30 minutes; the first fetch must not wait for
-        // the wall clock (it reads ~uptime until NTP syncs, so the age check
-        // alone would delay the first fetch by up to 30 min after boot)
-        if (last_weather_update == 0 ||
-            difftime(time(nullptr), last_weather_update) > 30*60)
+        if (nextFetchMs == 0 || (int32_t)(millis() - nextFetchMs) >= 0)
         {
+            // ow_interval_min: minutes between API calls (default 30, min 10)
+            uint32_t intervalMs = (uint32_t)max(10, min(1440,
+                DataStore::getInstance().get_value<int>("ow_interval_min", 30))) * (uint32_t)60000;
+
             auto newWeather = readWeatherFromOWM(iconIndex);
             if (not newWeather.empty())
             {
                 messageToBeDisplayed = newWeather;
-                last_weather_update = time(nullptr);
+                failures = 0;
+                nextFetchMs = millis() + intervalMs;
             }
+            else
+            {
+                // back off 1, 2, 4... min (capped at 10 min / the interval) instead of
+                // hitting the API every minute while it is failing
+                uint32_t backoffMs = (uint32_t)60000 << min<uint32_t>(failures, 10);
+                if (failures < 10) failures++;
+                nextFetchMs = millis() + min(min(backoffMs, intervalMs), (uint32_t)600000);
+            }
+            if (nextFetchMs == 0) nextFetchMs = 1;
         }
 
         if (messageToBeDisplayed.empty())
