@@ -20,7 +20,7 @@
 //   sht31     | Sht31Sensor   | sht31_addr   (default 0x44)
 //   aht10     | AhtSensor     | — (address 0x38, fixed)
 //   aht20     | AhtSensor     | — (address 0x38, fixed)
-//   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4)
+//   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4), ds18b20_pullup (default 0)
 //   scd4x     | Scd4xSensor   | — (address 0x62, fixed; adds CO2)
 //   veml7700  | Veml7700Sensor| — (address 0x10, fixed; lux only, feeds auto-brightness)
 //   stub      | StubSensor    | — (no hardware)
@@ -83,7 +83,8 @@ inline Sensor* createSensorForType(const std::string& type, int addrOverride = -
     if (type == "aht20")
         return new AhtSensor(/*isAht20=*/true);
     if (type == "ds18b20")
-        return new Ds18b20Sensor((uint8_t)ds.get_value<int>("ds18b20_pin", 4));
+        return new Ds18b20Sensor((uint8_t)ds.get_value<int>("ds18b20_pin", 4),
+                                 ds.get_value<int>("ds18b20_pullup", 0) != 0);
     if (type == "scd4x")
         return new Scd4xSensor();
     if (type == "veml7700")
