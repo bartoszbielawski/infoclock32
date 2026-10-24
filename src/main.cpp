@@ -14,6 +14,7 @@
 #include <logger.hpp>
 #include <runtime_store.hpp>
 #include <timezone_utils.hpp>
+#include <WiFi.h>
 #include <version.hpp>
 #include <watchdog_task.h>
 #include <Wire.h>
@@ -139,6 +140,10 @@ void setup() {
                           + dataStore.get_value("hostname", "infoclock32")
                           + "-setup  " + tr.ap_browse + " 192.168.4.1";
       scrollMessage(apMsg, display, 40);
+    } else if (dataStore.get_value<int>("show_ip_on_boot", 1) && WiFi.status() == WL_CONNECTED) {
+      std::string netMsg = std::string(WiFi.SSID().c_str()) + "  " + WiFi.localIP().toString().c_str()
+                           + "  " + dataStore.get_value("hostname", "infoclock32") + ".local";
+      scrollMessage(netMsg, display, 30);
     }
     vTaskDelay(10000 / portTICK_PERIOD_MS);
   }
