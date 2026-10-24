@@ -129,6 +129,8 @@ void hardware_init()
     if (connected)
     {
         s_ap_mode = false;
+        // mains-powered: modem sleep only adds latency and packet loss
+        WiFi.setSleep(false);
         logPrintf("WIFI", "connected, IP=%s",
                   WiFi.localIP().toString().c_str());
         start_mdns();
