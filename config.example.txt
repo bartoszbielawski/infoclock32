@@ -153,9 +153,11 @@ enable_mqtt_discovery=1
 #            (CO2 + temp + humidity)
 #   veml7700 VEML7700 ambient light via I2C, fixed address 0x10 (lux only;
 #            drives auto_brightness)
-#   stub     disabled / no hardware (default)
+#   auto     detect I2C sensors at boot (default); add 1-Wire ones to it,
+#            e.g. auto,ds18b20
+#   stub     disabled / no hardware
 # Single sensor:
-sensors=bme280
+#sensors=bme280
 # Virtual sensor for development/tests (also works in the host prototype):
 #sensors=sim,sim2
 #sim_temp=21

@@ -8,8 +8,8 @@
 // `sensor_display`). Examples:
 //   sensors=bme280             single sensor
 //   sensors=bme280,scd4x       two sensors, polled round-robin
-//   sensors=stub               disabled (the default)
-//   sensors=auto               scan the I2C bus for known sensors (see i2c_detect.hpp)
+//   sensors=auto               scan the I2C bus for known sensors (the default; see i2c_detect.hpp)
+//   sensors=stub               disabled
 //   sensors=auto,ds18b20       detected I2C sensors plus a 1-Wire one (not detectable)
 //
 //   type      | Sensor class  | Extra config keys
@@ -113,12 +113,12 @@ struct WireBus
 
 // Build the sensor list from the `sensors` config key. Unknown types are
 // logged and skipped; the list is capped at kMaxSensors. Returns an empty
-// vector only when `sensors` is empty / "stub" resolves to nothing usable.
-// Note: `stub` is a valid (no-hardware) entry — a single "stub" returns one
-// StubSensor, preserving the historical default of a disabled sensor task.
+// vector when `sensors` is `auto` and nothing was found on the bus. `stub` is
+// a valid (no-hardware) entry — a single "stub" returns one StubSensor, which
+// disables the sensor task.
 inline std::vector<Sensor*> createSensorList()
 {
-    std::string list = DataStore::getInstance().get_value("sensors", "stub");
+    std::string list = DataStore::getInstance().get_value("sensors", "auto");
     std::vector<std::string> types = parseSensorTypes(list);
 
     // `auto`: scan the bus once and use the addresses it found.

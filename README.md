@@ -187,7 +187,7 @@ Key config keys:
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
 | `push_token` | *(empty)* | When set, `/push` requires `?token=<value>`; empty keeps `/push` open |
 | `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
-| `sensors` | `stub` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
+| `sensors` | `auto` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
 | `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
 | `humidity_offset` | `0` | Humidity correction in %RH added to readings |
@@ -227,16 +227,17 @@ Set `sensors` in config to a **comma-separated list** of supported drivers (max 
 | `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
 | `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
 | `veml7700` | VEML7700 ambient light (Vishay) | I2C 0x10 (fixed) | — (lux only, no temperature; polled every 2 s on its own timer; drives `auto_brightness`, placeholder `{lux}`) |
-| `stub` (default) | None | — | — |
+| `auto` (default) | Whatever is found on the I2C bus | — | see Autodetection below |
+| `stub` | None (disables the sensor task) | — | — |
 | `sim`, `sim2`, ... | None (virtual) | — | `sim_temp`, `sim_humidity`, `sim_pressure`, `sim_co2`, `sim_lux`, `sim_no_temp`, `sim_poll_s`, `sim_drift`, `sim_fail_every`, `sim_fail_after`/`sim_fail_count`, `sim_begin_fail` (prefix = the type name) — for development and tests; see `include/sim_sensor.hpp` |
 
 Auto-brightness example: `sensors=bme280,veml7700` with `auto_brightness=1`. Mount the VEML7700 where the LED matrix does not shine on it, otherwise the display's own light feeds back into the reading.
 
-**Autodetection** — `sensors=auto` scans the I2C bus once at boot and uses what it finds (see the `autodetect:` lines in `/log`). It recognises SHT31 (0x44/0x45), AHT20 (0x38), BME280/BMP280/BMP180 (0x76/0x77, told apart by chip ID), SCD4x (0x62) and VEML7700 (0x10), at whichever of the possible addresses they answer. The result order is fixed: SHT31, AHT20, BME280, BMP280, BMP180, SCD4x, VEML7700, so humidity chips own temperature over the pressure chips. `auto` can be mixed with explicit entries, e.g. `sensors=auto,ds18b20` (DS18B20 is 1-Wire and cannot be detected). An AHT10 shares the AHT20's address and is not told apart, so list `aht10` explicitly if you have one. Detection happens at boot only: reboot after attaching a sensor.
+**Autodetection** (the default) — `sensors=auto` scans the I2C bus once at boot and uses what it finds (see the `autodetect:` lines in `/log`). It recognises SHT31 (0x44/0x45), AHT20 (0x38), BME280/BMP280/BMP180 (0x76/0x77, told apart by chip ID), SCD4x (0x62) and VEML7700 (0x10), at whichever of the possible addresses they answer. The result order is fixed: SHT31, AHT20, BME280, BMP280, BMP180, SCD4x, VEML7700, so humidity chips own temperature over the pressure chips. `auto` can be mixed with explicit entries, e.g. `sensors=auto,ds18b20` (DS18B20 is 1-Wire and cannot be detected). Set `sensors=stub` to switch sensors off. An AHT10 shares the AHT20's address and is not told apart, so list `aht10` explicitly if you have one. Detection happens at boot only: reboot after attaching a sensor.
 
 Examples: `sensors=bme280` (single) or `sensors=bme280,scd4x` (BME280 for temp/humidity/pressure, SCD4X for CO2, polled in turn).
 
-**Consolidation** — all sensors write to the *same* RuntimeStore keys, the *first listed* sensor that provides a measurement owns it (a later sensor only fills in while the owner has gone stale): `temp_c` (string including `°C`, e.g. `22.5°C`, always one decimal place), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders. When two sensors report the same measurement (e.g. both a BME280 and an SCD4X report temperature) the one listed first in `sensors` is used, so put your preferred sensor first; the other still contributes the measurements the first lacks (e.g. CO2). A reading with no update for three rounds (at least 2 minutes) is dropped: its placeholder and MQTT state disappear and it stops scrolling until the sensor reports again. Sensors that fail to initialise are skipped, and `sensors=stub` makes the sensor task exit. Per-measurement calibration is handled by the offset keys below.
+**Consolidation** — all sensors write to the *same* RuntimeStore keys, the *first listed* sensor that provides a measurement owns it (a later sensor only fills in while the owner has gone stale): `temp_c` (string including `°C`, e.g. `22.5°C`, always one decimal place), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders. When two sensors report the same measurement (e.g. both a BME280 and an SCD4X report temperature) the one listed first in `sensors` is used, so put your preferred sensor first; the other still contributes the measurements the first lacks (e.g. CO2). A reading with no update for three rounds (at least 2 minutes) is dropped: its placeholder and MQTT state disappear and it stops scrolling until the sensor reports again. Sensors that fail to initialise are skipped, and `sensors=stub` (or nothing detected under `auto`) makes the sensor task exit. Per-measurement calibration is handled by the offset keys below.
 
 **Offsets** — `temp_offset` (°C), `humidity_offset` (%RH), `pressure_offset` (hPa) and `co2_offset` (ppm) are added to each reading at write time (defaults 0). They apply in single- and multi-sensor setups alike. The barometric trend is computed from the *un-offset* pressure so a calibration offset doesn't shift the slope.
 

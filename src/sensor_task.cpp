@@ -77,7 +77,7 @@ void sensor_task(void* parameter)
     const size_t N = list->size();
     if (N == 0)
     {
-        logPrintf("TMP", "no usable sensors (sensors=? stub/failed) — task exiting");
+        logPrintf("TMP", "no usable sensors (none detected, stub or failed init) — task exiting");
         sensorListExit(list);
         vTaskDelete(nullptr);
         return;

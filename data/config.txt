@@ -93,14 +93,15 @@ sensor_interval=30
 #   ESP32-S3 DevKitC-1 : SDA=GPIO8,  SCL=GPIO9
 #   ESP32 DevKit v1    : SDA=GPIO21, SCL=GPIO22
 #
-# Set sensors to a comma-separated list of supported drivers (max 4; default: stub = disabled).
+# Set sensors to a comma-separated list of supported drivers (max 4; default: auto = detect I2C sensors at boot;
+# add ds18b20 for 1-Wire, e.g. auto,ds18b20; stub = disabled).
 # Duplicates are removed. Uncomment / edit to match your hardware.
 #
 # BMP180 (I2C, fixed address 0x77, temperature + pressure):
 #sensors=bmp180
 #
 # BMP280 (I2C, temperature + pressure - no humidity):
-sensors=bmp280
+#sensors=bmp280
 #bmp280_addr=118    # decimal for 0x76; use 119 for 0x77
 #
 # BME280 (I2C, temperature + humidity + pressure):

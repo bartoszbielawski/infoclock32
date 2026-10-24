@@ -108,11 +108,11 @@ int main(int argc, char** argv)
     // The sensor task now takes a std::vector<Sensor*> (it owns the list and
 // deletes its members on exit). The host shim has no Adafruit driver headers,
 // so we can't include sensor_factory.hpp here; a single StubSensor matches
-// both the old behaviour and the device default (`sensors` unset -> "stub").
+// both the old behaviour and the device default (`sensors` unset -> "auto", nothing detectable on the host).
     // `sensors` may list virtual sensors (sim, sim2, ...; see sim_sensor.hpp);
     // anything else (real drivers) is not available on the host -> stub.
     auto* sensors = new std::vector<Sensor*>();
-    for (const auto& type : parseSensorTypes(DataStore::getInstance().get_value("sensors", "stub")))
+    for (const auto& type : parseSensorTypes(DataStore::getInstance().get_value("sensors", "auto")))
     {
         if (sensors->size() >= (size_t)kMaxSensors) break;
         if (isSimType(type))
