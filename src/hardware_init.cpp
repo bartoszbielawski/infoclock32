@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <esp_wifi.h>
+#include <cstring>
+#include <wifi_cache.h>
 #include <ESPmDNS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -22,6 +25,16 @@ static void start_mdns()
     if (MDNS.begin(s_hostname.c_str()))
         logPrintf("WIFI", "mDNS started — http://%s.local", s_hostname.c_str());
     MDNS.addService("http", "tcp", 80);
+}
+
+void wifi_erase_cache()
+{
+    WiFi.mode(WIFI_STA);                          // driver must be started
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);     // the erase has to hit flash
+    wifi_config_t empty;
+    memset(&empty, 0, sizeof(empty));
+    esp_wifi_set_config(WIFI_IF_STA, &empty);
+    WiFi.disconnect(false, true);
 }
 
 // Persistent watchdog. Survives the WiFiManager portal closing: whenever the
@@ -119,8 +132,10 @@ void hardware_init()
             vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         connected = WiFi.status() == WL_CONNECTED;
-        logPrintf("WIFI", connected ? "connected with config.txt credentials"
-                                    : "config.txt credentials failed");
+        if (connected)
+            logPrintf("WIFI", "connected with config.txt credentials");
+        else
+            logPrintf("WIFI", "config.txt credentials failed (status %d)", (int)WiFi.status());
     }
 
     if (!connected)
@@ -130,7 +145,7 @@ void hardware_init()
             // The file is the authority and it failed: erase the stored pair
             // so a stale cache cannot outvote it, and autoConnect() opens the
             // portal directly (no doomed stored-credentials attempt first).
-            WiFi.disconnect(false, true);
+            wifi_erase_cache();
             logPrintf("WIFI", "opening setup portal at %s / 192.168.4.1",
                       apName.c_str());
         }

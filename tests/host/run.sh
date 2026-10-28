@@ -26,6 +26,7 @@ c++ $CXXFLAGS auto_brightness_check.cpp -o auto_brightness_check
 c++ $CXXFLAGS i2c_detect_check.cpp      -o i2c_detect_check
 c++ $CXXFLAGS i2c_scan_check.cpp        -o i2c_scan_check
 c++ $CXXFLAGS display_strings_check.cpp -o display_strings_check
+c++ $CXXFLAGS serial_cmd_check.cpp      -o serial_cmd_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
@@ -59,6 +60,7 @@ echo "config secrets guard passed"
 ./auto_brightness_check
 ./i2c_detect_check
 ./i2c_scan_check
+./serial_cmd_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

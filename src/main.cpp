@@ -24,6 +24,7 @@
 #include <sensor_task.h>
 #include <custom_message_task.h>
 #include <night_mode_task.h>
+#include <serial_console_task.h>
 #include <resto_menu_task.h>
 #include <ota_task.h>
 #include <screen_wipe_task.h>
@@ -74,6 +75,10 @@ void setup() {
   dataStore.load_from_file("/config.txt");
 
   pinMode(LED_BLINK_PIN, OUTPUT);
+
+  // Serial console first: hardware_init() can block in the Wi-Fi setup portal,
+  // and credentials must stay editable (or erasable) over USB meanwhile.
+  xTaskCreate(serial_console_task, "SerialConsole", 4096, nullptr, 1, nullptr);
 
   // Initialize board/network and core task infrastructure
   hardware_init();
