@@ -30,6 +30,7 @@ void handle_update_post();
 void handle_update_upload();
 void handle_wifi_get();
 void handle_wifi_post();
+void handle_forget_wifi();
 
 // ── / (home dashboard) ────────────────────────────────────────────────────────
 
@@ -730,6 +731,7 @@ void web_server_task(void* pvParameters)
     server.on("/update",  HTTP_POST, handle_update_post, handle_update_upload);
     server.on("/wifi",    HTTP_GET,  handle_wifi_get);
     server.on("/wifi",    HTTP_POST, handle_wifi_post);
+    server.on("/forget_wifi", HTTP_POST, handle_forget_wifi);
     server.begin();
 
     while (true)

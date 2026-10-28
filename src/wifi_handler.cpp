@@ -3,6 +3,7 @@
 #include <web_ui.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <wifi_cache.h>
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -122,9 +123,39 @@ void handle_wifi_get()
         "<p style='margin-top:16px;font-size:.85rem'>"
         "<a href='/wifi?rescan=1' style='color:#1d4ed8'>&#8635; Rescan</a>"
         "</p>"
+        "<form method='POST' action='/forget_wifi' style='margin-top:16px' "
+        "onsubmit=\"return confirm('Forget the saved Wi-Fi and restart into setup mode?')\">"
+        "<button type='submit' class='btn btn-danger'>Forget Wi-Fi</button>"
+        "</form>"
         "</div>"));  // card
 
     sendPageFoot();
+}
+
+// ── POST /forget_wifi ─────────────────────────────────────────────────────────
+
+void handle_forget_wifi()
+{
+    if (!is_authenticated()) return;
+
+    auto& ds = DataStore::getInstance();
+    ds.set_value("wifi_ssid",     "");
+    ds.set_value("wifi_password", "");
+    ds.save_to_file("/config.txt");
+    wifi_erase_cache();
+    logPrintf("WEB", "WiFi credentials erased via /forget_wifi");
+
+    sendPageHead("Forget Wi-Fi", "");
+    sendPageNav("/wifi");
+    server.sendContent_P(PSTR(
+        "<h2>Wi-Fi forgotten</h2><div class='card'>"
+        "<p>Saved Wi-Fi credentials erased. The device is restarting into setup "
+        "mode: join the <strong>&lt;hostname&gt;-setup</strong> network and open "
+        "<strong>192.168.4.1</strong>.</p></div>"));
+    sendPageFoot();
+
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    ESP.restart();
 }
 
 // ── POST /wifi ────────────────────────────────────────────────────────────────
