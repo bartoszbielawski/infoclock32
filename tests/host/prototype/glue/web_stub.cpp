@@ -13,3 +13,7 @@ void handle_update_get()
 void handle_update_post() {}
 
 void handle_update_upload() {}
+
+// hardware_init.cpp is not compiled here, and there is no Wi-Fi flash cache to erase.
+#include <wifi_cache.h>
+void wifi_erase_cache() {}
