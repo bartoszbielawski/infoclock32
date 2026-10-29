@@ -12,7 +12,10 @@ void ota_task(void*)
     // call, and flash write + network stalls can eat tens of seconds
     registerTask("OTA", 4096, 120000);
     while (WiFi.status() != WL_CONNECTED)
+    {
+        task_heartbeat();   // offline is not a hang: don't let the watchdog reboot us
         vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
 
     DataStore& ds = DataStore::getInstance();
     std::string hostname = ds.get_value("hostname", "infoclock32");

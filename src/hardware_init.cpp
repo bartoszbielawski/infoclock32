@@ -37,6 +37,20 @@ void wifi_erase_cache()
     WiFi.disconnect(false, true);
 }
 
+// Some ESP32-C3 boards (small clones with a weak antenna match) cannot complete
+// an association at full TX power: the AP is visible but phones get "connection
+// failed". `wifi_tx_dbm` (e.g. 8.5) caps the power; unset leaves the default.
+// The radio must already be started, so call this after WiFi.mode().
+static void apply_tx_power()
+{
+    float dbm = DataStore::getInstance().get_value<float>("wifi_tx_dbm", 0.0f);
+    if (dbm <= 0.0f) return;
+    int quarters = (int)(dbm * 4.0f + 0.5f);          // esp_wifi unit: 0.25 dBm
+    quarters = max(8, min(84, quarters));
+    WiFi.setTxPower((wifi_power_t)quarters);
+    logPrintf("WIFI", "TX power capped at %.2f dBm", quarters / 4.0f);
+}
+
 // Persistent watchdog. Survives the WiFiManager portal closing: whenever the
 // STA link drops (or boot ended offline), re-arms the connection with the last
 // credentials WiFi.begin()/WiFiManager used and keeps retrying every 30 s.
@@ -45,11 +59,26 @@ static void wifi_monitor_task(void* /*pv*/)
     registerTask("WiFiMonitor", 4096, 90000);
     // Connected at boot: main.cpp already scrolls the network info after the banner.
     bool wasConnected = WiFi.status() == WL_CONNECTED;
+    // Fallback AP: the WiFiManager portal only lives for its boot-time timeout,
+    // so while offline we raise a plain soft-AP (web UI at 192.168.4.1, /wifi
+    // page edits the credentials) after wifi_ap_after_s and drop it on reconnect.
+    const int apAfterS = max(0, DataStore::getInstance().get_value<int>("wifi_ap_after_s", 60));
+    const std::string apName = s_hostname + "-setup";
+    bool apUp = false;
+    uint32_t offlineSinceMs = millis();
+    int ticksToRetry = 0;
     for (;;)
     {
         task_heartbeat();
         if (WiFi.status() == WL_CONNECTED)
         {
+            if (apUp)
+            {
+                WiFi.softAPdisconnect(true);
+                WiFi.mode(WIFI_STA);
+                apUp = false;
+                logPrintf("WIFI", "fallback AP closed");
+            }
             if (!wasConnected)
             {
                 wasConnected = true;
@@ -72,11 +101,28 @@ static void wifi_monitor_task(void* /*pv*/)
         }
 
         if (wasConnected)
+        {
             logPrintf("WIFI", "link lost — retrying every 30 s");
+            offlineSinceMs = millis();
+        }
         wasConnected = false;
         s_ap_mode = true;
-        WiFi.reconnect();   // no-op if the device never had credentials
-        vTaskDelay(30000 / portTICK_PERIOD_MS);
+
+        if (!apUp && apAfterS > 0 && millis() - offlineSinceMs >= (uint32_t)apAfterS * 1000)
+        {
+            WiFi.mode(WIFI_AP_STA);
+            apUp = WiFi.softAP(apName.c_str());
+            apply_tx_power();
+            logPrintf("WIFI", "offline for %d s — fallback AP %s at %s",
+                      apAfterS, apName.c_str(), WiFi.softAPIP().toString().c_str());
+        }
+
+        if (ticksToRetry-- <= 0)
+        {
+            WiFi.reconnect();   // no-op if the device never had credentials
+            ticksToRetry = 5;   // 6 ticks x 5 s = every 30 s
+        }
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -115,6 +161,8 @@ void hardware_init()
     });
 
     bool connected = false;
+    WiFi.mode(WIFI_STA);
+    apply_tx_power();
     if (!ssid.empty())
     {
         // Try the config.txt credentials first — without persisting them, so

@@ -13,6 +13,8 @@
 wifi_ssid=MyNetwork
 wifi_password=secret
 #wifi_portal_timeout_s=180
+# wifi_tx_dbm=8.5      # cap TX power if phones cannot join the setup AP
+# wifi_ap_after_s=60   # offline seconds before the fallback setup AP starts (0 = off)
 
 # -- Device identity -----------------------------------------------------------
 # Hostname used for DHCP, mDNS (<hostname>.local), and the setup AP name.

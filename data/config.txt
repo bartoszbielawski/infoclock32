@@ -7,6 +7,11 @@
 wifi_ssid=
 wifi_password=
 #wifi_portal_timeout_s=180
+# Cap Wi-Fi TX power (dBm). Some ESP32-C3 boards cannot associate at full power:
+# the AP is visible but phones get "connection failed".
+wifi_tx_dbm=8.5
+# Seconds offline before the fallback setup AP starts (0 = never)
+#wifi_ap_after_s=60
 # Device hostname used for DHCP, mDNS (.local) and the AP setup portal name
 hostname=infoclock32
 
