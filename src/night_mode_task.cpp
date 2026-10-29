@@ -8,6 +8,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <night_utils.hpp>
+#include <time_valid.hpp>
 #include <auto_brightness.hpp>
 #include <runtime_store.hpp>
 #include <night_mode_task.h>
@@ -123,7 +124,11 @@ void night_mode_task(void* parameter)
             int start_min = parse_hhmm(ds.get_value("night_start", ""));
             int end_min   = parse_hhmm(ds.get_value("night_end",   ""));
 
-            if (start_min < 0 || end_min < 0)
+            if (!wall_time_valid())
+            {
+                // Unsynced clock: keep the current brightness, re-check in a minute.
+            }
+            else if (start_min < 0 || end_min < 0)
             {
                 // Night mode not configured — reset state.
                 last_was_night = false;

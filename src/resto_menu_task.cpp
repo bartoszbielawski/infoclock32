@@ -20,6 +20,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <string_utils.h>
+#include <time_valid.hpp>
 
 #include <ArduinoJson.h>
 #include <string>
@@ -197,6 +198,11 @@ void resto_menu_task(void* pvParameters) {
 
         if (WiFi.status() != WL_CONNECTED) {
             vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        if (!wall_time_valid() && ds.get_value("resto_test_date", "").empty()) {
+            vTaskDelay(10000 / portTICK_PERIOD_MS);   // wait for SNTP: no menu for 1970-01-01
             continue;
         }
 

@@ -9,6 +9,7 @@
 #include <LMDS.hpp>
 #include <clock_face.hpp>
 #include <display_strings.hpp>
+#include <time_valid.hpp>
 
 // Day name for the configured language, see "language" config key
 const char* localizedDayName(int wday)
@@ -49,7 +50,9 @@ void displayClock(void *parameter)
       // Fresh watchdog window for the hold itself (date + time + wipe hook).
       task_heartbeat();
       task_heartbeat_grace(30000);
-      // Show day name and date for 2 seconds
+      // Show day name and date for 2 seconds (skipped until SNTP has synced:
+      // the 1970 epoch date would be shown as if it were real)
+      if (wall_time_valid())
       {
         time_t now = time(nullptr);
         struct tm *timeinfo = localtime(&now);
@@ -87,6 +90,24 @@ void displayClock(void *parameter)
         display->clear();
 
         time_t now = time(nullptr);
+
+        if (!time_is_valid(now))
+        {
+          // Not synced yet: a placeholder, not 01:00:00 on 1 Jan 1970
+          const char* face = "--:--";
+          int16_t x1, y1;
+          uint16_t width, height;
+          display->getTextBounds(face, 0, 0, &x1, &y1, &width, &height);
+          display->setCursor((display->getSegments() * 8 - width) / 2, 0);
+          display->print(face);
+          drawWifiIndicator(*display, now % 2 == 0);
+          display->display();
+          if (i == 0)
+            logPrintf("DISP", "clock: time not synced");
+          vTaskDelay(1000 / portTICK_PERIOD_MS);
+          continue;
+        }
+
         struct tm *timeinfo = localtime(&now);
 
         // Blinking-colon phase, shared by the hh:mm and dot-matrix faces

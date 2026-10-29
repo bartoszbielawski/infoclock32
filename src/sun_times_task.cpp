@@ -14,6 +14,7 @@
 #include <logger.hpp>
 #include <sun_times.hpp>
 #include <display_strings.hpp>
+#include <time_valid.hpp>
 
 static constexpr int DEFAULT_INTERVAL_MIN = 30;
 
@@ -41,6 +42,11 @@ void sun_times_task(void* /*parameter*/)
         double lon = ds.get_value<float>("sun_lon", NAN);
 
         time_t now = time(nullptr);
+        if (!time_is_valid(now))
+        {
+            vTaskDelay(5000 / portTICK_PERIOD_MS);   // wait for SNTP
+            continue;
+        }
         struct tm lt;
         localtime_r(&now, &lt);
 

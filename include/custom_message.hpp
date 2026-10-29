@@ -72,6 +72,13 @@ inline bool is_expired(const CustomMessage& m, time_t now)
     return m.countdown >= 0 && m.end < 0 && countdown_days(m.countdown, now) < 0;
 }
 
+// True when the slot's visibility or text depends on today's date, so it must
+// not be judged against an unsynced (1970) clock.
+inline bool needs_wall_time(const CustomMessage& m)
+{
+    return m.start >= 0 || m.end >= 0 || m.countdown >= 0;
+}
+
 // Match "message_<name>_text" keys; on success `name` holds the slot name.
 inline bool parse_message_key(const std::string& key, std::string& name)
 {

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include <time_valid.hpp>
 
 static constexpr int DEFAULT_CYCLE_S = 60;
 
@@ -55,6 +56,8 @@ void custom_message_task(void* /*parameter*/)
         task_heartbeat_grace(messages.size() * 12000 + 12000);  // each scroll ~7 s
         for (const auto& m : messages)
         {
+            // dated slots and countdowns are meaningless until SNTP has synced
+            if (needs_wall_time(m) && !time_is_valid(now)) continue;
             // start is inclusive (>= midnight of start day)
             if (m.start >= 0 && now < m.start) continue;
             // end is inclusive — show through end of the end day (DST-aware)
