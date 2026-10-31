@@ -11,6 +11,7 @@
 #include <LittleFS.h>
 #include <secret_keys.hpp>
 #include <config_utils.hpp>
+#include <config_parse.hpp>
 #include <Arduino.h>
 
 class DataStore
@@ -26,70 +27,46 @@ public:
     DataStore(const DataStore&) = delete;
     DataStore& operator=(const DataStore&) = delete;
 
-    void load_from_file(const std::string& filename)
+    // Replaces the whole in-memory config with the file's content, so keys
+    // removed from the file disappear too. The file is read and parsed first;
+    // if it cannot be opened or read completely the current config is kept
+    // and false is returned.
+    bool load_from_file(const std::string& filename)
     {
         File file = LittleFS.open(filename.c_str(), "r");
         if (!file) {
             Serial.println("Failed to open file for reading");
-            return;
+            return false;
         }
 
-        auto size = file.size();
-
-        // Locked for consistency, though at boot this runs before any task
-        // that could contend with it.
-        std::lock_guard<std::mutex> lock(data_mutex_);
-        while (file.position() < size)
-        {
-            char buffer[128];
-            size_t bytesRead = file.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
-            buffer[bytesRead] = '\0';
-
-            // A line longer than the buffer would otherwise have its tail
-            // parsed as a fresh line (and could be taken for a key=value).
-            // Discard the remainder; a truncated key=value is not stored.
-            bool truncated = false;
-            if (bytesRead == sizeof(buffer) - 1)
-            {
-                while (file.available())
-                {
-                    int c = file.read();
-                    if (c == '\n') break;
-                    truncated = true;
-                }
-            }
-            std::string line(buffer);
-            // split into key and value separated by '=' and store in a map
-            if (line.empty())
-                continue;
-            if (line[0] == '#') // skip comments
-                continue;
-            if (truncated)
-            {
-                Serial.printf("Config line too long (>%u chars), ignored: %.24s...\n",
-                              (unsigned)(sizeof(buffer) - 1), line.c_str());
-                continue;
-            }
-
-            auto delimiterPos = line.find('=');
-            if (delimiterPos == std::string::npos)
-                continue;
-
-            std::string key = line.substr(0, delimiterPos);
-            std::string value = line.substr(delimiterPos + 1);
-
-            // Strip trailing CR/LF so config files with Windows (CRLF) line
-            // endings don't embed a '\r' into stored values.  readBytesUntil
-            // consumes the '\n' terminator but leaves the '\r' in the buffer.
-            while (!value.empty() && (value.back() == '\r' || value.back() == '\n'))
-                value.pop_back();
-            while (!key.empty() && (key.back() == '\r' || key.back() == '\n'))
-                key.pop_back();
-
-            data[key] = value;
-            Serial.printf("Loaded key: %s, value: %s\n", key.c_str(), loggableValue(key, value));
+        const size_t size = file.size();
+        if (size > MAX_CONFIG_BYTES) {
+            Serial.printf("Config file too large (%u bytes), keeping current settings\n", (unsigned)size);
+            file.close();
+            return false;
         }
+        std::string text;
+        text.reserve(size);
+        while (text.size() < size && file.available())
+            text.push_back((char)file.read());
         file.close();
+        if (text.size() != size) {
+            Serial.println("Config read incomplete, keeping current settings");
+            return false;
+        }
+
+        std::vector<std::string> tooLong;
+        std::map<std::string, std::string> parsed = parseConfigText(text, &tooLong);
+        for (const auto& l : tooLong)
+            Serial.printf("Config line too long (>%u chars), ignored: %.24s...\n",
+                          (unsigned)CONFIG_MAX_LINE, l.c_str());
+        for (const auto& kv : parsed)
+            Serial.printf("Loaded key: %s, value: %s\n", kv.first.c_str(),
+                          loggableValue(kv.first, kv.second));
+
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        data.swap(parsed);
+        return true;
     }
 
     void set_value(const std::string& key, const std::string& value)
@@ -233,6 +210,8 @@ public:
     }
 
 private:
+    static constexpr size_t MAX_CONFIG_BYTES = 32768;
+
     DataStore()
     {
         // load data from persistent storage if needed

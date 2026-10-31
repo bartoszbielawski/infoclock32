@@ -483,8 +483,10 @@ void handle_file_edit()
         file.print(server.arg("content"));
         file.close();
 
-        DataStore::getInstance().load_from_file(FILENAME);
-        logPrintf("WEB", "config saved and reloaded via /edit");
+        if (DataStore::getInstance().load_from_file(FILENAME))
+            logPrintf("WEB", "config saved and reloaded via /edit");
+        else
+            logPrintf("WEB", "config saved via /edit but reload failed, keeping previous settings");
 
         sendPageHead("Config editor");
         sendPageNav("/edit");

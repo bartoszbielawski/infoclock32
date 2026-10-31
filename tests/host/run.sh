@@ -18,6 +18,7 @@ c++ $CXXFLAGS secret_keys_check.cpp     -o secret_keys_check
 c++ $CXXFLAGS config_utils_check.cpp    -o config_utils_check
 c++ $CXXFLAGS security_utils_check.cpp -o security_utils_check
 c++ $CXXFLAGS html_utils_check.cpp      -o html_utils_check
+c++ $CXXFLAGS config_parse_check.cpp    -o config_parse_check
 c++ $CXXFLAGS message_utils_check.cpp   -o message_utils_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
@@ -55,6 +56,7 @@ echo "config secrets guard passed"
 ./config_utils_check
 ./security_utils_check
 ./html_utils_check
+./config_parse_check
 ./message_utils_check
 ./clock_face_check
 ./wdt_check
