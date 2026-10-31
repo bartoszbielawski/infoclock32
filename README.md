@@ -75,7 +75,9 @@ GitHub Actions builds all four targets on every push to `main` and on PRs; the `
 Each target ships two files:
 
 - `*-merged.bin` (`firmware-merged.bin` in CI artifacts): bootloader + partition table + app in one image. Flash it at offset `0x0` with a web flasher such as [espboards.dev](https://www.espboards.dev/tools/program/). Use it for the first flash of a blank device and whenever the release notes say the partition layout changed.
-- `*.bin` (`firmware.bin`): the app image only. Use it for OTA updates. Flashing it alone at `0x0` will not boot.
+- `*.bin` (`firmware.bin`): the app image only. Use it for OTA updates, including the web UI `/update` page. Flashing it alone at `0x0` will not boot.
+
+The `/update` page accepts the plain `.bin` only and refuses `-merged.bin`, since OTA can only replace the app. Pick the file for your board; only the ESP32-C3 merged image has been verified on hardware.
 
 The merged image does not contain the filesystem, so `/config.txt` survives a reflash unless the partition layout moved.
 
