@@ -4,6 +4,7 @@
 #include <data_store.hpp>
 #include <logger.hpp>
 #include <wifi_cache.h>
+#include <html_utils.hpp>
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,14 +68,19 @@ void handle_wifi_get()
     sendPageHead("WiFi Setup", "");
     sendPageNav("/wifi");
 
-    // Inline JS: clicking an SSID button fills the hidden field and shows the form.
+    // Inline JS: clicking an SSID button fills the hidden field and shows the
+    // form. The SSID travels in a data-ssid attribute (HTML-escaped), never
+    // inside a JavaScript string, since SSIDs are chosen by whoever runs a
+    // nearby access point.
     server.sendContent_P(PSTR(
         "<script>"
-        "function pick(s){"
-        "document.getElementById('ssid').value=s;"
+        "document.addEventListener('click',function(e){"
+        "var b=e.target.closest('button[data-ssid]');"
+        "if(!b)return;"
+        "document.getElementById('ssid').value=b.dataset.ssid;"
         "document.getElementById('pwform').style.display='block';"
         "document.getElementById('pw').focus();"
-        "}"
+        "});"
         "</script>"
         "<h2>WiFi Setup</h2>"
         "<div class='card'>"
@@ -88,18 +94,20 @@ void handle_wifi_get()
         int rssi    = WiFi.RSSI(j);
         bool open   = (WiFi.encryptionType(j) == WIFI_AUTH_OPEN);
 
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-            "<button type='button' class='btn btn-primary' "
-            "onclick=\"pick('%s')\" "
-            "style='font-size:.85rem;padding:6px 12px' "
-            "title='%d dBm'>%s %s%s</button>",
-            ssid.c_str(),
-            rssi,
-            signal_bars(rssi),
-            ssid.c_str(),
-            open ? " \xf0\x9f\x94\x93" : "");   // open networks get a padlock emoji
-        server.sendContent(buf);
+        // Built as a String (not a fixed buffer): an escaped 32-byte SSID is
+        // up to ~190 bytes and must never be cut off mid-tag.
+        const std::string safe = escapeHtml(ssid.c_str());
+        String btn = F("<button type='button' class='btn btn-primary' data-ssid='");
+        btn += safe.c_str();
+        btn += F("' style='font-size:.85rem;padding:6px 12px' title='");
+        btn += rssi;
+        btn += F(" dBm'>");
+        btn += signal_bars(rssi);
+        btn += ' ';
+        btn += safe.c_str();
+        if (open) btn += F(" \xf0\x9f\x94\x93");   // open networks get a padlock emoji
+        btn += F("</button>");
+        server.sendContent(btn);
     }
 
     server.sendContent_P(PSTR("</div>"));  // flex wrap
@@ -186,11 +194,10 @@ void handle_wifi_post()
         "<h2>WiFi Setup</h2>"
         "<div class='card'>"));
 
-    char buf[128];
-    snprintf(buf, sizeof(buf),
-        "<p style='margin-bottom:12px'>Credentials saved for <strong>%s</strong>.</p>",
-        ssid.c_str());
-    server.sendContent(buf);
+    String saved = F("<p style='margin-bottom:12px'>Credentials saved for <strong>");
+    saved += escapeHtml(ssid.c_str()).c_str();
+    saved += F("</strong>.</p>");
+    server.sendContent(saved);
 
     server.sendContent_P(PSTR(
         "<p style='margin-bottom:16px;color:#64748b;font-size:.9rem'>"
