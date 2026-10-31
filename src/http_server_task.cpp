@@ -696,6 +696,8 @@ void handle_metrics()
 
 void handle_frame()
 {
+    if (!is_authenticated()) return;
+
     auto& display = ResourceManager<LMDS>::getInstance().getResourceRef();
     const int w = display.getSegments() * 8;
     std::string art;
