@@ -168,22 +168,14 @@ void sendRow(const char* label, const char* value)
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-// Cached password — avoids DataStore lookup + mbedtls decode on every request.
+// web_password is read from DataStore on every request, so a change made
+// through any path (/actions, /edit, MQTT, serial) applies immediately.
 static AuthThrottle s_throttle;   // 5 bad logins -> 60 s lock-out
 static int64_t nowSeconds() { return (int64_t)(millis() / 1000UL); }
 
-static std::string s_cachedPw;
-static bool        s_pwLoaded = false;
-
-void invalidate_auth_cache() { s_pwLoaded = false; }
-
 bool check_auth_header()
 {
-    if (!s_pwLoaded) {
-        s_cachedPw = DataStore::getInstance().get_value("web_password", "");
-        s_pwLoaded = true;
-    }
-    const std::string& pw = s_cachedPw;
+    const std::string pw = DataStore::getInstance().get_value("web_password", "");
     if (pw.empty()) return true;   // no password set → open access
 
     if (!server.hasHeader("Authorization")) return false;   // first visit, not a failure

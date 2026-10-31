@@ -484,7 +484,6 @@ void handle_file_edit()
         file.close();
 
         DataStore::getInstance().load_from_file(FILENAME);
-        invalidate_auth_cache();
         logPrintf("WEB", "config saved and reloaded via /edit");
 
         sendPageHead("Config editor");
