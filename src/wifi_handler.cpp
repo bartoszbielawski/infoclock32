@@ -97,16 +97,16 @@ void handle_wifi_get()
         // Built as a String (not a fixed buffer): an escaped 32-byte SSID is
         // up to ~190 bytes and must never be cut off mid-tag.
         const std::string safe = escapeHtml(ssid.c_str());
-        String btn = F("<button type='button' class='btn btn-primary' data-ssid='");
+        String btn = "<button type='button' class='btn btn-primary' data-ssid='";
         btn += safe.c_str();
-        btn += F("' style='font-size:.85rem;padding:6px 12px' title='");
+        btn += "' style='font-size:.85rem;padding:6px 12px' title='";
         btn += rssi;
-        btn += F(" dBm'>");
+        btn += " dBm'>";
         btn += signal_bars(rssi);
         btn += ' ';
         btn += safe.c_str();
-        if (open) btn += F(" \xf0\x9f\x94\x93");   // open networks get a padlock emoji
-        btn += F("</button>");
+        if (open) btn += " \xf0\x9f\x94\x93";   // open networks get a padlock emoji
+        btn += "</button>";
         server.sendContent(btn);
     }
 
@@ -194,9 +194,9 @@ void handle_wifi_post()
         "<h2>WiFi Setup</h2>"
         "<div class='card'>"));
 
-    String saved = F("<p style='margin-bottom:12px'>Credentials saved for <strong>");
+    String saved = "<p style='margin-bottom:12px'>Credentials saved for <strong>";
     saved += escapeHtml(ssid.c_str()).c_str();
-    saved += F("</strong>.</p>");
+    saved += "</strong>.</p>";
     server.sendContent(saved);
 
     server.sendContent_P(PSTR(
