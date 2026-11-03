@@ -18,6 +18,8 @@ UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t task);
 // Task notifications (the ResourceManager grant/release handshake).
 uint32_t ulTaskNotifyTake(BaseType_t clearCountOnExit, TickType_t ticks);
 void xTaskNotifyGive(TaskHandle_t task);
+enum eNotifyAction { eSetBits = 2 };
+BaseType_t xTaskNotify(TaskHandle_t task, uint32_t value, eNotifyAction action);
 
 // Critical sections: a single recursive lock is plenty for a logic prototype.
 void host_critical_enter();

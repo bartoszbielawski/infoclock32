@@ -9,6 +9,7 @@
 #include <night_mode_task.h>
 #include <resto_menu_task.h>
 #include <ota_task.h>
+#include <status_task.h>
 
 // Tasks defined without a dedicated header:
 void displayClock(void *parameter);

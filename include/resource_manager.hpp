@@ -51,7 +51,12 @@ class ResourceManager
 {
 public:
     static constexpr uint16_t kDefaultQueueLength     = 8;
-    static constexpr uint16_t kDefaultFastQueueLength = 4;
+    // Sized for the priority waiters (clock, web push, MQTT push/flash, status)
+    // plus requests promoted when an exclusive hold ends (see endExclusive).
+    static constexpr uint16_t kDefaultFastQueueLength = 8;
+    // Task-notification bit that tells a waiting requester it was denied
+    // (endExclusive) rather than granted; a grant is a plain xTaskNotifyGive.
+    static constexpr uint32_t kDenyBit                = 0x80000000u;
     // The manager logs on its own stack (force-handover path), and logPrintf
     // keeps ~800 B of buffers plus vsnprintf/UDP internals: 2 KB was marginal.
     static constexpr uint32_t kManagerStackWords      = 4096;
@@ -171,7 +176,8 @@ public:
         ulTaskNotifyTake(pdTRUE, 0);
 
         uint32_t gen;
-        if (!registerPending(requester, gen))
+        bool     enqueue;
+        if (!registerPending(requester, priority, gen, enqueue))
         {
             drop_count_++;
             logDropLimited(pcTaskGetName(requester), "pending table full");
@@ -181,14 +187,26 @@ public:
         DisplayRequest request;
         request.task = requester;
         request.gen  = gen;
-        if (xQueueSend(priority ? fast_queue : request_queue, &request, 0) != pdTRUE)
+        // During an exclusive hold nobody is granted, so the request is only
+        // registered ("parked"): endExclusive() promotes or denies it. Queuing
+        // it would just fill the lanes with entries that die unserved.
+        if (enqueue && xQueueSend(priority ? fast_queue : request_queue, &request, 0) != pdTRUE)
         {
             drop_count_++;
             removePending(requester, gen);
             logDropLimited(pcTaskGetName(requester), "queue full");
             return false;
         }
-        if (ulTaskNotifyTake(pdTRUE, timeout) == 0)
+        const uint32_t got = ulTaskNotifyTake(pdTRUE, timeout);
+        if (got & kDenyBit)
+        {
+            // The exclusive hold ended and this normal-lane request was
+            // queued (or parked) before it: its content is stale.
+            removePending(requester, gen);
+            denied_++;
+            return false;
+        }
+        if (got == 0)
         {
             drop_count_++;
             logDropLimited(pcTaskGetName(requester), "timed out waiting for display");
@@ -211,6 +229,69 @@ public:
     }
 
     void setPreReleaseHook(void (*hook)(R&)) { pre_release_hook = hook; }
+
+    // ── exclusive hold (status display) ─────────────────────────────────────
+    // The current holder declares a long hold nobody may cut short. Requests
+    // made meanwhile are parked instead of queued. endExclusive() (call it
+    // right before release_access()) then:
+    //   - promotes parked priority-lane requests (clock, pushes) into the
+    //     fast queue, so they are served first after the release;
+    //   - denies every normal-lane request that was waiting, queued or
+    //     parked: their make_access_request returns false, and the task
+    //     starts its next cycle with fresh data instead of showing what it
+    //     prepared hours ago.
+    void beginExclusive() { exclusive_ = true; }
+
+    void endExclusive()
+    {
+        TaskHandle_t   deny[kMaxPending];
+        DisplayRequest promote[kMaxPending];
+        int nDeny = 0, nPromote = 0;
+
+        taskENTER_CRITICAL(&pend_mux_);
+        exclusive_ = false;
+        for (auto& p : pending_)
+        {
+            if (!p.task || p.state != PendState::WAITING) continue;
+            if (p.fast)
+            {
+                if (!p.queued)
+                {
+                    p.queued = true;
+                    promote[nPromote].task = p.task;
+                    promote[nPromote].gen  = p.gen;
+                    nPromote++;
+                }
+            }
+            else
+            {
+                p.state = PendState::DENIED;
+                deny[nDeny++] = p.task;
+            }
+        }
+        taskEXIT_CRITICAL(&pend_mux_);
+
+        for (int i = 0; i < nPromote; i++)
+        {
+            if (xQueueSend(fast_queue, &promote[i], 0) == pdTRUE) continue;
+            // Cannot happen with the default lane sizes; deny rather than leave
+            // a requester parked forever.
+            if (setPendingState(promote[i].task, promote[i].gen, PendState::DENIED) == PendState::WAITING)
+                deny[nDeny++] = promote[i].task;
+        }
+        for (int i = 0; i < nDeny; i++)
+            xTaskNotify(deny[i], kDenyBit, eSetBits);
+    }
+
+    bool exclusiveActive() const { return exclusive_.load(); }
+
+    // Ask the running hold to end now: DisplayHold::keepGoing() returns false
+    // at once while this is set, skipping the display_min_hold_s slice. The
+    // status task sets it before requesting and clears it once granted.
+    void requestUrgent(bool on) { urgent_ = on; }
+    bool urgentRequested() const { return urgent_.load(); }
+
+    uint32_t getDeniedCount() const { return denied_.load(); }
 
     // Called by the current holder while it draws, so the manager's
     // force-handover timer tracks real progress. Long scrolls and Life
@@ -267,13 +348,17 @@ private:
     // after a claim, the release wait is bounded by notifications alone
     // (release / give-up / force handover), so later registry changes —
     // including the owner replacing its entry — cannot stall it.
+    //   WAITING → DENIED  (endExclusive: stale normal-lane request; the
+    //                      requester is notified and removes the entry)
     // GONE is never stored — helpers report it for missing entries.
-    enum class PendState : uint8_t { WAITING, GRANTED, DEAD, GONE };
+    enum class PendState : uint8_t { WAITING, GRANTED, DEAD, DENIED, GONE };
     struct PendingRequest
     {
         TaskHandle_t task;
         uint32_t     gen;
         PendState    state;
+        bool         fast;     // priority lane
+        bool         queued;   // false = parked during an exclusive hold
     };
 
     static constexpr int      kMaxPending      = 12;
@@ -317,7 +402,10 @@ private:
         return (p && p->gen == gen) ? p : nullptr;
     }
 
-    bool registerPending(TaskHandle_t task, uint32_t& genOut)
+    // `enqueueOut` is decided under the same lock endExclusive() takes, so a
+    // request is either parked before its sweep (and gets promoted/denied) or
+    // sees the hold already over and is queued normally.
+    bool registerPending(TaskHandle_t task, bool fast, uint32_t& genOut, bool& enqueueOut)
     {
         bool ok = false;
         taskENTER_CRITICAL(&pend_mux_);
@@ -327,10 +415,13 @@ private:
                 if (!slot.task) { p = &slot; break; }
         if (p)
         {
-            p->task  = task;
-            p->gen   = ++gen_counter_;
-            p->state = PendState::WAITING;
-            genOut   = p->gen;
+            p->task    = task;
+            p->gen     = ++gen_counter_;
+            p->state   = PendState::WAITING;
+            p->fast    = fast;
+            p->queued  = !exclusive_.load();
+            genOut     = p->gen;
+            enqueueOut = p->queued;
             ok = true;
         }
         taskEXIT_CRITICAL(&pend_mux_);
@@ -393,6 +484,9 @@ private:
     std::atomic<uint32_t>     drop_logs_suppressed_{0};
     std::atomic<uint32_t>     force_handovers_{0};
     std::atomic<uint32_t>     last_force_handover_ms_{0};
+    std::atomic<bool>         exclusive_{false};
+    std::atomic<bool>         urgent_{false};
+    std::atomic<uint32_t>     denied_{0};
     PendingRequest            pending_[kMaxPending] = {};
     portMUX_TYPE              pend_mux_ = portMUX_INITIALIZER_UNLOCKED;
     uint32_t                  gen_counter_;   // guarded by pend_mux_
@@ -424,7 +518,8 @@ public:
     bool keepGoing()
     {
         rmd_.renewHold();
-        return !(rmd_.yieldRequested() && elapsed() > min_hold_ms_);
+        return !(rmd_.urgentRequested() ||
+                 (rmd_.yieldRequested() && elapsed() > min_hold_ms_));
     }
 
     // Renew without the preemption check, for a hold that cannot be cut

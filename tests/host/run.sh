@@ -30,6 +30,7 @@ c++ $CXXFLAGS i2c_scan_check.cpp        -o i2c_scan_check
 c++ $CXXFLAGS display_strings_check.cpp -o display_strings_check
 c++ $CXXFLAGS serial_cmd_check.cpp      -o serial_cmd_check
 c++ $CXXFLAGS time_valid_check.cpp      -o time_valid_check
+c++ $CXXFLAGS status_state_check.cpp    -o status_state_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
@@ -67,6 +68,7 @@ echo "config secrets guard passed"
 ./i2c_scan_check
 ./serial_cmd_check
 ./time_valid_check
+./status_state_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

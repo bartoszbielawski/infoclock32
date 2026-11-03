@@ -187,6 +187,82 @@ static void hammer_task(void*)
     vTaskDelete(nullptr);
 }
 
+// ── phase 4: exclusive hold (status display) ─────────────────────────────────
+// X holds the display exclusively. While it does, a normal-lane waiter, a
+// priority-lane waiter and a priority requester that gives up are parked.
+// endExclusive() must deny the normal-lane waiter (stale), serve the priority
+// waiter, and never grant anyone while the hold lasts. Repeated short-timeout
+// requests during the hold must not fill the lanes.
+
+static std::atomic<bool> xHolds{false};
+static std::atomic<bool> xEnded{false};
+static std::atomic<int>  normalResult{-1};     // 1 granted, 0 denied/false
+static std::atomic<int>  priorityResult{-1};
+static std::atomic<int>  grantedDuringHold{0};
+static std::atomic<int>  spamGrants{0};
+static std::atomic<int>  spamFalse{0};
+static std::atomic<bool> spamDone{false};
+static std::atomic<int64_t> priorityGrantedMs{-1};
+static std::atomic<int64_t> endMs{0};
+
+static void exclusive_holder_task(void*)
+{
+    if (auto display = rm().acquire(portMAX_DELAY, true))
+    {
+        rm().beginExclusive();
+        xHolds = true;
+        vTaskDelay(pdMS_TO_TICKS(800));
+        endMs = nowMs();
+        xEnded = true;
+        rm().endExclusive();
+    }
+    vTaskDelete(nullptr);
+}
+
+static void normal_waiter_task(void*)
+{
+    while (!xHolds) vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    bool got = (bool)rm().acquire(portMAX_DELAY, false);
+    if (got && !xEnded) grantedDuringHold++;
+    normalResult = got ? 1 : 0;
+    vTaskDelete(nullptr);
+}
+
+static void priority_waiter_task(void*)
+{
+    while (!xHolds) vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    if (auto display = rm().acquire(portMAX_DELAY, true))
+    {
+        if (!xEnded) grantedDuringHold++;
+        priorityGrantedMs = nowMs();
+        priorityResult = 1;
+    }
+    else
+        priorityResult = 0;
+    vTaskDelete(nullptr);
+}
+
+static void spam_task(void*)
+{
+    while (!xHolds) vTaskDelay(pdMS_TO_TICKS(5));
+    // 40 short-timeout requests during the hold, mixed lanes: all must time out
+    // (nobody is granted) and none may leave the lanes full.
+    for (int i = 0; i < 40; i++)
+    {
+        if (rm().make_access_request(pdMS_TO_TICKS(10), (i % 2) == 0))
+        {
+            spamGrants++;
+            rm().release_access();
+        }
+        else
+            spamFalse++;
+    }
+    spamDone = true;
+    vTaskDelete(nullptr);
+}
+
 int main()
 {
     logger_init();
@@ -259,6 +335,32 @@ int main()
         fail("drops were not all counted");
     if (dropLines > 2)
         fail("drop log lines are not rate limited");
+
+    // ── phase 4 ──────────────────────────────────────────────────────────
+    xTaskCreate(exclusive_holder_task, "stressX", 4096, nullptr, 1, nullptr);
+    xTaskCreate(normal_waiter_task,    "stressN", 4096, nullptr, 1, nullptr);
+    xTaskCreate(priority_waiter_task,  "stressP", 4096, nullptr, 1, nullptr);
+    xTaskCreate(spam_task,             "stressS", 4096, nullptr, 1, nullptr);
+    deadline = nowMs() + 20000;
+    while ((normalResult < 0 || priorityResult < 0 || !spamDone) && nowMs() < deadline)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    if (normalResult < 0 || priorityResult < 0 || !spamDone)
+        fail("exclusive phase did not finish (requester left parked?)");
+    else
+    {
+        fprintf(stderr, "[rm_stress] exclusive: normal %s, priority %s (%lld ms after end), "
+                        "%d granted during hold, spam %d false / %d granted, %u denied\n",
+                normalResult == 1 ? "granted" : "denied",
+                priorityResult == 1 ? "granted" : "denied",
+                (long long)(priorityGrantedMs - endMs), grantedDuringHold.load(),
+                spamFalse.load(), spamGrants.load(), (unsigned)rm().getDeniedCount());
+        if (grantedDuringHold != 0)      fail("someone was granted during the exclusive hold");
+        if (normalResult != 0)           fail("stale normal-lane request was not denied");
+        if (priorityResult != 1)         fail("priority waiter was not served after the hold");
+        if (priorityGrantedMs - endMs > 1000) fail("priority waiter served too late after the hold");
+        if (spamGrants != 0)             fail("short-timeout requests were granted during the hold");
+        if (rm().exclusiveActive())      fail("exclusive flag still set after endExclusive");
+    }
 
     if (violations == 0)
     {

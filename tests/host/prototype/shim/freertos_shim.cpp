@@ -145,6 +145,16 @@ void xTaskNotifyGive(TaskHandle_t task)
     ctx->cv.notify_all();
 }
 
+BaseType_t xTaskNotify(TaskHandle_t task, uint32_t value, eNotifyAction)
+{
+    HostTask* ctx = (HostTask*)task;
+    if (!ctx) return 0;
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    ctx->notifyCount |= value;   // eSetBits is the only action the manager uses
+    ctx->cv.notify_all();
+    return 1;
+}
+
 // ── critical sections ────────────────────────────────────────────────────────
 
 static std::recursive_mutex criticalMutex;

@@ -12,6 +12,7 @@
 #include <uptime_utils.hpp>
 #include <logger.hpp>
 #include <night_mode_task.h>
+#include <status_task.h>
 #include <mqtt_discovery.hpp>
 #include <version.hpp>
 #include <esp_timer.h>
@@ -154,6 +155,42 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         p.toLowerCase();
         pendingFlashFull = !(p == "neg" || p == "negative");
         pendingFlash = true;
+    }
+    else if (topicStr.endsWith("/set_status"))
+    {
+        // "<preset>" or "<preset>,<minutes|eoh>" starts a configured preset;
+        // anything else is "<text>[;<minutes|eoh>[;<cue>]]". (Not "/status":
+        // that is the device's own heartbeat topic, which the wildcard
+        // subscription delivers back to us.)
+        std::string p(buf);
+        size_t semi = p.find(';');
+        size_t comma = p.find(',');
+        bool presetForm = !p.empty() && p.find_first_not_of("0123456789,eoh ") == std::string::npos &&
+                          isdigit((unsigned char)p[0]);
+        StatusError e;
+        if (presetForm)
+        {
+            std::string dur = comma == std::string::npos ? "" : p.substr(comma + 1);
+            while (!dur.empty() && dur[0] == ' ') dur.erase(0, 1);
+            e = status_request_preset(atoi(p.c_str()), dur);
+        }
+        else
+        {
+            std::string text = p.substr(0, semi), dur, cue;
+            if (semi != std::string::npos)
+            {
+                size_t semi2 = p.find(';', semi + 1);
+                dur = p.substr(semi + 1, semi2 == std::string::npos ? std::string::npos : semi2 - semi - 1);
+                if (semi2 != std::string::npos) cue = p.substr(semi2 + 1);
+            }
+            e = status_request_custom(text, cue, dur);
+        }
+        logPrintf("MQT", "set_status: %s", status_error_text(e));
+    }
+    else if (topicStr.endsWith("/clear_status"))
+    {
+        status_cancel();
+        logPrintf("MQT", "status cancelled");
     }
     else if (topicStr.endsWith("/looped"))
     {

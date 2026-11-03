@@ -269,6 +269,19 @@ message_1_text=Hello, world!
 #message_3_text=Launch {}
 #message_3_countdown=2026-12-31
 
+# -- Timed status (ON AIR) -----------------------------------------------------
+# Page: http://<hostname>.local/s   HTTP: /status/set?preset=1, /status/cancel
+# MQTT: <client>/set_status, <client>/clear_status. Built-in presets (ON AIR,
+# IN MEETING, DO NOT DISTURB) are used until you define any slot below (1..8).
+#   _text     text shown (ASCII, max 64 chars; too wide for the matrix = scrolls)
+#   _cue      none | border | blink | invert
+#   _minutes  1..720, or eoh = until the end of the hour (needs synced clock)
+#   _time     show the time for 3 s every N minutes during the status (0 = never)
+#status_1_text=ON AIR
+#status_1_cue=blink
+#status_1_minutes=60
+#status_1_time=0
+
 # -- Logging / diagnostics -----------------------------------------------------
 # IP address of a UDP syslog server (RFC 3164, port 514). Leave blank to disable.
 syslog_server=
