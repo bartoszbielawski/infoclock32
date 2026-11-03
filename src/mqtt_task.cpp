@@ -388,7 +388,10 @@ void mqtt_task(void *parameter)
 
         // Push messages next — drain the whole queue
         char *pushMsg = nullptr;
-        while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
+        // (Not during a timed status: each attempt would block this task for
+        // 10 s waiting for a display the status owns, delaying a cancel. The
+        // messages stay queued.)
+        while (!status_info().active && xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
         {
             if (auto display = rmd.acquire(pdMS_TO_TICKS(10000), true))
             {
@@ -419,6 +422,11 @@ void mqtt_task(void *parameter)
         // Both force the display on for the strobe, restore the frame and
         // the configured power state afterwards, and work at any brightness
         // (they toggle enable/fill, not intensity).
+        if (pendingFlash && status_info().active)
+        {
+            pendingFlash = false;
+            logPrintf("MQT", "flash skipped - status active");
+        }
         if (pendingFlash)
         {
             pendingFlash = false;
@@ -480,7 +488,7 @@ void mqtt_task(void *parameter)
         }
 
         // Display looped message
-        if (!loopedMessage.empty())
+        if (!loopedMessage.empty() && !status_info().active)
         {
             // Wait long enough to outlast a clock hold (7-9 s, cut short once
             // anyone is queued); a shorter timeout almost never got a turn.

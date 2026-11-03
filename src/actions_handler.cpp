@@ -10,6 +10,7 @@
 #include <timezone_utils.hpp>
 #include <web_ui.hpp>
 #include <night_mode_task.h>
+#include <status_task.h>
 #include <sensor_display.hpp>
 
 // ── /push ─────────────────────────────────────────────────────────────────────
@@ -49,6 +50,15 @@ void handle_push()
         if (s >= 10 && s <= 500) speed = s;
     }
 
+    // A timed status owns the display: answer at once instead of tying up the
+    // single web task for the whole wait below (a cancel would queue behind it).
+    if (status_info().active)
+    {
+        server.send(503, "application/json",
+                    "{\"ok\":false,\"error\":\"status active\"}");
+        return;
+    }
+
     auto& rmd = ResourceManager<LMDS>::getInstance();
     // Bounded priority wait: fail with "display busy" instead of blocking the
     // single web-server task forever. The clock holds the display 7–9 s at a
@@ -84,7 +94,11 @@ void handle_actions()
         if (action == "push")
         {
             String msg = server.arg("message");
-            if (!msg.isEmpty())
+            if (!msg.isEmpty() && status_info().active)
+            {
+                result = "&#9888; A timed status is showing &mdash; cancel it first.";
+            }
+            else if (!msg.isEmpty())
             {
                 if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
                 {
@@ -215,7 +229,9 @@ void handle_actions()
         else if (action == "reset_display")
         {
             // User action: priority lane, same bound as a push.
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
+            if (status_info().active)
+                result = "&#9888; A timed status is showing &mdash; cancel it first.";
+            else if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
             {
                 display->begin();
                 display->setIntensity((uint8_t)current_display_brightness());
