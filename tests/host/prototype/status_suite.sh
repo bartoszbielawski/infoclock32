@@ -28,6 +28,18 @@ wait_inactive() { # $1 = max seconds; prints seconds waited, rc 1 on timeout
   done
 }
 wait_active() { local t0=$(now); while true; do case "$(info)" in *'"active":true'*) echo $(( $(now) - t0 )); return 0;; esac; [ $(( $(now)-t0 )) -ge "$1" ] && return 1; sleep 0.5; done; }
+# Sample the frame every 0.5 s for 2.5 s: a once-per-second cue must show at least
+# two different frames. (Two samples exactly 1 s apart can land on the same phase.)
+alternates() {
+  local first cur i; first=$(frame)
+  for i in 1 2 3 4 5; do sleep 0.5; cur=$(frame); [ "$cur" != "$first" ] && { ok "$1"; return; }; done
+  no "$1" "frame never changed in 2.5 s"
+}
+# Device uptime in seconds from /api/status ("[Nd ]Nh Nm Ns").
+uptime_s() {
+  j "$H/api/status" | sed -n 's/.*"uptime":"\([^"]*\)".*/\1/p' |
+    awk '{s=0; for(i=1;i<=NF;i++){v=$i+0; if($i~/d$/)s+=v*86400; else if($i~/h$/)s+=v*3600; else if($i~/m$/)s+=v*60; else if($i~/s$/)s+=v}; print s}'
+}
 borders() { local f; f=$(frame); local bad=0 l; while IFS= read -r l; do [ "${l:0:1}" = "#" ] && [ "${l: -1}" = "#" ] || bad=1; done <<<"$f"; echo $bad; }
 
 echo "== reachability"
@@ -64,9 +76,9 @@ set_ "text=X&cue=border&minutes=2" >/dev/null; sleep 3
 eq "border bars on both ends" "$(borders)" 0
 f1=$(frame); sleep 1.3; f2=$(frame); eq "border is steady" "$f1" "$f2"
 set_ "text=X&cue=blink&minutes=2" >/dev/null; sleep 3
-f1=$(frame); sleep 1.0; f2=$(frame); [ "$f1" != "$f2" ] && ok "blink changes second to second" || no "blink" "frames equal"
+alternates "blink changes second to second"
 set_ "text=X&cue=invert&minutes=2" >/dev/null; sleep 3
-f1=$(frame); sleep 1.0; f2=$(frame); [ "$f1" != "$f2" ] && ok "invert changes second to second" || no "invert" "frames equal"
+alternates "invert changes second to second"
 
 echo "== end of hour"
 r=$(set_ "text=EOH&minutes=eoh"); has "eoh accepted" "$r" '"ok":true'
@@ -123,17 +135,19 @@ fi
 
 if [ "$LONG" -gt 0 ]; then
   echo "== long hold ($LONG s): watchdog grace and liveness"
-  up0=$(j "$H/api/status" | sed -n 's/.*"uptime[^0-9]*\([0-9]*\).*/\1/p')
+  up0=$(uptime_s)
   set_ "text=LONG&cue=blink&minutes=$(( (LONG+59)/60 ))" >/dev/null
   t0=$(now)
-  while [ $(( $(now)-t0 )) -lt "$LONG" ]; do
+  # (Stop checking 30 s early: the status ends at ceil(LONG/60) minutes, and a
+  # slow wall clock, as in WSL, would otherwise make the last check race it.)
+  while [ $(( $(now)-t0 )) -lt $(( LONG - 30 )) ]; do
     sleep 20
     code=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$H/api/status")
     [ "$code" = 200 ] || no "long hold: web server" "http $code at $(( $(now)-t0 )) s"
     has "long hold: still active at $(( $(now)-t0 )) s" "$(info)" '"active":true'
   done
-  up1=$(j "$H/api/status" | sed -n 's/.*"uptime[^0-9]*\([0-9]*\).*/\1/p')
-  echo "uptime field before/after: '$up0' / '$up1'"
+  up1=$(uptime_s)
+  [ -n "$up0" ] && [ -n "$up1" ] && [ "$up1" -ge $(( up0 + LONG - 30 )) ] && ok "no reboot during the hold (uptime ${up0}s -> ${up1}s)" || no "reboot during the hold?" "uptime $up0 -> $up1"
   w=$(wait_inactive $(( (LONG+59)/60*60 - LONG + 30 ))); [ $? -eq 0 ] && ok "long hold ended by itself" || no "long hold end" "still active"
   sleep 15
   has "web server alive after long hold" "$(j "$H/api/status")" "{"
