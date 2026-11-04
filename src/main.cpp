@@ -96,12 +96,8 @@ void setup() {
   // and credentials must stay editable (or erasable) over USB meanwhile.
   xTaskCreate(serial_console_task, "SerialConsole", 4096, nullptr, 1, nullptr);
 
-  // Initialize board/network and core task infrastructure
-  hardware_init();
-
-  // Configure SNTP time sources (UTC base; timezone handled separately)
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
+  // Display before Wi-Fi: hardware_init() can block in the setup portal, and
+  // an uninitialised MAX7219 powers up with every LED lit (issue #9).
   // Configure SPI bus with explicit pins before constructing the LED matrix driver.
   // Pin defaults come from pins.hpp; override via config keys spi_sck/spi_mosi/spi_cs.
   int spiSck  = dataStore.get_value<int>("spi_sck",  MATRIX_SCK_PIN);
@@ -114,6 +110,16 @@ void setup() {
   lmds->begin();
   ResourceManager<LMDS>::getInstance().initialize(lmds);
   ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
+
+  // Restore display brightness from config, clamp to valid [0..15]
+  apply_display_brightness(max(0, min(15, dataStore.get_value<int>("brightness", 7))));
+
+  // Initialize board/network; while in setup mode a task keeps the AP
+  // instructions scrolling until the device is connected.
+  hardware_init();
+
+  // Configure SNTP time sources (UTC base; timezone handled separately)
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   for (const auto& warning : securityWarnings(dataStore))
     logPrintf("SEC", "%s", warning.c_str());
@@ -130,10 +136,6 @@ void setup() {
   apply_timezone();
 
   auto& rmd = ResourceManager<LMDS>::getInstance();
-  // Restore display brightness from config, clamp to valid [0..15]
-  int brightness = dataStore.get_value<int>("brightness", 7);
-  brightness = max(0, min(15, brightness));
-  apply_display_brightness(brightness);
 
   if (auto display = rmd.acquire())
   {
@@ -152,13 +154,8 @@ void setup() {
     else
       snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
     scrollMessage(bootMsg, display, 30);
-    if (wifi_is_ap_mode()) {
-      const DisplayStrings& tr = display_strings(parse_lang(dataStore.get_value("language", "en")));
-      std::string apMsg = std::string(tr.ap_connect)
-                          + dataStore.get_value("hostname", "infoclock32")
-                          + "-setup  " + tr.ap_browse + " 192.168.4.1";
-      scrollMessage(apMsg, display, 40);
-    } else if (dataStore.get_value<int>("show_ip_on_boot", 1) && WiFi.status() == WL_CONNECTED) {
+    // In setup mode the AP instructions repeat from hardware_init's setup-hint task.
+    if (!wifi_is_ap_mode() && dataStore.get_value<int>("show_ip_on_boot", 1) && WiFi.status() == WL_CONNECTED) {
       std::string netMsg = std::string(WiFi.SSID().c_str()) + "  " + WiFi.localIP().toString().c_str()
                            + "  " + dataStore.get_value("hostname", "infoclock32") + ".local";
       scrollMessage(netMsg, display, 30);

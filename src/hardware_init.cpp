@@ -15,8 +15,10 @@
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
+#include <display_strings.hpp>
 
 static volatile bool s_ap_mode = false;   // true while not connected to any AP
+static volatile bool s_unprovisioned = false;   // no credentials anywhere at boot
 static std::string s_hostname = "infoclock32";
 
 bool wifi_is_ap_mode() { return s_ap_mode; }
@@ -52,6 +54,36 @@ static void apply_tx_power()
     logPrintf("WIFI", "TX power capped at %.2f dBm", quarters / 4.0f);
 }
 
+// Keeps the "join <hostname>-setup, open 192.168.4.1" instructions on the
+// matrix for as long as the device is in setup mode (issue #9): while the
+// boot portal blocks setup() and while the fallback AP is up. Unprovisioned
+// devices repeat it back to back; a device whose saved network is merely
+// unreachable shows it every 30 s so the clock stays readable in between.
+static void setup_hint_task(void* /*pv*/)
+{
+    registerTask("SetupHint", 4096, 120000);
+    for (;;)
+    {
+        task_heartbeat();
+        if (s_ap_mode)
+        {
+            const DisplayStrings& tr = display_strings(
+                parse_lang(DataStore::getInstance().get_value("language", "en")));
+            std::string msg = std::string(tr.ap_connect) + s_hostname + "-setup  " +
+                              tr.ap_browse + " 192.168.4.1";
+            task_heartbeat_grace(120000);   // FIFO wait + scroll
+            if (auto display = ResourceManager<LMDS>::getInstance().acquire())
+                scrollMessage(msg, display, 40);
+            task_heartbeat();
+            vTaskDelay((s_unprovisioned ? 1000 : 30000) / portTICK_PERIOD_MS);
+        }
+        else
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+    }
+}
+
 // Persistent watchdog. Survives the WiFiManager portal closing: whenever the
 // STA link drops (or boot ended offline) it retries every 30 s - with the
 // config.txt credentials when they exist (the driver's own copy may have been
@@ -85,6 +117,7 @@ static void wifi_monitor_task(void* /*pv*/)
             {
                 wasConnected = true;
                 s_ap_mode = false;
+                s_unprovisioned = false;
                 logPrintf("WIFI", "connected, IP=%s",
                           WiFi.localIP().toString().c_str());
                 start_mdns();
@@ -173,9 +206,24 @@ void hardware_init()
                   wm.getWiFiSSID().c_str());
     });
 
+    // The portal blocks this function; the hint task keeps the instructions
+    // scrolling meanwhile (the display is initialised before hardware_init).
+    wm.setAPCallback([](WiFiManager*) { s_ap_mode = true; });
+    xTaskCreate(setup_hint_task, "SetupHint", 4096, nullptr, 1, nullptr);
+
     bool connected = false;
     WiFi.mode(WIFI_STA);
     apply_tx_power();
+
+    // Nothing to connect to (fresh flash or /forget_wifi): the portal is the
+    // only way forward, so keep it open until someone provisions the device
+    // instead of timing out into a gap with no setup network (issue #9).
+    if (ssid.empty() && !wm.getWiFiIsSaved())
+    {
+        s_unprovisioned = true;
+        wm.setConfigPortalTimeout(0);
+        logPrintf("WIFI", "no credentials — setup portal stays open until provisioned");
+    }
     if (!ssid.empty())
     {
         // Try the config.txt credentials first — without persisting them, so
@@ -230,6 +278,7 @@ void hardware_init()
     if (connected)
     {
         s_ap_mode = false;
+        s_unprovisioned = false;
         // mains-powered: modem sleep only adds latency and packet loss
         WiFi.setSleep(false);
         logPrintf("WIFI", "connected, IP=%s",
