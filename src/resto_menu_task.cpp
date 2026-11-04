@@ -9,6 +9,7 @@
  *   resto_start_hour   – first hour to display menu, 0-23 (default 9)
  *   resto_end_hour     – last hour (exclusive) to display menu, 0-23 (default 14)
  *   novae_codes        – Novae API group code, e.g. "CER103" (default "CER103")
+ *   resto_scroll_ms    – scroll speed, ms per pixel step, 10-100 (default 20)
  */
 
 #include <WiFi.h>
@@ -21,6 +22,7 @@
 #include <logger.hpp>
 #include <string_utils.h>
 #include <time_valid.hpp>
+#include <scroll_timing.hpp>
 
 #include <ArduinoJson.h>
 #include <string>
@@ -44,9 +46,11 @@ static const int kDefaultEndHour    = 14;
 static const uint32_t kFetchIntervalMs = 60UL * 60UL * 1000UL; // 1 hour
 // Milliseconds per scroll step (config key resto_scroll_ms). 10 ms suited the
 // old single long menu line; with one hold per dish 20 ms reads comfortably
-// and still keeps a ~60-character dish (about 8 s) inside the
-// display_min_hold_s slice (10 s), past which a waiting clock may cut it.
+// and each dish gets a display slice sized to finish its scroll
+// (scroll_timing.hpp), so a long one is no longer cut by a waiting clock.
 static const int kDefaultScrollMs = 20;
+static const int kMinScrollMs     = 10;
+static const int kMaxScrollMs     = 100;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -257,14 +261,19 @@ void resto_menu_task(void* pvParameters) {
             continue;
         }
 
+        int scrollMs = ds.get_value<int>("resto_scroll_ms", kDefaultScrollMs);
+        scrollMs = max(kMinScrollMs, min(kMaxScrollMs, scrollMs));
+
         for (const auto& menu : cachedMenus)
         {
             // One hold per dish, not one per menu. The minimum-slice policy
             // (display_min_hold_s) cuts any hold that outlasts its slice, so a
             // whole menu on one hold only ever showed its first dishes — the
             // scroll was aborted mid-way and restarted from the start on the
-            // next round. A single dish always fits inside the slice, so the
-            // clock can now only take the display *between* dishes.
+            // next round. At the readable speed a long dish can outlast the
+            // default slice too, so each dish gets a slice sized to finish
+            // its scroll (capped at 30 s): the clock can only take the
+            // display *between* dishes.
             for (size_t i = 0; i < menu.dishes.size(); ++i)
             {
                 std::string message = menu.dishes[i];
@@ -273,14 +282,14 @@ void resto_menu_task(void* pvParameters) {
                 // Blocking acquire: cover the worst-case wait + scroll hold,
                 // then re-anchor the watchdog window once granted (the
                 // clock-task pattern).
+                const uint32_t sliceMs = scroll_slice_ms(
+                    scroll_duration_ms(message.size(), scrollMs), display_min_hold_ms());
                 task_heartbeat_grace(90000);
                 if (auto display = rmd.acquire())
                 {
                     task_heartbeat();
-                    task_heartbeat_grace(30000);
-                    const int scrollMs = max(10, min(100,
-                        DataStore::getInstance().get_value<int>("resto_scroll_ms", kDefaultScrollMs)));
-                    scrollMessage(message, display, scrollMs);
+                    task_heartbeat_grace(sliceMs + 30000);
+                    scrollMessage(message, display, scrollMs, 1, sliceMs);
                 }
                 else
                 {

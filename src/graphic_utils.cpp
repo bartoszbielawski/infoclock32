@@ -39,7 +39,8 @@ uint32_t display_min_hold_ms()
 // held for holdMs; a wider one scrolls past at speed and then parks centered
 // for holdMs. holdMs < 0 keeps the legacy scroll-only behavior (static show of
 // 100*speed ms for fitting messages).
-static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps, int holdMs)
+static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps, int holdMs,
+                         uint32_t minHoldMs = 0)
 {
   // Feeds the manager's force-handover timer and carries the shared
   // minimum-slice policy: short messages (the common case, 6-8 s) complete
@@ -47,7 +48,7 @@ static void scrollCanvas(GFXcanvas1& canvas, LMDS& display, int speed, int steps
   // get cut so a waiting fast-lane request (clock, user push) is granted
   // instead of waiting out the whole scroll.
   auto& rmd = ResourceManager<LMDS>::getInstance();
-  DisplayHold<LMDS> hold(rmd, display_min_hold_ms());
+  DisplayHold<LMDS> hold(rmd, minHoldMs ? minHoldMs : display_min_hold_ms());
 
   // Draw the canvas centered (or center-cropped when wider than the display)
   // and keep it on screen for ms. Checked every second so a waiting
@@ -156,19 +157,20 @@ void showMessage(std::string message, LMDS& display, int holdMs)
   showMessage(nullptr, 0, std::move(message), display, holdMs);
 }
 
-void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps)
+void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps,
+                   uint32_t minHoldMs)
 {
   message = clampMessage(message);
   logPrintf("DISP", "scrolling '%s'%s", message.c_str(), icon ? " with icon" : "");
 
   GFXcanvas1 canvas(canvasWidthFor(icon, iconWidth, message), 8);
   drawMessage(canvas, icon, iconWidth, message);
-  scrollCanvas(canvas, display, speed, steps, -1);
+  scrollCanvas(canvas, display, speed, steps, -1, minHoldMs);
 }
 
-void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+void scrollMessage(std::string message, LMDS& display, int speed, int steps, uint32_t minHoldMs)
 {
-  scrollMessage(nullptr, 0, std::move(message), display, speed, steps);
+  scrollMessage(nullptr, 0, std::move(message), display, speed, steps, minHoldMs);
 }
 
 void wipeDisplayLeftToRight(LMDS& display, int speed)

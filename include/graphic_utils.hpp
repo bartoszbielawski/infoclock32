@@ -22,12 +22,17 @@ void copyCanvasToDisplay(GFXcanvas1 &canvas, uint16_t canvasOffset, LMDS &displa
 void showMessage(std::string message, LMDS& display, int holdMs);
 void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int holdMs);
 
-void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1);
+// minHoldMs > 0 replaces the display_min_hold_s slice for this one scroll (a
+// caller that wants the scroll to finish sizes it with scroll_timing.hpp);
+// 0 keeps the shared policy.
+void scrollMessage(std::string message, LMDS& display, int speed = 100, int step = 1,
+                   uint32_t minHoldMs = 0);
 
 // Variant that draws an icon bitmap to the left of the message:
 // iconWidth bytes, one per column, bit 0 = top row (see weather_icons.hpp).
 // Pass nullptr to omit the icon.
-void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed = 100, int step = 1);
+void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed = 100, int step = 1,
+                   uint32_t minHoldMs = 0);
 
 
 void wipeDisplayLeftToRight(LMDS& display, int speed = 50);
