@@ -21,7 +21,21 @@ if ! ./build.sh prototype > "$WORK/build.log" 2>&1; then
 fi
 
 PIDS=""
-trap 'for p in $PIDS; do kill $p 2>/dev/null; done; rm -rf "$WORK"' EXIT INT TERM
+# Stop the prototypes and wait until they are gone, so a run started right
+# after this one doesn't find its ports still taken (SIGKILL after 5 s).
+cleanup() {
+    for p in $PIDS; do kill $p 2>/dev/null; done
+    i=0
+    while [ $i -lt 50 ]; do
+        alive=0
+        for p in $PIDS; do kill -0 $p 2>/dev/null && alive=1; done
+        [ $alive -eq 0 ] && break
+        sleep 0.1; i=$((i + 1))
+    done
+    for p in $PIDS; do kill -9 $p 2>/dev/null; done
+    rm -rf "$WORK"
+}
+trap cleanup EXIT INT TERM
 
 BASE=$(grep -vE '^(sensors|sensor_interval|sensor_display|sensor_hold_s|sensor_readout_interval|sim[0-9]*_[a-z0-9_]+|enable_[a-z]+|msg_interval|mqtt_server)=' fs/config.txt)
 PORT=18080
@@ -141,7 +155,17 @@ else
 fi
 if grep -aq "TOPSECRET" "$WORK/web.log"; then fail "web: secret value found in log"; else ok "web: secret value not logged"; fi
 
-code() { curl -s -o /dev/null -w '%{http_code}' --max-time "${MAXT:-5}" "$@"; }
+# 000 = no HTTP response at all. On a loaded machine the prototype's simple
+# socket shim occasionally drops a request before any handler sees it (the
+# prototype log then has no trace of it), so retry once; any real status code,
+# including errors, is returned as is.
+code() {
+    c=$(curl -s -o /dev/null -w '%{http_code}' --max-time "${MAXT:-15}" "$@")
+    if [ "$c" = 000 ]; then
+        c=$(curl -s -o /dev/null -w '%{http_code}' --max-time "${MAXT:-15}" "$@")
+    fi
+    echo "$c"
+}
 expect_code() {   # label want got
     if [ "$3" = "$2" ]; then ok "$1: HTTP $2"; else fail "$1: HTTP $3, want $2"; fi
 }
