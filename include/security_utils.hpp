@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <cctype>
 
 // Compare without an early exit, so response time doesn't reveal how many
 // leading characters of a password were right. Length still leaks (fine).
@@ -66,6 +67,43 @@ inline bool pushTokenOk(const std::string& configured, const std::string& suppli
 {
     if (configured.empty()) return true;
     return constantTimeEquals(configured, supplied);
+}
+
+// Host part of an Origin / Referer URL: "http://infoclock32.lan:8080/x" ->
+// "infoclock32.lan:8080". Empty when the value isn't an http(s) URL.
+inline std::string urlHostPort(const std::string& url)
+{
+    size_t p = url.find("://");
+    if (p == std::string::npos) return "";
+    std::string scheme = url.substr(0, p);
+    if (scheme != "http" && scheme != "https") return "";
+    size_t start = p + 3;
+    size_t end = url.find_first_of("/?#", start);
+    std::string hp = url.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    size_t at = hp.rfind('@');                    // drop any user:pass@
+    if (at != std::string::npos) hp = hp.substr(at + 1);
+    for (char& c : hp) c = (char)tolower((unsigned char)c);
+    return hp;
+}
+
+// Light CSRF check for state-changing requests. Browsers send Origin (or at
+// least Referer) on a cross-site form POST; scripts such as curl send neither.
+// So: no header -> allowed (non-browser client); a header naming another host
+// than the one the request was sent to -> refused. `host` is the request's
+// Host header. Comparison ignores case.
+inline bool sameOriginRequest(const std::string& origin, const std::string& referer,
+                              const std::string& host)
+{
+    std::string h = host;
+    for (char& c : h) c = (char)tolower((unsigned char)c);
+    if (!origin.empty())
+    {
+        if (origin == "null") return false;       // sandboxed / file: pages
+        return urlHostPort(origin) == h;
+    }
+    if (!referer.empty())
+        return urlHostPort(referer) == h;
+    return true;
 }
 
 // Upper bounds for POST bodies that end up in RAM and on flash.

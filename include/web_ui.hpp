@@ -34,3 +34,6 @@ void getStatusFields(char* uptime, size_t uptime_sz,
 // is_authenticated()  → same check; sends 401 and returns false on failure.
 bool check_auth_header();
 bool is_authenticated();
+// request_same_origin() -> false when a browser's Origin/Referer names a host
+//                          other than the one the request was sent to (CSRF).
+bool request_same_origin();

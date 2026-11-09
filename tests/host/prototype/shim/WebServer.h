@@ -63,6 +63,10 @@ public:
     }
     bool   hasHeader(const char* name) const;
     String header(const char* name) const;
+    // Device parity: the shim keeps every request header, so this is a no-op.
+    void   collectHeaders(const char* [], const size_t) {}
+    String hostHeader() const { return header("Host"); }
+    int    clientContentLength() const { return (int)client_content_length_; }
 
     void sendHeader(const String& name, const String& value, bool first = false);
     // Responses are fully buffered, so the advertised length is irrelevant.
@@ -104,6 +108,7 @@ private:
     int         status_ = 0;
     std::string content_type_ = "text/html";
     std::string body_;
+    size_t      client_content_length_ = 0;
     std::vector<std::pair<std::string, std::string>> resp_headers_;
     HTTPUpload  upload_;
 };

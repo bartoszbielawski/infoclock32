@@ -35,6 +35,23 @@ int main()
     CHECK(parseSerialCommand("   \r\n").cmd == SerialCmd::None, "blank line");
     CHECK(parseSerialCommand("rm -rf").cmd == SerialCmd::Unknown, "unknown verb");
 
+    // line buffer: complete lines, CR ignored, over-long lines dropped whole
+    {
+        SerialLineBuffer b(8);
+        std::string out;
+        auto feedAll = [&](const std::string& s) {
+            SerialLineBuffer::Result last = SerialLineBuffer::Result::None;
+            for (char ch : s) { auto r = b.feed(ch, out); if (r != SerialLineBuffer::Result::None) last = r; }
+            return last;
+        };
+        CHECK(feedAll("get a\r\n") == SerialLineBuffer::Result::Line && out == "get a", "CRLF line");
+        CHECK(feedAll("12345678\n") == SerialLineBuffer::Result::Line && out == "12345678", "exactly max");
+        CHECK(feedAll("set k=123456789\n") == SerialLineBuffer::Result::Overflow, "over-long line reported");
+        CHECK(feedAll("reboot\n") == SerialLineBuffer::Result::Line && out == "reboot",
+              "next line after overflow is clean (got '%s')", out.c_str());
+        CHECK(feedAll("\n") == SerialLineBuffer::Result::Line && out.empty(), "empty line");
+    }
+
     if (failures) { printf("%d serial cmd check(s) FAILED\n", failures); return 1; }
     printf("all serial cmd checks passed\n");
     return 0;

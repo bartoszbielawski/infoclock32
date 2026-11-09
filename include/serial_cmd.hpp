@@ -11,6 +11,40 @@ struct SerialCommand {
     std::string value;
 };
 
+// Accumulates console characters into lines. A line longer than `maxLen` is
+// dropped whole (reported as overflow) instead of being cut and executed:
+// a truncated "set key=value" would otherwise save a cut-off value.
+class SerialLineBuffer
+{
+public:
+    enum class Result { None, Line, Overflow };
+
+    explicit SerialLineBuffer(size_t maxLen = 256) : max_(maxLen) {}
+
+    // Feed one character; on Line, `out` holds the completed line.
+    Result feed(char ch, std::string& out)
+    {
+        if (ch == '\n')
+        {
+            bool over = overflow_;
+            overflow_ = false;
+            if (over) { line_.clear(); return Result::Overflow; }
+            out.swap(line_);
+            line_.clear();
+            return Result::Line;
+        }
+        if (ch == '\r' || overflow_) return Result::None;
+        if (line_.size() >= max_) { overflow_ = true; line_.clear(); return Result::None; }
+        line_ += ch;
+        return Result::None;
+    }
+
+private:
+    size_t      max_;
+    std::string line_;
+    bool        overflow_ = false;
+};
+
 inline std::string serialTrim(const std::string& s)
 {
     size_t b = s.find_first_not_of(" \t\r\n");

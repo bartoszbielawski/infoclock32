@@ -56,6 +56,12 @@ static void handle_command(const SerialCommand& c)
     }
     case SerialCmd::WifiCache:
     {
+#ifndef INFOCLOCK_TEST_HOOKS
+        // Test hook only: it re-enables storing Wi-Fi credentials in flash
+        // (NVS), which normal firmware deliberately avoids.
+        Serial.println("ERR wifi_cache is only available in test builds");
+        break;
+#else
         // Test hook: store a pair in the NVS cache the way old firmware did,
         // without touching config.txt.
         WiFi.persistent(true);
@@ -66,6 +72,7 @@ static void handle_command(const SerialCommand& c)
         WiFi.persistent(false);
         logPrintf("CON", "wifi cached for %s, status %d", c.key.c_str(), (int)WiFi.status());
         break;
+#endif
     }
     case SerialCmd::Reboot:
         logPrintf("CON", "reboot requested");
@@ -85,20 +92,24 @@ static void handle_command(const SerialCommand& c)
 void serial_console_task(void* /*pv*/)
 {
     registerTask("SerialConsole", 4096);
+    SerialLineBuffer buffer(256);
     std::string line;
     for (;;)
     {
         task_heartbeat();
         while (Serial.available() > 0)
         {
-            char ch = (char)Serial.read();
-            if (ch == '\n')
+            switch (buffer.feed((char)Serial.read(), line))
             {
+            case SerialLineBuffer::Result::Line:
                 handle_command(parseSerialCommand(line));
-                line.clear();
+                break;
+            case SerialLineBuffer::Result::Overflow:
+                Serial.println("ERR line too long (max 256 characters), ignored");
+                break;
+            default:
+                break;
             }
-            else if (ch != '\r' && line.size() < 256)
-                line += ch;
         }
         vTaskDelay(20 / portTICK_PERIOD_MS);
     }

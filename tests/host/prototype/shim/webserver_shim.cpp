@@ -327,6 +327,7 @@ void WebServer::handleClient()
     for (const auto& h : req_headers_)
         if (strcasecmp(h.first.c_str(), "Content-Length") == 0)
             contentLen = (size_t)strtoul(h.second.c_str(), nullptr, 10);
+    client_content_length_ = contentLen;
     while (rest.size() < contentLen && rest.size() <= 256 * 1024)
     {
         ssize_t n = recv(fd, buf, sizeof(buf), 0);

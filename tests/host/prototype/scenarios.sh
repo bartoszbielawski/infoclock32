@@ -165,6 +165,17 @@ big=$(head -c 30000 /dev/zero | tr '\0' 'a')
 expect_code "oversize /edit POST"   413 "$(code -u u:pw --data-urlencode "content=$big" "$U/edit")"
 # Send bad logins until the lock-out kicks in (a loaded runner can drop a
 # request client-side, so don't assume exactly five are counted).
+# An empty /edit body must never wipe the config (a large POST the device's
+# WebServer fails to parse arrives as an empty "content").
+before=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
+expect_code "empty /edit POST refused" 400 "$(code -u u:pw --data-urlencode "content=" "$U/edit")"
+after=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
+if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact after empty POST"; else fail "config changed by empty POST ($before -> $after)"; fi
+
+# CSRF: a browser POST from another site is refused, same-site works
+expect_code "cross-site POST /reboot"      403 "$(code -u u:pw -X POST -H 'Origin: https://evil.example' "$U/reboot")"
+expect_code "cross-site POST via Referer"  403 "$(code -u u:pw -H 'Referer: https://evil.example/x' --data-urlencode "content=" "$U/edit")"
+expect_code "same-site POST /edit (empty)" 400 "$(code -u u:pw -H "Origin: http://127.0.0.1:$p" --data-urlencode "content=" "$U/edit")"
 for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
     [ "$(code -u u:wrong "$U/edit")" = 429 ] && break
 done

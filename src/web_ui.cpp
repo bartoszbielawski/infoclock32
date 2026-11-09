@@ -6,6 +6,7 @@
 #include <web_ui.hpp>
 #include <uptime_utils.hpp>
 #include <security_utils.hpp>
+#include <logger.hpp>
 
 // ── Server instance ───────────────────────────────────────────────────────────
 
@@ -201,8 +202,25 @@ bool check_auth_header()
     return ok;
 }
 
+bool request_same_origin()
+{
+    return sameOriginRequest(server.header("Origin").c_str(),
+                             server.header("Referer").c_str(),
+                             server.hostHeader().c_str());
+}
+
 bool is_authenticated()
 {
+    // Cross-site form POSTs (another web page driving this device through
+    // your browser) are refused before anything else; GETs only read.
+    if (server.method() != HTTP_GET && !request_same_origin())
+    {
+        String from = server.header("Origin");
+        if (!from.length()) from = server.header("Referer");
+        logPrintf("WEB", "refused cross-site request from '%.64s'", from.c_str());
+        server.send(403, "text/plain", "Cross-site request refused");
+        return false;
+    }
     if (check_auth_header()) return true;
     int retry = s_throttle.retryAfter(nowSeconds());
     if (retry > 0)

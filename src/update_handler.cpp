@@ -82,7 +82,7 @@ void handle_update_upload()
         otaRunning = false;
         otaFirstChunk = true;
         otaBoost(true);
-        if (!check_auth_header())
+        if (!request_same_origin() || !check_auth_header())
         {
             otaError = "Authentication failed";
             logPrintf("WEB", "OTA rejected: %s", otaError.c_str());

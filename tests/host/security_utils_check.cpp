@@ -75,6 +75,21 @@ int main()
         CHECK(securityWarnings(safe).empty(), "hardened config: no warnings");
     }
 
+    // same-origin (CSRF) check
+    CHECK(urlHostPort("http://infoclock32.lan/edit") == "infoclock32.lan", "host from URL");
+    CHECK(urlHostPort("http://192.168.1.5:8080/x?y=1") == "192.168.1.5:8080", "host:port");
+    CHECK(urlHostPort("https://user:pw@Host.LAN/") == "host.lan", "userinfo dropped, lowercased");
+    CHECK(urlHostPort("javascript:alert(1)").empty() && urlHostPort("").empty(), "non-http -> empty");
+    CHECK(sameOriginRequest("", "", "infoclock32.lan"), "no headers (curl) allowed");
+    CHECK(sameOriginRequest("http://infoclock32.lan", "", "infoclock32.lan"), "same origin allowed");
+    CHECK(sameOriginRequest("http://INFOCLOCK32.lan", "", "infoclock32.LAN"), "case-insensitive");
+    CHECK(sameOriginRequest("", "http://192.168.1.5/edit", "192.168.1.5"), "same-host referer allowed");
+    CHECK(!sameOriginRequest("https://evil.example", "", "infoclock32.lan"), "foreign origin refused");
+    CHECK(!sameOriginRequest("", "https://evil.example/page", "infoclock32.lan"), "foreign referer refused");
+    CHECK(!sameOriginRequest("null", "", "infoclock32.lan"), "opaque origin refused");
+    CHECK(!sameOriginRequest("http://infoclock32.lan:8080", "", "infoclock32.lan"), "different port refused");
+    CHECK(!sameOriginRequest("http://infoclock32.lan.evil.example", "", "infoclock32.lan"), "suffix trick refused");
+
     if (failures) { printf("%d security util check(s) FAILED\n", failures); return 1; }
     printf("all security util checks passed\n");
     return 0;

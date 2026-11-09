@@ -471,17 +471,51 @@ void handle_file_edit()
 
     if (server.method() == HTTP_POST)
     {
-        if (!server.hasArg("content")) { server.send(400, "text/plain", "Bad Request"); return; }
-        if (bodyTooLarge(server.arg("content").length(), kMaxConfigBody))
+        // Judge size by the real Content-Length: on the device a large body
+        // may not be parsed at all, leaving "content" empty or missing, so its
+        // parsed length can't be trusted (urlencoding can triple the size).
+        if (bodyTooLarge((size_t)server.clientContentLength(), kMaxConfigBody * 3 + 64) ||
+            bodyTooLarge(server.arg("content").length(), kMaxConfigBody))
         {
             server.send(413, "text/plain", "Config too large");
             return;
         }
+        if (!server.hasArg("content")) { server.send(400, "text/plain", "Bad Request"); return; }
+        // An empty config is never valid, and writing one would erase every
+        // setting (Wi-Fi credentials included) on flash and, via the reload,
+        // in memory. Refuse it and keep the current file.
+        if (server.arg("content").length() == 0)
+        {
+            logPrintf("WEB", "/edit refused an empty config; nothing changed");
+            server.send(400, "text/plain", "Empty config refused");
+            return;
+        }
 
-        File file = LittleFS.open(FILENAME, "w");
+        // Temp file + rename: a short write or power cut can't truncate it.
+        const std::string tmpName = std::string(FILENAME) + ".tmp";
+        File file = LittleFS.open(tmpName.c_str(), "w");
         if (!file) { server.send(500, "text/plain", "Failed to open file for writing"); return; }
-        file.print(server.arg("content"));
+        const size_t want  = server.arg("content").length();
+        const size_t wrote = file.print(server.arg("content"));
         file.close();
+        if (wrote != want)
+        {
+            LittleFS.remove(tmpName.c_str());
+            logPrintf("WEB", "/edit write incomplete (%u of %u bytes); nothing changed",
+                      (unsigned)wrote, (unsigned)want);
+            server.send(500, "text/plain", "Write failed; config unchanged");
+            return;
+        }
+        if (!LittleFS.rename(tmpName.c_str(), FILENAME))
+        {
+            LittleFS.remove(FILENAME);
+            if (!LittleFS.rename(tmpName.c_str(), FILENAME))
+            {
+                logPrintf("WEB", "/edit could not replace the config file");
+                server.send(500, "text/plain", "Save failed");
+                return;
+            }
+        }
 
         if (DataStore::getInstance().load_from_file(FILENAME))
             logPrintf("WEB", "config saved and reloaded via /edit");
@@ -735,6 +769,10 @@ void web_server_task(void* pvParameters)
     server.on("/wifi",    HTTP_GET,  handle_wifi_get);
     server.on("/wifi",    HTTP_POST, handle_wifi_post);
     server.on("/forget_wifi", HTTP_POST, handle_forget_wifi);
+    // Authorization is always collected; Origin/Referer feed the CSRF check.
+    // Must precede begin(), which only installs the default list when empty.
+    static const char* kHeaders[] = { "Origin", "Referer" };
+    server.collectHeaders(kHeaders, 2);
     server.begin();
 
     while (true)
