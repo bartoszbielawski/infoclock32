@@ -10,6 +10,11 @@
 //
 // Connect data pin to GPIO with a 4.7 kΩ pull-up to 3.3 V.
 // Multiple sensors on the same bus are supported; index 0 is always used.
+//
+// Two-phase: startMeasurement() starts the ~750 ms 12-bit conversion and
+// returns at once; the sensor task collects it with read() on a later pass
+// instead of blocking for the conversion. read() alone still works (it then
+// starts the conversion and waits, as before).
 class Ds18b20Sensor : public Sensor {
 public:
     explicit Ds18b20Sensor(uint8_t pin, bool pullup = false)
@@ -24,12 +29,27 @@ public:
         uint8_t count = _dt.getDeviceCount();
         if (count == 0) return false;
         _dt.setResolution(12);       // 12-bit, ~750 ms conversion
-        _dt.setWaitForConversion(true);
+        _dt.setWaitForConversion(false);   // conversions run while we do other work
         return true;
     }
 
-    bool read() override {
+    int startMeasurement() override {
+        // requestTemperatures() doesn't report a missing device; a bus reset
+        // without a presence pulse does.
+        if (!_ow.reset()) { _started = false; return -1; }
         _dt.requestTemperatures();
+        _started = true;
+        return (int)_dt.millisToWaitForConversion();
+    }
+
+    bool read() override {
+        if (!_started) {
+            // Called without startMeasurement(): measure and wait here.
+            int ms = startMeasurement();
+            if (ms < 0) return false;
+            delay((uint32_t)ms);
+        }
+        _started = false;
         float t = _dt.getTempCByIndex(0);
         if (t == DEVICE_DISCONNECTED_C) return false;
         _temp = t;
@@ -45,4 +65,5 @@ private:
     float            _temp;
     uint8_t          _pin;
     bool             _pullup;
+    bool             _started = false;   // a conversion is waiting to be read
 };
