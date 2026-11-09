@@ -745,6 +745,42 @@ void handle_frame()
     server.send(200, "text/plain", art.c_str());
 }
 
+#ifdef INFOCLOCK_TEST_HOOKS
+// ── /debug/https (test builds only) ─────────────────────────────────────────
+// GET /debug/https?url=https://...&verify=0|1 fetches the URL with
+// HttpUtils::httpGet, temporarily overriding tls_verify (in memory only), and
+// reports the result. Used to check certificate verification on hardware
+// (e.g. against badssl.com). Compiled only with -DINFOCLOCK_TEST_HOOKS.
+#include <http_utils.hpp>
+
+static void handle_debug_https()
+{
+    if (!is_authenticated()) return;
+    String url = server.arg("url");
+    if (!url.startsWith("https://")) { server.send(400, "text/plain", "url must start with https://"); return; }
+
+    auto& ds = DataStore::getInstance();
+    const bool had = ds.has_key("tls_verify");
+    const std::string prev = ds.get_value("tls_verify", "");
+    if (server.hasArg("verify"))
+        ds.set_value("tls_verify", server.arg("verify") == "1" ? "1" : "0");
+    const std::string mode = ds.get_value("tls_verify", "0");
+
+    String body;
+    const uint32_t t0 = millis();
+    const int code = HttpUtils::httpGet(url, body, true);
+    const uint32_t ms = millis() - t0;
+
+    if (had) ds.set_value("tls_verify", prev); else ds.remove_value("tls_verify");
+
+    char line[160];
+    snprintf(line, sizeof(line), "tls_verify=%s code=%d bytes=%u ms=%lu\n",
+             mode.c_str(), code, (unsigned)body.length(), (unsigned long)ms);
+    logPrintf("DBG", "https %s -> %s", url.c_str(), line);
+    server.send(200, "text/plain", line);
+}
+#endif
+
 // ── Server task / routing ─────────────────────────────────────────────────────
 
 void web_server_task(void* pvParameters)
@@ -762,6 +798,9 @@ void web_server_task(void* pvParameters)
     server.on("/api/runtime", HTTP_GET, handle_api_runtime);
     server.on("/metrics",     HTTP_GET, handle_metrics);
     server.on("/frame",       HTTP_GET, handle_frame);
+#ifdef INFOCLOCK_TEST_HOOKS
+    server.on("/debug/https", HTTP_GET, handle_debug_https);
+#endif
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
     server.on("/update",  HTTP_GET,  handle_update_get);
