@@ -2,6 +2,7 @@
 #include <freertos/FreeRTOS.h>
 #include "graphic_utils.hpp"
 #include <message_utils.hpp>
+#include <utility>
 #include <resource_manager.hpp>
 #include <data_store.hpp>
 #include <logger.hpp>
@@ -114,66 +115,60 @@ static void drawIcon(GFXcanvas1& canvas, const uint8_t* icon, int iconWidth, int
   }
 }
 
-void showMessage(std::string message, LMDS& display, int holdMs)
+// One canvas builder for all four show/scroll entry points: an optional icon
+// (one byte per column, bit 0 = top row) followed by the text.
+static const int FONT_WIDTH = 6;   // 5 pixels + 1 pixel space
+static const int ICON_GAP   = 1;   // space between icon and text
+
+static int iconArea(const uint8_t* icon, uint8_t iconWidth)
 {
-  message = clampMessage(message);
-  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
+  return icon ? iconWidth + ICON_GAP : 0;
+}
 
-  logPrintf("DISP", "showing '%s' for %d ms", message.c_str(), holdMs);
+// The canvas must be built in place by the caller (GFXcanvas1 owns a heap
+// buffer and isn't safely copyable); this sizes it and draws into it.
+static int canvasWidthFor(const uint8_t* icon, uint8_t iconWidth, const std::string& message)
+{
+  return (int)message.size() * FONT_WIDTH + iconArea(icon, iconWidth);
+}
 
-  GFXcanvas1 canvas(message.size() * FONT_WIDTH, 8);
+static void drawMessage(GFXcanvas1& canvas, const uint8_t* icon, uint8_t iconWidth,
+                        const std::string& message)
+{
+  if (icon)
+    drawIcon(canvas, icon, iconWidth, 0);
+  canvas.setCursor(iconArea(icon, iconWidth), 0);
   canvas.print(message.c_str());
-
-  scrollCanvas(canvas, display, 20, 1, holdMs);
 }
 
 void showMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int holdMs)
 {
   message = clampMessage(message);
-  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
-  static const int ICON_GAP = 1;   //space between icon and text
+  logPrintf("DISP", "showing '%s'%s for %d ms", message.c_str(), icon ? " with icon" : "", holdMs);
 
-  int iconArea = icon ? iconWidth + ICON_GAP : 0;
-  logPrintf("DISP", "showing '%s' %s icon for %d ms", message.c_str(), icon ? "with" : "without", holdMs);
-
-  GFXcanvas1 canvas(message.size() * FONT_WIDTH + iconArea, 8);
-  if (icon)
-    drawIcon(canvas, icon, iconWidth, 0);
-  canvas.setCursor(iconArea, 0);
-  canvas.print(message.c_str());
-
+  GFXcanvas1 canvas(canvasWidthFor(icon, iconWidth, message), 8);
+  drawMessage(canvas, icon, iconWidth, message);
   scrollCanvas(canvas, display, 20, 1, holdMs);
 }
 
-void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+void showMessage(std::string message, LMDS& display, int holdMs)
 {
-  message = clampMessage(message);
-  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
-
-  logPrintf("DISP", "scrolling '%s'", message.c_str());
-
-  GFXcanvas1 canvas(message.size() * FONT_WIDTH, 8);
-  canvas.print(message.c_str());
-
-  scrollCanvas(canvas, display, speed, steps, -1);
+  showMessage(nullptr, 0, std::move(message), display, holdMs);
 }
 
 void scrollMessage(const uint8_t* icon, uint8_t iconWidth, std::string message, LMDS& display, int speed, int steps)
 {
   message = clampMessage(message);
-  static const int FONT_WIDTH = 6; //5 pixels + 1 pixel space
-  static const int ICON_GAP = 1;   //space between icon and text
+  logPrintf("DISP", "scrolling '%s'%s", message.c_str(), icon ? " with icon" : "");
 
-  int iconArea = icon ? iconWidth + ICON_GAP : 0;
-  logPrintf("DISP", "scrolling '%s' %s icon", message.c_str(), icon ? "with" : "without");
-
-  GFXcanvas1 canvas(message.size() * FONT_WIDTH + iconArea, 8);
-  if (icon)
-    drawIcon(canvas, icon, iconWidth, 0);
-  canvas.setCursor(iconArea, 0);
-  canvas.print(message.c_str());
-
+  GFXcanvas1 canvas(canvasWidthFor(icon, iconWidth, message), 8);
+  drawMessage(canvas, icon, iconWidth, message);
   scrollCanvas(canvas, display, speed, steps, -1);
+}
+
+void scrollMessage(std::string message, LMDS& display, int speed, int steps)
+{
+  scrollMessage(nullptr, 0, std::move(message), display, speed, steps);
 }
 
 void wipeDisplayLeftToRight(LMDS& display, int speed)
