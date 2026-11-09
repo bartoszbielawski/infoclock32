@@ -55,7 +55,8 @@ void displayClock(void *parameter)
       if (wall_time_valid())
       {
         time_t now = time(nullptr);
-        struct tm *timeinfo = localtime(&now);
+        struct tm timeinfoBuf;
+        struct tm *timeinfo = localtime_r(&now, &timeinfoBuf);
 
         const char* dayName = localizedDayName(timeinfo->tm_wday);
 
@@ -108,7 +109,9 @@ void displayClock(void *parameter)
           continue;
         }
 
-        struct tm *timeinfo = localtime(&now);
+        struct tm timeinfoBuf;
+
+        struct tm *timeinfo = localtime_r(&now, &timeinfoBuf);
 
         // Blinking-colon phase, shared by the hh:mm and dot-matrix faces
         bool colonOn = timeinfo->tm_sec % 2 == 0;

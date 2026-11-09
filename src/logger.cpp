@@ -23,7 +23,8 @@ static String              syslogServer;
 static void getTimestamp(char *buf, size_t len)
 {
     time_t now = time(nullptr);
-    struct tm *t = localtime(&now);
+    struct tm tmBuf;
+    struct tm *t = localtime_r(&now, &tmBuf);   // reentrant: called from every task
     snprintf(buf, len, "%04d-%02d-%02dT%02d:%02d:%02d",
              t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
              t->tm_hour, t->tm_min, t->tm_sec);

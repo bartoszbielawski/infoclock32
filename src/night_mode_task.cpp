@@ -137,7 +137,8 @@ void night_mode_task(void* parameter)
             else
             {
                 time_t now = time(nullptr);
-                struct tm* t = localtime(&now);
+                struct tm tBuf;
+                struct tm* t = localtime_r(&now, &tBuf);
                 int now_min = t->tm_hour * 60 + t->tm_min;
 
                 bool is_night = in_night_window(now_min, start_min, end_min);
