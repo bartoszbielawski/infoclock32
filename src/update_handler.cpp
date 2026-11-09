@@ -7,6 +7,7 @@
 #include <task_registry.hpp>
 #include <reboot_utils.hpp>
 #include <web_ui.hpp>
+#include <ota_image.hpp>
 
 void handle_update_get()
 {
@@ -55,6 +56,9 @@ void handle_update_get()
 static bool otaRunning = false;
 static String otaError;
 static bool otaFirstChunk = false;
+// Set only when Update.end() accepted a complete image. The result page must
+// not report success (and reboot) for a POST that carried no upload at all.
+static bool otaSucceeded = false;
 
 // All tasks share priority 1; the web server must drain the socket faster
 // than the 5 s HTTP_MAX_POST_WAIT, so it outranks them while an upload runs.
@@ -80,6 +84,7 @@ void handle_update_upload()
     {
         otaError = "";
         otaRunning = false;
+        otaSucceeded = false;
         otaFirstChunk = true;
         otaBoost(true);
         if (!request_same_origin() || !check_auth_header())
@@ -104,16 +109,24 @@ void handle_update_upload()
         task_heartbeat();
         if (!otaRunning) return;
 
-        // esp_app_desc_t magic (0xABCD5432) sits at offset 32 of an app image;
-        // a bootloader or merged image has something else there.
+        // Plain app image for this chip only (see ota_image.hpp): a merged
+        // image or one built for another board is refused before any write.
         if (otaFirstChunk)
         {
             otaFirstChunk = false;
-            static const uint8_t magic[4] = {0x32, 0x54, 0xCD, 0xAB};
-            if (upload.currentSize < 36 || upload.buf[0] != 0xE9 ||
-                memcmp(upload.buf + 32, magic, 4) != 0)
+            uint16_t chip = 0;
+            switch (checkAppImageHeader(upload.buf, upload.currentSize,
+                                        CONFIG_IDF_FIRMWARE_CHIP_ID, &chip))
             {
+            case OtaImageCheck::Ok:
+                break;
+            case OtaImageCheck::NotAppImage:
                 otaFail("Not an application image - use the plain .bin, not -merged.bin");
+                return;
+            case OtaImageCheck::WrongChip:
+                otaFail(String("Image is for ") + espChipName(chip) + ", this board is " +
+                        espChipName(CONFIG_IDF_FIRMWARE_CHIP_ID) +
+                        " - pick the .bin for your board");
                 return;
             }
         }
@@ -127,7 +140,10 @@ void handle_update_upload()
         {
             otaRunning = false;
             if (Update.end(true))
+            {
+                otaSucceeded = true;
                 logPrintf("WEB", "OTA complete: %u bytes", upload.totalSize);
+            }
             else
             {
                 otaError = String("Update.end: ") + Update.errorString();
@@ -146,7 +162,10 @@ void handle_update_post()
     otaBoost(false);
     if (!is_authenticated()) return;
 
-    bool ok = otaError.length() == 0 && !Update.hasError();
+    bool ok = otaSucceeded && otaError.length() == 0 && !Update.hasError();
+    if (!ok && otaError.length() == 0 && !otaSucceeded)
+        otaError = "No firmware file was uploaded";
+    otaSucceeded = false;   // one result page per upload
     sendPageHead(ok ? "Update complete" : "Update failed");
     sendPageNav("/update");
     if (ok)
@@ -167,6 +186,7 @@ void handle_update_post()
                                    "</div></div>"));
     }
     sendPageFoot();
+    otaError = "";          // don't show this error again on a later bare POST
 
     if (ok)
     {
