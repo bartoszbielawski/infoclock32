@@ -24,6 +24,10 @@ struct FakeSensor : Sensor {
     const char* name() const override { return "fake"; }
 };
 
+struct FastFake : FakeSensor {     // own timer, like the VEML7700
+    int pollIntervalS() const override { return 2; }
+};
+
 int main()
 {
     // ── pruneSensors ──────────────────────────────────────────────────────
@@ -177,6 +181,21 @@ int main()
         unsigned got = d.ingest(lite, 0, 100, 120, off);
         CHECK(got == measurementBit(MEAS_LUX) && d.lux == 123.5f && !d.have(MEAS_TEMP),
               "light sensor fills only lux (mask %u)", got);
+    }
+
+    // ── sensor cap: only round-robin sensors count ──────────────────────
+    {
+        FakeSensor a, b, c, d, e;
+        FastFake light;
+        std::vector<Sensor*> l = { &a, &b, &c };
+        CHECK(!exceedsSensorCap(l, d, 4), "4th round sensor fits");
+        l.push_back(&d);
+        CHECK(exceedsSensorCap(l, e, 4), "5th round sensor is over the cap");
+        CHECK(!exceedsSensorCap(l, light, 4), "fast (light) sensor is never over the cap");
+        l.push_back(&light);
+        CHECK(exceedsSensorCap(l, e, 4), "a fast sensor in the list doesn't free a slot");
+        std::vector<Sensor*> m = { &light, &a, &b, &c };
+        CHECK(!exceedsSensorCap(m, d, 4), "a fast sensor doesn't take a round slot");
     }
 
     if (failures) { printf("%d sensor merge check(s) FAILED\n", failures); return 1; }

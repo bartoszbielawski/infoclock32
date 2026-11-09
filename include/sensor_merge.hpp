@@ -205,3 +205,24 @@ struct MeasurementSet
         return dropped;
     }
 };
+
+// The kMaxSensors cap limits the round-robin round (its length sets how stale
+// a reading can get). Sensors on their own timer (pollIntervalS() > 0, e.g.
+// the VEML7700 light sensor) don't take a slot in the round, so they are not
+// counted: `sensors=auto` sorts the light sensor last, and counting it let four
+// other sensors silently push auto-brightness out.
+inline bool countsTowardSensorCap(const Sensor& s)
+{
+    return s.pollIntervalS() <= 0;
+}
+
+// True when `candidate` must be skipped because the round is already full.
+inline bool exceedsSensorCap(const std::vector<Sensor*>& accepted, const Sensor& candidate,
+                             int maxRoundSensors)
+{
+    if (!countsTowardSensorCap(candidate)) return false;
+    int inRound = 0;
+    for (const Sensor* s : accepted)
+        if (countsTowardSensorCap(*s)) inRound++;
+    return inRound >= maxRoundSensors;
+}

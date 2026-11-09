@@ -192,7 +192,7 @@ Key config keys:
 | `push_token` | *(empty)* | When set, `/push` requires `?token=<value>`; empty keeps `/push` open |
 | `tls_verify` | `0` | `1` verifies HTTPS servers (weather, LHC, menu) against the built-in Mozilla root CAs (`certs/`); `0` keeps the old behaviour of not checking certificates |
 | `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
-| `sensors` | `auto` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
+| `sensors` | `auto` | Comma-separated list of sensor drivers, polled round-robin (max 4; the light sensor is not counted, see below) |
 | `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
 | `humidity_offset` | `0` | Humidity correction in %RH added to readings |
@@ -220,7 +220,7 @@ Key config keys:
 
 ## Sensors
 
-Set `sensors` in config to a **comma-separated list** of supported drivers (max 4, duplicates removed). With several sensors they are polled **round-robin** — one sensor per `sensor_interval`, so the full round takes N×interval:
+Set `sensors` in config to a **comma-separated list** of supported drivers (max 4 polled round-robin; the VEML7700 light sensor runs on its own timer and is not counted; duplicates removed). With several sensors they are polled **round-robin** — one sensor per `sensor_interval`, so the full round takes N×interval:
 
 | Value | Sensor | Interface | Extra keys |
 |-------|--------|-----------|------------|

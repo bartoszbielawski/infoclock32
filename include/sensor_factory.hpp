@@ -38,6 +38,7 @@
 #include <vector>
 #include <sensor.hpp>
 #include <sensor_types.hpp>
+#include <sensor_merge.hpp>
 #include <i2c_detect.hpp>
 #include <i2c_scan.hpp>
 #include <runtime_store.hpp>
@@ -157,17 +158,19 @@ inline std::vector<Sensor*> createSensorList()
     std::vector<Sensor*> out;
     for (const auto& type : types)
     {
-        if (out.size() >= kMaxSensors)
-        {
-            logPrintf("TMP", "sensor '%s' exceeds max of %d — skipped",
-                      type.c_str(), kMaxSensors);
-            continue;
-        }
         auto fa = foundAddr.find(type);
         Sensor* s = createSensorForType(type, fa != foundAddr.end() ? fa->second : -1);
         if (s == nullptr)
         {
             logPrintf("TMP", "unknown sensor type '%s' — skipped", type.c_str());
+            continue;
+        }
+        // Only round-robin sensors count toward the cap (see sensor_merge.hpp).
+        if (exceedsSensorCap(out, *s, kMaxSensors))
+        {
+            logPrintf("TMP", "sensor '%s' exceeds max of %d — skipped",
+                      type.c_str(), kMaxSensors);
+            delete s;
             continue;
         }
         out.push_back(s);

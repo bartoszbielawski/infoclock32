@@ -145,7 +145,7 @@ enable_mqtt_discovery=1
 # 1-Wire (DS18B20) - see ds18b20_pin under Temperature sensor below
 
 # - - - - - - - - - - - - - - - -  Sensors - - - - - - - - - - - - - - - -
-# Comma-separated list of sensor types to poll round-robin (max 4, duplicates
+# Comma-separated list of sensor types to poll round-robin (max 4, light sensor not counted, duplicates
 # removed). All sensors share the same {temp_c}/{temp_rh}/{temp_hpa}/{temp_co2}
 # keys - the first listed sensor that provides a measurement owns it. Default: stub (disabled).
 #   bmp180   BMP180 via I2C, fixed address 0x77 (temp + pressure)
