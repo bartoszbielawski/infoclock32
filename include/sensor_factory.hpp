@@ -7,7 +7,7 @@
 // `sensors` is a comma-separated list of driver types (same syntax as
 // `sensor_display`). Examples:
 //   sensors=bme280             single sensor
-//   sensors=bme280,scd4x       two sensors, polled round-robin
+//   sensors=bme280,scd4x       two sensors, each read every sensor_interval
 //   sensors=auto               scan the I2C bus for known sensors (the default; see i2c_detect.hpp)
 //   sensors=stub               disabled
 //   sensors=auto,ds18b20       detected I2C sensors plus a 1-Wire one (not detectable)
@@ -165,7 +165,7 @@ inline std::vector<Sensor*> createSensorList()
             logPrintf("TMP", "unknown sensor type '%s' — skipped", type.c_str());
             continue;
         }
-        // Only round-robin sensors count toward the cap (see sensor_merge.hpp).
+        // The light sensor (own timer) doesn't count toward the cap (see sensor_merge.hpp).
         if (exceedsSensorCap(out, *s, kMaxSensors))
         {
             logPrintf("TMP", "sensor '%s' exceeds max of %d — skipped",

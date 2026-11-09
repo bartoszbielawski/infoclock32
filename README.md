@@ -30,7 +30,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`/`it`/`es`/`pt`/`de`), `timezone`, `clock_style` |
 | Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
-| Sensors (multiple drivers, round-robin) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
+| Sensors (multiple drivers) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
 | Night mode (auto-dim) | `night_start`, `night_end`, `night_brightness` |
 | Auto-brightness (VEML7700 light sensor) | `auto_brightness`, `ab_lux_max`, `ab_gamma`, `ab_min`, `ab_max`, `ab_tau_s`, `ab_pause_s` |
@@ -192,8 +192,8 @@ Key config keys:
 | `push_token` | *(empty)* | When set, `/push` requires `?token=<value>`; empty keeps `/push` open |
 | `tls_verify` | `0` | `1` verifies HTTPS servers (weather, LHC, menu) against the built-in Mozilla root CAs (`certs/`); `0` keeps the old behaviour of not checking certificates |
 | `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
-| `sensors` | `auto` | Comma-separated list of sensor drivers, polled round-robin (max 4; the light sensor is not counted, see below) |
-| `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |
+| `sensors` | `auto` | Comma-separated list of sensor drivers, each polled every `sensor_interval` (max 4; the light sensor is not counted, see below) |
+| `sensor_interval` | `300` | Poll interval in seconds; every sensor is read once per interval, however many there are (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
 | `humidity_offset` | `0` | Humidity correction in %RH added to readings |
 | `pressure_offset` | `0` | Pressure correction in hPa added to readings |
@@ -220,7 +220,7 @@ Key config keys:
 
 ## Sensors
 
-Set `sensors` in config to a **comma-separated list** of supported drivers (max 4 polled round-robin; the VEML7700 light sensor runs on its own timer and is not counted; duplicates removed). With several sensors they are polled **round-robin** — one sensor per `sensor_interval`, so the full round takes N×interval:
+Set `sensors` in config to a **comma-separated list** of supported drivers (max 4; the VEML7700 light sensor runs on its own 2 s timer and is not counted; duplicates removed). **Every sensor is read once per `sensor_interval`**: slow conversions (DS18B20, about 750 ms) are started together and collected a second later, so several sensors don't add up to a slower refresh:
 
 | Value | Sensor | Interface | Extra keys |
 |-------|--------|-----------|------------|
@@ -244,7 +244,7 @@ Auto-brightness example: `sensors=bme280,veml7700` with `auto_brightness=1`. Mou
 
 Examples: `sensors=bme280` (single) or `sensors=bme280,scd4x` (BME280 for temp/humidity/pressure, SCD4X for CO2, polled in turn).
 
-**Consolidation** — all sensors write to the *same* RuntimeStore keys, the *first listed* sensor that provides a measurement owns it (a later sensor only fills in while the owner has gone stale): `temp_c` (string including `°C`, e.g. `22.5°C`, always one decimal place), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders. When two sensors report the same measurement (e.g. both a BME280 and an SCD4X report temperature) the one listed first in `sensors` is used, so put your preferred sensor first; the other still contributes the measurements the first lacks (e.g. CO2). A reading with no update for three rounds (at least 2 minutes) is dropped: its placeholder and MQTT state disappear and it stops scrolling until the sensor reports again. Sensors that fail to initialise are skipped, and `sensors=stub` (or nothing detected under `auto`) makes the sensor task exit. Per-measurement calibration is handled by the offset keys below.
+**Consolidation** — all sensors write to the *same* RuntimeStore keys, the *first listed* sensor that provides a measurement owns it (a later sensor only fills in while the owner has gone stale): `temp_c` (string including `°C`, e.g. `22.5°C`, always one decimal place), `temp_hpa` (integer hPa), `temp_rh` (%), `temp_co2` (integer ppm). Use them in custom messages as `{temp_c}` placeholders. When two sensors report the same measurement (e.g. both a BME280 and an SCD4X report temperature) the one listed first in `sensors` is used, so put your preferred sensor first; the other still contributes the measurements the first lacks (e.g. CO2). A reading with no update for three intervals (at least 2 minutes) is dropped: its placeholder and MQTT state disappear and it stops scrolling until the sensor reports again. Sensors that fail to initialise are skipped, and `sensors=stub` (or nothing detected under `auto`) makes the sensor task exit. Per-measurement calibration is handled by the offset keys below.
 
 **Offsets** — `temp_offset` (°C), `humidity_offset` (%RH), `pressure_offset` (hPa) and `co2_offset` (ppm) are added to each reading at write time (defaults 0). They apply in single- and multi-sensor setups alike. The barometric trend is computed from the *un-offset* pressure so a calibration offset doesn't shift the slope.
 

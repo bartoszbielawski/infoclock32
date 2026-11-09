@@ -100,6 +100,8 @@ start beginfail  "sensors=sim,sim2" \
     "sim_temp=20" "sim2_temp=25" "sim2_co2=800" "sim2_begin_fail=1"
 # only a stub: task exits, nothing is published
 start stubonly   "sensors=stub"
+# two-phase sensor (like a DS18B20): started, then collected a second later
+start conv      "sensors=sim,sim2" "sim_temp=19" "sim_conversion_ms=750" "sim2_temp=25" "sim2_co2=700"
 # offsets are applied at write time
 start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5" "humidity_offset=-5"
 
@@ -136,6 +138,9 @@ expect_no_metric beginfail temp_co2
 expect_log       stubonly "task exiting"
 expect_no_metric stubonly temp_c
 
+expect_metric    conv temp_c   19
+expect_metric    conv temp_co2 700
+if grep -aq "failed to read from sensor 'Sim'" "$WORK/conv.log"; then fail "conv: a two-phase read failed"; else ok "conv: no failed two-phase reads"; fi
 expect_metric    offsets temp_c  21.5
 expect_metric    offsets temp_rh 35
 

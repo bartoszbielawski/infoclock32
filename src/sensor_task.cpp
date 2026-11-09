@@ -17,8 +17,8 @@
 #include <string>
 #include <vector>
 
-// Default poll interval in seconds (per sensor). With N sensors the full
-// round takes N * interval.
+// Default poll interval in seconds. Every sensor is read once per interval
+// (each has its own timer, see sensor_round.hpp).
 static constexpr int DEFAULT_INTERVAL_S = 300;
 
 // Config keys (multi-sensor rework: the old temp_* display/poll keys are gone;
@@ -157,37 +157,39 @@ void sensor_task(void* parameter)
         int64_t now = monoSeconds();
         bool newData = false;   // a poll succeeded in this wake
 
-        // Round-robin: refresh one sensor per interval. The index always
-        // advances so a dead sensor doesn't stall the round.
+        // Every sensor on its own timer; slow conversions are started together
+        // and collected on a later pass (see sensor_round.hpp).
         SensorOffsets off;
         off.temp = tempOffset;
         off.humidity = rhOffset;
         off.pressure = pressOffset;
         off.co2 = co2Offset;
         SensorRound::Result res = round.step(now, interval_s, off);
-        // Fast sensors (ambient light) poll every couple of seconds: they must
-        // not retrigger the scroll, and their failures are logged once.
-        newData = res.ok && (res.accepted & ~measurementBit(MEAS_LUX)) != 0;
-        if (res.polled)
+        unsigned got = 0;   // measurements updated by any read in this step
+        for (const auto& rd : res.reads)
         {
-            const bool fast = list->at(res.index)->pollIntervalS() > 0;
-            if (!fast && !res.ok)
-                logPrintf("TMP", "failed to read from sensor '%s' (round index %zu)",
-                          list->at(res.index)->name(), res.index);
+            const bool fast = list->at(rd.index)->pollIntervalS() > 0;
+            // Fast sensors (ambient light) poll every couple of seconds: they
+            // must not retrigger the scroll, and their failures are logged once.
+            if (rd.ok && (rd.accepted & ~measurementBit(MEAS_LUX)) != 0)
+                newData = true;
+            if (!fast && !rd.ok)
+                logPrintf("TMP", "failed to read from sensor '%s' (index %zu)",
+                          list->at(rd.index)->name(), rd.index);
             if (fast)
             {
-                if (!res.ok && !fastFailed[res.index])
-                    logPrintf("TMP", "sensor '%s' read failing", list->at(res.index)->name());
-                if (res.ok && fastFailed[res.index])
-                    logPrintf("TMP", "sensor '%s' recovered", list->at(res.index)->name());
-                fastFailed[res.index] = !res.ok;
+                if (!rd.ok && !fastFailed[rd.index])
+                    logPrintf("TMP", "sensor '%s' read failing", list->at(rd.index)->name());
+                if (rd.ok && fastFailed[rd.index])
+                    logPrintf("TMP", "sensor '%s' recovered", list->at(rd.index)->name());
+                fastFailed[rd.index] = !rd.ok;
             }
+            if (rd.ok) got |= rd.accepted;
         }
-        if (res.ok)
+        if (got)
         {
             auto& rs = RuntimeStore::getInstance();
             time_t wall = time(nullptr);
-            unsigned got = res.accepted;
 
             if (got & measurementBit(MEAS_TEMP))
                 rs.set("temp_c", data.temp, runtimeTempFormat());

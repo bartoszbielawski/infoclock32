@@ -14,9 +14,9 @@
 #include <vector>
 #include <cctype>
 
-// How many sensors may be active at once. The I2C bus and the round-robin
-// display cycle are the practical limits; beyond this the readings would be
-// stale by the time a sensor refreshes again.
+// How many sensors (not counting the light sensor) may be active at once.
+// Every sensor is read once per interval whatever the count, so this is not a
+// timing limit: typical setups use one or two, and more only add fallbacks.
 inline constexpr int kMaxSensors = 4;
 
 inline std::vector<std::string> parseSensorTypes(const std::string& list)

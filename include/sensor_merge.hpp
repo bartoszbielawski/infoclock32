@@ -82,11 +82,14 @@ struct MeasurementSlot
     int64_t stamp  = 0;      // monotonic seconds of the write
 };
 
-// A value is stale once it is older than 3 full rounds (never under 2 min), so
+// A value is stale once it is older than 3 intervals (never under 2 min), so
 // a single slow or failed read does not blank a reading.
-inline int64_t staleAfterSeconds(size_t sensorCount, int intervalSeconds)
+inline int64_t staleAfterSeconds(int intervalSeconds)
 {
-    int64_t s = (int64_t)3 * (int64_t)(sensorCount ? sensorCount : 1) * intervalSeconds;
+    // Every sensor is refreshed once per interval (each has its own timer,
+    // see sensor_round.hpp), so the window no longer grows with the number
+    // of sensors.
+    int64_t s = (int64_t)3 * intervalSeconds;
     return s < 120 ? 120 : s;
 }
 
@@ -206,11 +209,10 @@ struct MeasurementSet
     }
 };
 
-// The kMaxSensors cap limits the round-robin round (its length sets how stale
-// a reading can get). Sensors on their own timer (pollIntervalS() > 0, e.g.
-// the VEML7700 light sensor) don't take a slot in the round, so they are not
-// counted: `sensors=auto` sorts the light sensor last, and counting it let four
-// other sensors silently push auto-brightness out.
+// The kMaxSensors cap counts the measurement sensors only. Sensors on their
+// own fast timer (pollIntervalS() > 0, e.g. the VEML7700 light sensor) are
+// not counted: `sensors=auto` sorts the light sensor last, and counting it
+// let four other sensors silently push auto-brightness out.
 inline bool countsTowardSensorCap(const Sensor& s)
 {
     return s.pollIntervalS() <= 0;

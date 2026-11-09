@@ -37,13 +37,15 @@ static Run drive(SensorRound& r, int64_t from, int64_t to, int interval)
     for (int64_t t = from; t <= to; t++)
     {
         auto res = r.step(t, interval, kNoOffsets);
-        if (res.polled) run.polls++;
-        if (res.ok) run.oks++;
-        for (int m = 0; m < MEAS_COUNT; m++)
+        for (const auto& rd : res.reads)
         {
-            if (res.accepted & measurementBit((Measurement)m)) run.accepted[m]++;
-            if (res.dropped & measurementBit((Measurement)m)) run.dropped[m]++;
+            run.polls++;
+            if (rd.ok) run.oks++;
+            for (int m = 0; m < MEAS_COUNT; m++)
+                if (rd.accepted & measurementBit((Measurement)m)) run.accepted[m]++;
         }
+        for (int m = 0; m < MEAS_COUNT; m++)
+            if (res.dropped & measurementBit((Measurement)m)) run.dropped[m]++;
     }
     return run;
 }
@@ -106,18 +108,18 @@ int main()
 
     // ── SensorRound with a virtual clock ──────────────────────────────────
     const int interval = 60;
-    {   // healthy pair: one read per interval, round-robin, first provider wins
+    {   // healthy pair: each sensor once per interval, first provider wins
         SimParams a; a.temp = 20.0f; a.hasHumidity = true;
         SimParams b; b.temp = 25.0f; b.hasCo2 = true;
         SimSensor sa(a), sb(b);
         std::vector<Sensor*> l = { &sa, &sb };
         SensorRound r(l);
         Run run = drive(r, 0, 599, interval);
-        CHECK(run.polls == 10 && run.oks == 10, "10 polls in 600 s at 60 s (%d)", run.polls);
-        CHECK(sa.attempts() == 5 && sb.attempts() == 5, "alternates (%d/%d)", sa.attempts(), sb.attempts());
+        CHECK(run.polls == 20 && run.oks == 20, "each of 2 sensors read 10x in 600 s at 60 s (%d)", run.polls);
+        CHECK(sa.attempts() == 10 && sb.attempts() == 10, "own timers (%d/%d)", sa.attempts(), sb.attempts());
         CHECK(r.data.temp == 20.0f, "temperature stays with first sensor (%.1f)", r.data.temp);
         CHECK(r.data.have(MEAS_CO2) && r.data.have(MEAS_HUMIDITY), "union of capabilities");
-        CHECK(run.accepted[MEAS_TEMP] == 5, "second sensor never overwrites temp (%d)", run.accepted[MEAS_TEMP]);
+        CHECK(run.accepted[MEAS_TEMP] == 10, "second sensor never overwrites temp (%d)", run.accepted[MEAS_TEMP]);
         CHECK(run.dropped[MEAS_TEMP] == 0, "healthy round drops nothing");
     }
     {   // first sensor dies for good: second takes over, nothing blanks early
@@ -159,10 +161,11 @@ int main()
         std::vector<Sensor*> l = { &sa };
         SensorRound r(l);
         auto res = r.step(0, 300, kNoOffsets);
-        CHECK(res.polled && !res.ok, "first poll fails");
+        CHECK(res.reads.size() == 1 && !res.reads[0].ok, "first poll fails");
         CHECK(r.nextPollAt() == 30, "retry in 30 s, not 300 (%lld)", (long long)r.nextPollAt());
         res = r.step(30, 300, kNoOffsets);
-        CHECK(res.ok && r.nextPollAt() == 330, "recovers and resumes the interval");
+        CHECK(res.reads.size() == 1 && res.reads[0].ok && r.nextPollAt() == 330,
+              "recovers and resumes the interval");
     }
     {   // offsets flow through, raw pressure stays raw
         SimParams a; a.hasPressure = true;
@@ -202,11 +205,71 @@ int main()
         std::vector<Sensor*> l = { new SimSensor(lite) };
         SensorRound r(l);
         auto a = r.step(0, 300, kNoOffsets);
-        CHECK(a.polled && a.ok && a.accepted == measurementBit(MEAS_LUX), "lux-only first poll");
+        CHECK(a.reads.size() == 1 && a.reads[0].ok && a.reads[0].accepted == measurementBit(MEAS_LUX),
+              "lux-only first poll");
         CHECK(r.nextPollAt() == 2, "next poll on the sensor's own timer (%lld)", (long long)r.nextPollAt());
         auto b = r.step(1, 300, kNoOffsets);
-        CHECK(!b.polled, "not polled before its period");
+        CHECK(b.reads.empty(), "not polled before its period");
         delete l[0];
+    }
+
+    // ── two-phase measurement (startMeasurement + later read) ────────────
+    {   // a DS18B20-like sensor is started, then collected a second later;
+        // an instant sensor next to it is read in the first step
+        SimParams slow; slow.temp = 18.0f; slow.conversionMs = 750;
+        SimParams fast; fast.temp = 22.0f; fast.hasHumidity = true;
+        SimSensor ss(slow, "Conv"), sf(fast);
+        std::vector<Sensor*> l = { &ss, &sf };
+        SensorRound r(l);
+        auto a = r.step(0, 300, kNoOffsets);
+        CHECK(a.started == 1, "conversion started (%zu)", a.started);
+        CHECK(a.reads.size() == 1 && a.reads[0].index == 1 && a.reads[0].ok,
+              "instant sensor read in the same step");
+        CHECK(r.nextPollAt() == 1, "wake to collect after the conversion (%lld)", (long long)r.nextPollAt());
+        auto b = r.step(1, 300, kNoOffsets);
+        CHECK(b.reads.size() == 1 && b.reads[0].index == 0 && b.reads[0].ok, "conversion collected");
+        CHECK(r.data.temp == 18.0f, "first listed sensor owns temperature (%.1f)", r.data.temp);
+        CHECK(ss.starts() == 1 && ss.unstartedReads() == 0, "read only after a start");
+        CHECK(r.nextPollAt() == 300, "next start one interval after the previous start (%lld)",
+              (long long)r.nextPollAt());
+        Run run = drive(r, 2, 3599, 300);
+        CHECK(ss.starts() == 12 && ss.unstartedReads() == 0 && ss.goodReads() == 12,
+              "12 conversions in an hour, none collected unstarted (%d/%d)", ss.starts(), ss.unstartedReads());
+        CHECK(run.dropped[MEAS_TEMP] == 0, "no stale drop with two-phase reads");
+    }
+    {   // several slow conversions overlap: all collected after 1 s, not 1 s each
+        SimParams c; c.conversionMs = 750;
+        SimSensor s1(c, "A"), s2(c, "B"), s3(c, "C");
+        std::vector<Sensor*> l = { &s1, &s2, &s3 };
+        SensorRound r(l);
+        auto a = r.step(0, 60, kNoOffsets);
+        CHECK(a.started == 3 && a.reads.empty(), "all three started together");
+        auto b = r.step(1, 60, kNoOffsets);
+        CHECK(b.reads.size() == 3, "all three collected one second later (%zu)", b.reads.size());
+    }
+    {   // a failed start counts as a failed read and retries in 30 s
+        struct NoDevice : SimSensor {
+            int startMeasurement() override { return -1; }
+        } nd;
+        std::vector<Sensor*> l = { &nd };
+        SensorRound r(l);
+        auto a = r.step(0, 300, kNoOffsets);
+        CHECK(a.reads.size() == 1 && !a.reads[0].ok && a.started == 0, "failed start reported");
+        CHECK(r.nextPollAt() == 30, "retry after a failed start (%lld)", (long long)r.nextPollAt());
+    }
+    {   // refresh and stale window don't depend on how many sensors there are
+        SimParams p;
+        SimSensor s1(p), s2(p), s3(p), s4(p);
+        std::vector<Sensor*> l = { &s1, &s2, &s3, &s4 };
+        SensorRound r(l);
+        drive(r, 0, 599, 60);
+        CHECK(s1.attempts() == 10 && s4.attempts() == 10, "4 sensors, each read every interval (%d/%d)",
+              s1.attempts(), s4.attempts());
+        CHECK(staleAfterSeconds(300) == 900 && staleAfterSeconds(5) == 120, "stale window = 3 intervals, min 120 s");
+    }
+    {   // sim_conversion_ms is read from config
+        FakeStore ds; ds.m["sim_conversion_ms"] = "750";
+        CHECK(simParamsFromStore(ds, "sim").conversionMs == 750, "conversion_ms param");
     }
 
     if (failures) { printf("%d sim sensor check(s) FAILED\n", failures); return 1; }

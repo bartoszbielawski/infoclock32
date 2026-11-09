@@ -12,7 +12,18 @@ public:
     // Initialize the sensor. Return true on success.
     virtual bool begin() = 0;
 
-    // Trigger a new reading. Return true if data is valid.
+    // Optional first half of a two-phase measurement: start a conversion and
+    // return the milliseconds until read() can collect it, so the sensor task
+    // can start every due sensor at once and collect them together instead of
+    // waiting on each in turn.
+    //   0   (default) read() measures by itself
+    //   > 0 collect with read() after this many ms
+    //   < 0 the start failed; counted as a failed read
+    // read() must still work on its own (it then measures and waits itself).
+    virtual int startMeasurement() { return 0; }
+
+    // Take (or, after startMeasurement(), collect) a reading. Return true if
+    // the data is valid.
     virtual bool read() = 0;
 
     // Degrees Celsius. Meaningful only when hasTemperature() is true.

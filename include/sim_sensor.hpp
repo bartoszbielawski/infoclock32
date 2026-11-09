@@ -20,6 +20,9 @@
 //   sim_fail_after=10      after 10 good reads the sensor "dies" ...
 //   sim_fail_count=20      ... for 20 attempts, then recovers (-1 = forever)
 //   sim_begin_fail=1       begin() reports failure (missing chip)
+//   sim_conversion_ms=750  two-phase like a DS18B20: startMeasurement() returns
+//                          this many ms and read() then collects; a read()
+//                          without a started conversion fails (default 0)
 //
 // Example: sensors=sim,sim2  with sim2_co2=800 and sim_fail_after=3 shows the
 // second sensor taking over temperature when the first dies.
@@ -46,6 +49,7 @@ struct SimParams
     int   failAfter = -1;     // -1 = never dies
     int   failCount = -1;     // attempts spent dead; -1 = forever
     bool  beginFails = false;
+    int   conversionMs = 0;   // > 0: two-phase measurement
 };
 
 // True for "sim", "sim2", "sim17" ...
@@ -82,6 +86,8 @@ SimParams simParamsFromStore(Store& ds, const std::string& type)
     sp.failAfter   = ds.template get_value<int>(p + "fail_after", -1);
     sp.failCount   = ds.template get_value<int>(p + "fail_count", -1);
     sp.beginFails  = ds.template get_value<int>(p + "begin_fail", 0) != 0;
+    sp.conversionMs = ds.template get_value<int>(p + "conversion_ms", 0);
+    if (sp.conversionMs < 0) sp.conversionMs = 0;
     return sp;
 }
 
@@ -93,8 +99,23 @@ public:
 
     bool begin() override { return !p_.beginFails; }
 
+    int startMeasurement() override
+    {
+        if (p_.conversionMs <= 0) return 0;
+        started_ = true;
+        starts_++;
+        return p_.conversionMs;
+    }
+
     bool read() override
     {
+        // A two-phase sim only produces data for a started conversion, so a
+        // scheduler that forgets startMeasurement() shows up in the tests.
+        if (p_.conversionMs > 0)
+        {
+            if (!started_) { unstartedReads_++; return false; }
+            started_ = false;
+        }
         attempts_++;
         if (p_.failEvery > 0 && attempts_ % p_.failEvery == 0)
             return false;
@@ -133,11 +154,15 @@ public:
     // Inspection for tests
     int attempts() const { return attempts_; }
     int goodReads() const { return good_; }
+    int starts() const { return starts_; }
+    int unstartedReads() const { return unstartedReads_; }
 
 private:
     SimParams p_;
     const char* label_;
     int attempts_ = 0, good_ = 0, deadAttempts_ = 0;
+    int starts_ = 0, unstartedReads_ = 0;
+    bool started_ = false;
     float t_ = 0, rh_ = 0, hp_ = 0;
     int co2_ = 0;
     float lux_ = 0;

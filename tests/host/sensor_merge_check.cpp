@@ -70,9 +70,9 @@ int main()
 
     // ── slotAccepts / staleness ───────────────────────────────────────────
     {
-        const int64_t stale = staleAfterSeconds(2, 300);   // 1800
+        const int64_t stale = staleAfterSeconds(600);   // 1800
         CHECK(stale == 1800, "stale window %lld", (long long)stale);
-        CHECK(staleAfterSeconds(1, 5) == 120, "stale floor 120 s");
+        CHECK(staleAfterSeconds(5) == 120, "stale floor 120 s");
 
         MeasurementSlot s;
         CHECK(slotAccepts(s, 1, 0, 0, stale), "empty slot accepts non-owner");
@@ -122,7 +122,7 @@ int main()
         CHECK(d.owner[MEAS_TEMP] == 0 && d.owner[MEAS_CO2] == 1, "owners resolved");
 
         SensorOffsets off; off.temp = 0.5f; off.pressure = -2.0f; off.co2 = -1000.0f;
-        const int64_t stale = staleAfterSeconds(2, 300);
+        const int64_t stale = staleAfterSeconds(600);
 
         unsigned got = d.ingest(bme, 0, 0, stale, off);
         CHECK(got == (measurementBit(MEAS_TEMP) | measurementBit(MEAS_HUMIDITY) | measurementBit(MEAS_PRESSURE)),

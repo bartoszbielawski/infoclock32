@@ -145,7 +145,7 @@ enable_mqtt_discovery=1
 # 1-Wire (DS18B20) - see ds18b20_pin under Temperature sensor below
 
 # - - - - - - - - - - - - - - - -  Sensors - - - - - - - - - - - - - - - -
-# Comma-separated list of sensor types to poll round-robin (max 4, light sensor not counted, duplicates
+# Comma-separated list of sensor types, each read every sensor_interval (max 4, light sensor not counted, duplicates
 # removed). All sensors share the same {temp_c}/{temp_rh}/{temp_hpa}/{temp_co2}
 # keys - the first listed sensor that provides a measurement owns it. Default: stub (disabled).
 #   bmp180   BMP180 via I2C, fixed address 0x77 (temp + pressure)
@@ -171,7 +171,7 @@ enable_mqtt_discovery=1
 #sim2_co2=800
 #sim_fail_after=10    # sim dies after 10 good reads, so sim2 takes over
 #
-# Multiple sensors (comma-separated, polled round-robin):
+# Multiple sensors (comma-separated, each read every sensor_interval):
 #sensors=bme280,scd4x
 # Or detect I2C sensors automatically at boot (SHT31, AHT20, BME280/BMP280/
 # BMP180, SCD4x, VEML7700); can be mixed with entries that cannot be detected:
@@ -194,8 +194,8 @@ bme280_addr=118
 #pressure_offset=0    # hPa
 #co2_offset=0         # ppm
 
-# How often to poll each sensor (seconds). With N sensors the full round takes
-# N*interval. Code default: 300
+# How often to read each sensor (seconds); every sensor is read once per
+# interval, however many there are. Code default: 300
 sensor_interval=30
 
 # What scrolls on the display: ordered comma list of temp / humidity /
