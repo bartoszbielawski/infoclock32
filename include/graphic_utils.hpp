@@ -8,8 +8,6 @@
 #include <stdint.h>
 #include <string>
 
-using namespace std;
-
 // Minimum slice every display hold keeps before a waiting priority-lane
 // request (clock, user push) can cut it short — config key
 // `display_min_hold_s`, default kDefaultMinHoldMs. Feed it to a DisplayHold.
