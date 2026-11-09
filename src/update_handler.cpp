@@ -78,6 +78,14 @@ static void otaFail(const String& why)
 
 void handle_update_upload()
 {
+    // A POST to /update that isn't multipart (no file, or a script posting a
+    // raw body) takes the WebServer's raw-body path, which calls this handler
+    // too - while server.upload() refers to no upload at all (a null object
+    // between requests). Reading it crashed the device: ignore such requests;
+    // handle_update_post() then answers "No firmware file was uploaded".
+    if (!server.header("Content-Type").startsWith("multipart/"))
+        return;
+
     HTTPUpload& upload = server.upload();
 
     if (upload.status == UPLOAD_FILE_START)

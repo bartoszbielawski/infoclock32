@@ -769,10 +769,11 @@ void web_server_task(void* pvParameters)
     server.on("/wifi",    HTTP_GET,  handle_wifi_get);
     server.on("/wifi",    HTTP_POST, handle_wifi_post);
     server.on("/forget_wifi", HTTP_POST, handle_forget_wifi);
-    // Authorization is always collected; Origin/Referer feed the CSRF check.
+    // Authorization is always collected; Origin/Referer feed the CSRF check,
+    // Content-Type lets /update tell a real upload from a bare POST.
     // Must precede begin(), which only installs the default list when empty.
-    static const char* kHeaders[] = { "Origin", "Referer" };
-    server.collectHeaders(kHeaders, 2);
+    static const char* kHeaders[] = { "Origin", "Referer", "Content-Type" };
+    server.collectHeaders(kHeaders, 3);
     server.begin();
 
     while (true)
