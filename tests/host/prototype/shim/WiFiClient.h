@@ -33,6 +33,7 @@ class WiFiClientSecure : public WiFiClient
 {
 public:
     void setInsecure() {}
+    void setCACertBundle(const uint8_t*) {}   // device parity; curl does TLS on the host
     void setCACert(const char*) {}
 };
 

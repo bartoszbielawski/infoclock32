@@ -190,6 +190,7 @@ Key config keys:
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
 | `push_token` | *(empty)* | When set, `/push` requires `?token=<value>`; empty keeps `/push` open |
+| `tls_verify` | `0` | `1` verifies HTTPS servers (weather, LHC, menu) against the built-in Mozilla root CAs (`certs/`); `0` keeps the old behaviour of not checking certificates |
 | `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
 | `sensors` | `auto` | Comma-separated list of sensor drivers, polled round-robin (max 4, see below) |
 | `sensor_interval` | `300` | Per-sensor poll interval in seconds; with N sensors the full round takes N×interval (the shipped `data/config.txt` pins `30`) |

@@ -122,6 +122,10 @@ enable_mqtt_discovery=1
 # Five wrong web logins lock the web UI for 60 s. Boot logs [SEC] warnings
 # for an empty web_password / push_token / mqtt_password.
 #push_token=
+#
+# Verify HTTPS certificates against the built-in Mozilla root CAs
+# (weather, LHC, restaurant menu). 0 = do not check (default, old behaviour).
+#tls_verify=0
 #mqtt_config_writes=1
 
 # -- Pin overrides ------------------------------------------------------------

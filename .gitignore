@@ -37,3 +37,4 @@ tests/host/config_parse_check
 tests/host/html_utils_check
 tests/host/serial_cmd_check
 tests/host/time_valid_check
+tests/host/ca_bundle_check

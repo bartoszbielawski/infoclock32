@@ -14,7 +14,15 @@
   #define HAS_WIFI_CLIENT_SECURE
 #endif
 #include <logger.hpp>
+#include <data_store.hpp>
 #include <config_utils.hpp>
+
+// Mozilla root CAs (certs/x509_crt_bundle.bin, embedded via
+// board_build.embed_files). Used when the config key tls_verify=1.
+#if defined(ESP_PLATFORM) && defined(HAS_WIFI_CLIENT_SECURE)
+  extern const uint8_t ca_bundle_start[] asm("_binary_certs_x509_crt_bundle_bin_start");
+  #define HAS_CA_BUNDLE 1
+#endif
 
 namespace HttpUtils {
 
@@ -40,7 +48,19 @@ int httpGet(const String &url, String &outBody, bool insecure,
 
     if (url.startsWith("https")) {
 #ifdef HAS_WIFI_CLIENT_SECURE
-        if (insecure) secureClient.setInsecure();
+        // tls_verify=1 checks the server certificate against the embedded
+        // root CAs; otherwise the caller's `insecure` flag decides (the
+        // historical default skips verification).
+        bool verify = DataStore::getInstance().get_value<int>("tls_verify", 0) == 1;
+#ifdef HAS_CA_BUNDLE
+        if (verify)
+            secureClient.setCACertBundle(ca_bundle_start);
+        else
+#else
+        (void)verify;
+#endif
+        if (insecure)
+            secureClient.setInsecure();
         ok = http.begin(secureClient, url);
 #else
         logPrintf("HTTP", "HTTPS not supported on this build (no WiFiClientSecure)");
