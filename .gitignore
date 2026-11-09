@@ -33,3 +33,7 @@ tests/host/auto_brightness_check
 tests/host/display_strings_check
 tests/host/i2c_detect_check
 tests/host/i2c_scan_check
+tests/host/config_parse_check
+tests/host/html_utils_check
+tests/host/serial_cmd_check
+tests/host/time_valid_check
