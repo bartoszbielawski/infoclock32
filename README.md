@@ -232,7 +232,7 @@ Set `sensors` in config to a **comma-separated list** of supported drivers (max 
 | `bme280` | BME280 | I2C | `bme280_addr` (default `0x76`) |
 | `sht31` | SHT31 | I2C | `sht31_addr` (default `0x44`) |
 | `aht10` / `aht20` | AHT10 / AHT20 | I2C 0x38 (fixed) | — |
-| `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`) |
+| `ds18b20` | DS18B20 | 1-Wire | `ds18b20_pin` (default `4`); optional calibration `ds18b20_slope` / `ds18b20_offset`: T = slope × reading + offset (defaults `1` / `0`) |
 | `scd4x` | SCD4x / SCD40 / SCD30 (Sensirion) | I2C 0x62 (fixed) | — (adds CO2) |
 | `veml7700` | VEML7700 ambient light (Vishay) | I2C 0x10 (fixed) | — (lux only, no temperature; polled every 2 s on its own timer; drives `auto_brightness`, placeholder `{lux}`) |
 | `auto` (default) | Whatever is found on the I2C bus | — | see Autodetection below |

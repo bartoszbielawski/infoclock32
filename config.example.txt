@@ -193,6 +193,15 @@ bme280_addr=118
 
 # Pin number for DS18B20 data line (1-Wire). Ignored for I2C sensors.
 #ds18b20_pin=4
+# Optional calibration: T = ds18b20_slope * reading + ds18b20_offset
+# (defaults 1 and 0; slope must be 0.5-1.5, offset within +/-20 degC).
+# From two reference points - the sensor read raw1 at true ref1 (e.g. an ice
+# bath) and raw2 at true ref2 (a reference thermometer):
+#   slope  = (ref2 - ref1) / (raw2 - raw1)
+#   offset = ref1 - slope * raw1
+# A plain offset correction: leave the slope at 1. temp_offset still applies.
+#ds18b20_slope=1.0
+#ds18b20_offset=0.0
 
 # Calibration offsets added to each reading. Defaults: 0
 #temp_offset=0        # degrees C

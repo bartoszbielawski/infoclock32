@@ -28,6 +28,7 @@ c++ $CXXFLAGS log_policy_check.cpp     -o log_policy_check
 c++ $CXXFLAGS mqtt_config_check.cpp    -o mqtt_config_check
 c++ $CXXFLAGS menu_filter_check.cpp    -o menu_filter_check
 c++ $CXXFLAGS tick_utils_check.cpp     -o tick_utils_check
+c++ $CXXFLAGS linear_cal_check.cpp     -o linear_cal_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
@@ -74,6 +75,7 @@ echo "config secrets guard passed"
 ./mqtt_config_check
 ./menu_filter_check
 ./tick_utils_check
+./linear_cal_check
 ./clock_face_check
 ./wdt_check
 ./uptime_check

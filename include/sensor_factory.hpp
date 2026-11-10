@@ -20,7 +20,8 @@
 //   sht31     | Sht31Sensor   | sht31_addr   (default 0x44)
 //   aht10     | AhtSensor     | — (address 0x38, fixed)
 //   aht20     | AhtSensor     | — (address 0x38, fixed)
-//   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4), ds18b20_pullup (default 0)
+//   ds18b20   | Ds18b20Sensor | ds18b20_pin  (default 4), ds18b20_pullup (default 0),
+//             |               | ds18b20_slope / ds18b20_offset (calibration)
 //   scd4x     | Scd4xSensor   | — (address 0x62, fixed; adds CO2)
 //   veml7700  | Veml7700Sensor| — (address 0x10, fixed; lux only, feeds auto-brightness)
 //   stub      | StubSensor    | — (no hardware)
@@ -50,6 +51,7 @@
 #include <sht31_sensor.hpp>
 #include <aht_sensor.hpp>
 #include <ds18b20_sensor.hpp>
+#include <cmath>
 #include <scd4x_sensor.hpp>
 #include <veml7700_sensor.hpp>
 #include <sim_sensor.hpp>
@@ -84,8 +86,17 @@ inline Sensor* createSensorForType(const std::string& type, int addrOverride = -
     if (type == "aht20")
         return new AhtSensor(/*isAht20=*/true);
     if (type == "ds18b20")
+    {
+        const char* why = "";
+        LinearCal cal = makeLinearCal(ds.get_value<float>("ds18b20_slope", NAN),
+                                      ds.get_value<float>("ds18b20_offset", NAN), &why);
+        if (*why)
+            logPrintf("TMP", "ds18b20: calibration ignored (%s)", why);
+        else if (cal.active())
+            logPrintf("TMP", "ds18b20: calibration slope %.4f, offset %+.2f degC", cal.slope, cal.offset);
         return new Ds18b20Sensor((uint8_t)ds.get_value<int>("ds18b20_pin", 4),
-                                 ds.get_value<int>("ds18b20_pullup", 0) != 0);
+                                 ds.get_value<int>("ds18b20_pullup", 0) != 0, cal);
+    }
     if (type == "scd4x")
         return new Scd4xSensor();
     if (type == "veml7700")
