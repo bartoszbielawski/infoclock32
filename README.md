@@ -214,6 +214,7 @@ Key config keys:
 | `i2c_sda` / `i2c_scl` | board defaults | Override the I2C pins from `pins.hpp` |
 | `resto_restaurants` | `3` | Comma-separated Novae restaurant numbers |
 | `resto_start_hour` / `resto_end_hour` | `9` / `14` | Hours between which the menu is fetched and displayed (end exclusive; window wraps midnight) |
+| `resto_scroll_ms` | `20` | Menu scroll speed, ms per step (10–100, higher = slower); a dish scrolling longer than `display_min_hold_s` may be cut when the clock is waiting |
 | `resto_test_date` | — | `YYYY-MM-DD` override for menu fetches; also bypasses the display window (testing) |
 | `enable_weather` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
 | `enable_lhc` | `0` | LHC beam status; off because CERN's feed requires a login since late 2026 |

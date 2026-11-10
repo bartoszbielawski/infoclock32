@@ -42,7 +42,11 @@ static constexpr size_t kNumRestaurants = sizeof(kRestaurants) / sizeof(kRestaur
 static const int kDefaultStartHour  = 9;
 static const int kDefaultEndHour    = 14;
 static const uint32_t kFetchIntervalMs = 60UL * 60UL * 1000UL; // 1 hour
-static const uint32_t kScrollSpeedMs  = 10;
+// Milliseconds per scroll step (config key resto_scroll_ms). 10 ms suited the
+// old single long menu line; with one hold per dish 20 ms reads comfortably
+// and still keeps a ~60-character dish (about 8 s) inside the
+// display_min_hold_s slice (10 s), past which a waiting clock may cut it.
+static const int kDefaultScrollMs = 20;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -274,7 +278,9 @@ void resto_menu_task(void* pvParameters) {
                 {
                     task_heartbeat();
                     task_heartbeat_grace(30000);
-                    scrollMessage(message, display, kScrollSpeedMs);
+                    const int scrollMs = max(10, min(100,
+                        DataStore::getInstance().get_value<int>("resto_scroll_ms", kDefaultScrollMs)));
+                    scrollMessage(message, display, scrollMs);
                 }
                 else
                 {

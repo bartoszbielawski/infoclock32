@@ -103,6 +103,11 @@ resto_restaurants=3
 resto_start_hour=9
 resto_end_hour=14
 #
+# Scroll speed in ms per step (10-100, higher = slower). Default: 20.
+# A dish that scrolls longer than display_min_hold_s may be cut short when
+# the clock is waiting; at 20 ms a ~60-character dish takes about 8 s.
+#resto_scroll_ms=20
+#
 # Test override: fetch menus for this date (YYYY-MM-DD) and bypass the window.
 #resto_test_date=2026-09-21
 
