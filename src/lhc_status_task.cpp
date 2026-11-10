@@ -106,6 +106,8 @@ void lhc_status_task(void *parameter)
             if (response != 200)
             {
                 logPrintf("LHC", "HTTP GET failed, response: %d", response);
+                if (response == 401 || response == 403)
+                    logPrintf("LHC", "the CERN feed now requires a login - set enable_lhc=0");
                 task_heartbeat_grace(320000);                // planned 5-minute cooldown below
                 vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // 5-minute cooldown before retrying
                 continue;

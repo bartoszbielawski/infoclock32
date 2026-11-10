@@ -103,7 +103,7 @@ start stubonly   "sensors=stub"
 # two-phase sensor (like a DS18B20): started, then collected a second later
 start conv      "sensors=sim,sim2" "sim_temp=19" "sim_conversion_ms=750" "sim2_temp=25" "sim2_co2=700"
 # offsets are applied at write time
-start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5" "humidity_offset=-5"
+start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5" "humidity_offset=-5" "log_display=1"
 
 # web: runtime JSON stays valid, /edit cannot be broken out of via a value,
 # secrets never reach /api/runtime
@@ -207,6 +207,13 @@ before=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 expect_code "empty /edit POST refused" 400 "$(code -u u:pw --data-urlencode "content=" "$U/edit")"
 after=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact after empty POST"; else fail "config changed by empty POST ($before -> $after)"; fi
+
+# display lines stay out of /log by default (Serial still has them);
+# log_display=1 keeps them
+eval "pw=\$PORT_web"; eval "po=\$PORT_offsets"
+if curl -s --max-time 15 "http://127.0.0.1:$pw/log/entries" | grep -q '"tag":"DISP"'; then fail "log: DISP lines in /log by default"; else ok "log: no DISP lines in /log by default"; fi
+if grep -aq "\[DISP\]" "$WORK/web.log"; then ok "log: DISP lines still on Serial"; else fail "log: DISP lines missing on Serial"; fi
+if curl -s --max-time 15 "http://127.0.0.1:$po/log/entries" | grep -q '"tag":"DISP"'; then ok "log: log_display=1 keeps DISP lines"; else fail "log: log_display=1 has no DISP lines"; fi
 
 eval "px=\$PORT_xss"; X="http://127.0.0.1:$px"
 pages=$(for u in / /messages /actions /status; do curl -s --max-time 15 "$X$u"; done)

@@ -5,6 +5,7 @@
 #include <freertos/semphr.h>
 #include <data_store.hpp>
 #include <logger.hpp>
+#include <log_policy.hpp>
 
 #include <deque>
 #include <cstdarg>
@@ -70,6 +71,14 @@ void logPrintf(const char *tag, const char *format, ...)
     snprintf(line, sizeof(line), "%s [%s] %s", ts, tag, msgBuf);
 
     Serial.println(line);
+
+    // Display lines (one per frame) would flush /log within minutes: Serial
+    // only, unless log_display=1 (see log_policy.hpp).
+    const bool displayOn = isDisplayLogTag(tag) &&
+                           DataStore::getInstance().get_value<int>("log_display", 0) != 0;
+    if (!logLineKept(tag, displayOn))
+        return;
+
     sendSyslog(tag, msgBuf);
 
     if (logMutex && xSemaphoreTake(logMutex, pdMS_TO_TICKS(50)) == pdTRUE)

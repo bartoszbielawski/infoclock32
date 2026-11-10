@@ -74,9 +74,10 @@ night_brightness=1
 
 # -- Feature toggles -----------------------------------------------------------
 # Set to 0 to disable a task entirely. Default for all: 1 (enabled),
-# except enable_life (default 0, off).
+# except enable_life and enable_lhc (default 0, off). The LHC status feed
+# (CERN) requires a login since late 2026, so enable_lhc stays off.
 enable_weather=1
-enable_lhc=1
+enable_lhc=0
 enable_mqtt=1
 enable_resto=1
 

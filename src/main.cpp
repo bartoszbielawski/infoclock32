@@ -74,6 +74,11 @@ void setup() {
   // Must happen before WiFi auto-connect logic in hardware_init().
   dataStore.load_from_file("/config.txt");
 
+  // Logging first, so the Wi-Fi start-up in hardware_init() reaches /log and
+  // syslog too, not only Serial. Syslog sends are skipped until Wi-Fi is up.
+  logger_init();
+  logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
+
   pinMode(LED_BLINK_PIN, OUTPUT);
 
   // Serial console first: hardware_init() can block in the Wi-Fi setup portal,
@@ -99,9 +104,6 @@ void setup() {
   ResourceManager<LMDS>::getInstance().initialize(lmds);
   ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
 
-  // Logging and boot banner
-  logger_init();
-  logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
   for (const auto& warning : securityWarnings(dataStore))
     logPrintf("SEC", "%s", warning.c_str());
 
@@ -162,7 +164,8 @@ void setup() {
   else
     logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
 
-  if (dataStore.get_value<int>("enable_lhc", 1))
+  // Off by default: CERN's feed answers 401 (login required) since late 2026.
+  if (dataStore.get_value<int>("enable_lhc", 0))
     xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "LHCStatusTask disabled (enable_lhc=0)");

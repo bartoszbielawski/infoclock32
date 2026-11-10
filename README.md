@@ -215,7 +215,9 @@ Key config keys:
 | `resto_restaurants` | `3` | Comma-separated Novae restaurant numbers |
 | `resto_start_hour` / `resto_end_hour` | `9` / `14` | Hours between which the menu is fetched and displayed (end exclusive; window wraps midnight) |
 | `resto_test_date` | — | `YYYY-MM-DD` override for menu fetches; also bypasses the display window (testing) |
-| `enable_weather` / `enable_lhc` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
+| `enable_weather` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
+| `enable_lhc` | `0` | LHC beam status; off because CERN's feed requires a login since late 2026 |
+| `log_display` | `0` | `1` also keeps the display tasks' per-frame lines (`DISP`) in `/log` and syslog; they always go to Serial |
 | `enable_life` | `0` | Game of Life idle animation (off by default) |
 
 ## Sensors
