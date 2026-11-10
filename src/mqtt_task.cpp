@@ -13,6 +13,7 @@
 #include <logger.hpp>
 #include <night_mode_task.h>
 #include <mqtt_discovery.hpp>
+#include <mqtt_config.hpp>
 #include <version.hpp>
 #include <esp_timer.h>
 
@@ -127,6 +128,27 @@ static void publishStatus(const std::string& clientId)
 
 static void onMessage(char *topic, byte *payload, unsigned int length)
 {
+    // /config needs the whole payload: cutting it at 128 bytes saved long
+    // values truncated. Everything else is display text or a short command.
+    if (String(topic).endsWith("/config"))
+    {
+        std::string key, value;
+        const MqttConfigResult r = parseMqttConfig(
+            (const char*)payload, length,
+            DataStore::getInstance().get_value<int>("mqtt_config_writes", 1) != 0, key, value);
+        if (r == MqttConfigResult::Ok)
+        {
+            DataStore::getInstance().set_value(key, value);
+            logPrintf("MQT", "/config set '%s' = '%s'", key.c_str(), value.c_str());
+        }
+        else
+        {
+            logPrintf("MQT", "/config %s%s%s", mqttConfigResultText(r),
+                      key.empty() ? "" : ": ", key.c_str());
+        }
+        return;
+    }
+
     length = min(length, (unsigned int)128);
     char buf[129];
     memcpy(buf, payload, length);
@@ -194,31 +216,6 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
 
             publish_state(mqtt_client_id(), "display_power", state.c_str());
         }
-    }
-    else if (topicStr.endsWith("/config"))
-    {
-        if (DataStore::getInstance().get_value<int>("mqtt_config_writes", 1) == 0)
-        {
-            logPrintf("MQT", "/config ignored (mqtt_config_writes=0)");
-            return;
-        }
-        String line(buf);
-        int sep = line.indexOf('=');
-        if (sep <= 0)
-            return;
-
-        String key   = line.substring(0, sep);
-        String value = line.substring(sep + 1);
-
-        // Block sensitive keys
-        if (!isValidConfigKey(key.c_str()) || isSecretKey(key.c_str()))
-        {
-            logPrintf("MQT", "/config blocked sensitive key '%s'", key.c_str());
-            return;
-        }
-
-        DataStore::getInstance().set_value(key.c_str(), value.c_str());
-        logPrintf("MQT", "/config set '%s' = '%s'", key.c_str(), value.c_str());
     }
     else if (topicStr.endsWith("/reboot"))
     {
