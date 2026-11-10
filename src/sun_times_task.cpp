@@ -86,8 +86,15 @@ void sun_times_task(void* /*parameter*/)
         {
             // Block (not timeout-acquire): a timed-out request would linger
             // in the manager queue as a dead entry and poison the handshake.
+            // Cover the display wait like the other tasks, so a long queue
+            // can't trip the 120 s watchdog; re-anchor once granted.
+            task_heartbeat_grace(90000);
             if (auto display = rmd.acquire())
+            {
+                task_heartbeat();
+                task_heartbeat_grace(30000);
                 scrollMessage(line, display, 30);
+            }
             else
                 logPrintf("SUN", "display busy, skipping cycle");
         }

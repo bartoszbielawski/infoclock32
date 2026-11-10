@@ -109,6 +109,9 @@ start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5"
 # secrets never reach /api/runtime
 start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_api_key=TOPSECRET"
 
+# menu: the real task parses the canned Novae menu through the JSON filter
+start resto "sensors=stub" "enable_resto=1" "resto_test_date=2026-01-01"
+
 # xss: hostile config values (as MQTT /config could set them) must come out
 # escaped on every page; a {secret} placeholder must never expand
 start xss  "sensors=stub" "message_hello_text=x' onfocus='alert(1)" \
@@ -207,6 +210,11 @@ before=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 expect_code "empty /edit POST refused" 400 "$(code -u u:pw --data-urlencode "content=" "$U/edit")"
 after=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact after empty POST"; else fail "config changed by empty POST ($before -> $after)"; fi
+
+expect_log resto "R3: Roasted chicken with rosemary potatoes"
+expect_log resto "R3: Mushroom risotto with parmesan and grilled zucchini"
+if grep -aq "Evening dish" "$WORK/resto.log"; then fail "resto: non-midi dish shown"; else ok "resto: only midi dishes"; fi
+if grep -aq "JSON error" "$WORK/resto.log"; then fail "resto: JSON error"; else ok "resto: menu parsed without errors"; fi
 
 # display lines stay out of /log by default (Serial still has them);
 # log_display=1 keeps them
