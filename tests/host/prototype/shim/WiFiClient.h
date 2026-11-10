@@ -46,16 +46,34 @@ int host_http_fetch(const char* url, String& outBody);
 int host_http_canned(const char* url, String& outBody);
 void host_set_http_transport(int (*transport)(const char*, String&));
 
+// Reads a String as a Stream (the shim fetches the whole body up front).
+class StringBodyStream : public Stream
+{
+public:
+    void reset(const String* s) { s_ = s; pos_ = 0; }
+    int available() override { return s_ ? (int)(s_->length() - pos_) : 0; }
+    int read() override { return available() > 0 ? (unsigned char)(*s_)[pos_++] : -1; }
+    int peek() override { return available() > 0 ? (unsigned char)(*s_)[pos_] : -1; }
+    size_t write(uint8_t) override { return 0; }
+private:
+    const String* s_ = nullptr;
+    size_t pos_ = 0;
+};
+
 class HTTPClient
 {
 public:
     bool begin(Client&, const String& url) { url_ = url; return true; }
     void addHeader(const String&, const String&) {}
+    void useHTTP10(bool) {}
     int GET();
     String getString() const { return body_; }
+    int getSize() const { return (int)body_.length(); }
+    Stream& getStream() { stream_.reset(&body_); return stream_; }
     void end() { body_.clear(); url_.clear(); }
 
 private:
     String url_;
     String body_;
+    StringBodyStream stream_;
 };

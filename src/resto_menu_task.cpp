@@ -119,8 +119,18 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
     // Set it via /edit or MQTT /config if the default is wrong.
     String novaeCode = DataStore::getInstance().get_value("novae_codes", "CER103").c_str();
 
-    String body;
-    int code = HttpUtils::httpGet(url, body, true, {
+    // Parse straight from the connection: the response is ~21 KB, and
+    // buffering it first needs that much contiguous heap, which a fragmented
+    // heap doesn't always have (the body then came back empty). The filter
+    // keeps only the two fields used below.
+    JsonDocument filter;
+    filter[0]["title"] = true;
+    filter[0]["model"]["service"] = true;
+    JsonDocument doc;
+    DeserializationError err = DeserializationError::EmptyInput;
+    int code = HttpUtils::httpGetStream(url, [&](Stream& body) {
+        err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
+    }, true, {
         {"Novae-Codes",      novaeCode},
         {"Accept",           "application/json"},
         {"X-Requested-With", "xmlhttprequest"},
@@ -130,16 +140,6 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
         logPrintf(TAG, "R%d HTTP %d", restaurantCode, code);
         return {};
     }
-
-    // Keep only the two fields used below: the API sends prices, allergens,
-    // images and more per item, and parsing all of it could run the heap dry
-    // on a long menu. The raw body is freed as soon as it is parsed.
-    JsonDocument filter;
-    filter[0]["title"] = true;
-    filter[0]["model"]["service"] = true;
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
-    body = String();
     if (err) {
         logPrintf(TAG, "R%d JSON error: %s", restaurantCode, err.c_str());
         return {};
