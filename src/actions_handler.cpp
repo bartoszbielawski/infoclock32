@@ -5,6 +5,7 @@
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
 #include <data_store.hpp>
+#include <runtime_store.hpp>
 #include <security_utils.hpp>
 #include <logger.hpp>
 #include <timezone_utils.hpp>
@@ -217,8 +218,12 @@ void handle_actions()
             // User action: priority lane, same bound as a push.
             if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
             {
-                display->begin();
+                display->begin();   // re-inits the MAX7219s, which switches them on
                 display->setIntensity((uint8_t)current_display_brightness());
+                // Keep the power state MQTT/HA set: a reset must not light a
+                // display that was switched off.
+                if (RuntimeStore::getInstance().get("display_power", "on") == "off")
+                    display->setEnabled(false);
                 result = "&#10003; Display reset.";
                 logPrintf("WEB", "display reset via /actions");
             }

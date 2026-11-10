@@ -462,6 +462,14 @@ void handle_file_edit()
             server.send(413, "text/plain", "Config too large");
             return;
         }
+        // The device's WebServer may not parse a large body at all, leaving
+        // "content" missing or empty: report that as too large, not as 400.
+        const bool contentEmpty = !server.hasArg("content") || server.arg("content").length() == 0;
+        if (contentEmpty && bodyTooLarge((size_t)server.clientContentLength(), kMaxConfigBody))
+        {
+            server.send(413, "text/plain", "Config too large");
+            return;
+        }
         if (!server.hasArg("content")) { server.send(400, "text/plain", "Bad Request"); return; }
         // An empty config is never valid, and writing one would erase every
         // setting (Wi-Fi credentials included) on flash and, via the reload,

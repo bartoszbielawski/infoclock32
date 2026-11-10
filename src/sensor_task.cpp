@@ -14,6 +14,7 @@
 #include <sensor_round.hpp>
 #include <night_mode_task.h>
 #include <esp_timer.h>
+#include <time_valid.hpp>
 #include <string>
 #include <vector>
 
@@ -210,8 +211,13 @@ void sensor_task(void* parameter)
                 // Feed the trend history and refresh the trend placeholders.
                 // The trend is computed from the un-offset reading so the
                 // calibration offset doesn't shift the slope.
-                PressureHistoryStore::getInstance().add(wall, data.rawPressure);
-                haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
+                // Only with a synced clock: samples stamped 1970 would sit in
+                // the history next to real ones and skew the trend.
+                if (time_is_valid(wall))
+                {
+                    PressureHistoryStore::getInstance().add(wall, data.rawPressure);
+                    haveTrend = PressureHistoryStore::getInstance().trend(wall, trendKind, trendRate);
+                }
                 if (haveTrend)
                 {
                     rs.set("pressure_trend", pressureTrendName(trendKind));

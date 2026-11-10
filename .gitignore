@@ -44,3 +44,4 @@ tests/host/wifi_policy_check
 tests/host/log_policy_check
 tests/host/mqtt_config_check
 tests/host/menu_filter_check
+tests/host/tick_utils_check

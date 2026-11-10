@@ -260,7 +260,11 @@ static bool reconnect()
     std::string user     = ds.get_value("mqtt_user", "");
     std::string pass     = ds.get_value("mqtt_password", "");
 
-    mqttClient.setServer(server.c_str(), 1883);
+    // PubSubClient keeps the pointer, not a copy: hold the name in a static
+    // so it stays valid beyond this call.
+    static std::string s_server;
+    s_server = server;
+    mqttClient.setServer(s_server.c_str(), 1883);
     mqttClient.setCallback(onMessage);
     mqttClient.setKeepAlive(60);
     // Retained "offline" last-will: HA marks the device unavailable if it

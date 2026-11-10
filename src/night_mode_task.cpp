@@ -10,6 +10,7 @@
 #include <night_utils.hpp>
 #include <time_valid.hpp>
 #include <auto_brightness.hpp>
+#include <tick_utils.hpp>
 #include <runtime_store.hpp>
 #include <night_mode_task.h>
 
@@ -60,6 +61,28 @@ void apply_display_brightness(int level)
     RuntimeStore::getInstance().set("display_brightness", std::to_string(level));
 }
 
+// Deferred config save for brightness changes (see set_user_brightness).
+static portMUX_TYPE s_saveMux = portMUX_INITIALIZER_UNLOCKED;
+static DeferredAction s_brightnessSave;
+static constexpr int kBrightnessSaveDelayS = 5;
+
+static void requestBrightnessSave()
+{
+    const int64_t now = monoS();
+    taskENTER_CRITICAL(&s_saveMux);
+    s_brightnessSave.touch(now, kBrightnessSaveDelayS);
+    taskEXIT_CRITICAL(&s_saveMux);
+}
+
+static bool brightnessSaveDue()
+{
+    const int64_t now = monoS();
+    taskENTER_CRITICAL(&s_saveMux);
+    bool due = s_brightnessSave.takeDue(now);
+    taskEXIT_CRITICAL(&s_saveMux);
+    return due;
+}
+
 bool set_user_brightness(int level)
 {
     level = max(0, min(15, level));
@@ -72,7 +95,9 @@ bool set_user_brightness(int level)
     if (g_night)
         return false;
     DataStore::getInstance().set_value("brightness", std::to_string(level));
-    DataStore::getInstance().save_to_file("/config.txt");
+    // Saved by the night-mode task a few seconds after the last change: a
+    // Home Assistant slider sends many steps, each used to rewrite the file.
+    requestBrightnessSave();
     return true;
 }
 
@@ -194,6 +219,9 @@ void night_mode_task(void* parameter)
         {
             autob.reset();
         }
+
+        if (brightnessSaveDue())
+            DataStore::getInstance().save_to_file("/config.txt");
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }

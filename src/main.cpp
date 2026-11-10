@@ -68,7 +68,18 @@ void setup() {
   { unsigned long t = millis(); while (!Serial && millis() - t < 2000) delay(10); }
 #endif
 
-  LittleFS.begin(true);
+  // Format only if the filesystem really can't be mounted: a transient
+  // failure (e.g. brown-out at power-up) must not wipe the config. Retry once,
+  // then format (a blank board without a filesystem image needs it).
+  if (!LittleFS.begin(false))
+  {
+    delay(200);
+    if (!LittleFS.begin(false))
+    {
+      Serial.println("LittleFS mount failed twice - formatting (config.txt is lost)");
+      LittleFS.begin(true);
+    }
+  }
 
   // Load persisted config first (hostname/timezone/task toggles, etc.)
   // Must happen before WiFi auto-connect logic in hardware_init().

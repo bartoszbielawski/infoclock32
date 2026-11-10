@@ -202,6 +202,12 @@ expect_code "page without login"    401 "$(code "$U/edit")"
 expect_code "page with password"    200 "$(code -u u:pw "$U/edit")"
 big=$(head -c 30000 /dev/zero | tr '\0' 'a')
 expect_code "oversize /edit POST"   413 "$(code -u u:pw --data-urlencode "content=$big" "$U/edit")"
+# a body the device's WebServer could not parse arrives with "content" empty:
+# that must be 413 (too large) as well, not 400, and the config stays intact
+c0=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
+expect_code "oversize body, empty content" 413 "$(code -u u:pw --data-urlencode "content=" --data-urlencode "pad=$big" "$U/edit")"
+c1=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
+if [ "$c0" = "$c1" ]; then ok "config intact after oversize empty POST"; else fail "config changed ($c0 -> $c1)"; fi
 # Send bad logins until the lock-out kicks in (a loaded runner can drop a
 # request client-side, so don't assume exactly five are counted).
 # An empty /edit body must never wipe the config (a large POST the device's

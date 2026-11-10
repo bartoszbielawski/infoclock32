@@ -10,6 +10,8 @@
 #include <clock_face.hpp>
 #include <display_strings.hpp>
 #include <time_valid.hpp>
+#include <tick_utils.hpp>
+#include <sys/time.h>
 
 // Day name for the configured language, see "language" config key
 const char* localizedDayName(int wday)
@@ -90,7 +92,12 @@ void displayClock(void *parameter)
 
         display->clear();
 
-        time_t now = time(nullptr);
+        // Frame start: what this frame shows, and where the next wake is
+        // counted from (msToNextFrame).
+        struct timeval frameTv;
+        gettimeofday(&frameTv, nullptr);
+        const int64_t frameStartUs = (int64_t)frameTv.tv_sec * 1000000 + frameTv.tv_usec;
+        time_t now = frameTv.tv_sec;
 
         if (!time_is_valid(now))
         {
@@ -155,7 +162,13 @@ void displayClock(void *parameter)
         drawWifiIndicator(*display, timeinfo->tm_sec % 2 == 0);
         display->display();
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // Wake just after the next whole second, so drawing time doesn't
+        // accumulate into a skipped second (see tick_utils.hpp).
+        struct timeval tv;
+        gettimeofday(&tv, nullptr);
+        const int64_t nowUs = (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
+        const uint32_t sleepMs = msToNextFrame(frameStartUs, nowUs);
+        vTaskDelay((sleepMs ? sleepMs : 1) / portTICK_PERIOD_MS);
       }
       othersWaiting = displayWanted();
     } // display released here
