@@ -188,7 +188,7 @@ void handle_update_post()
         server.sendContent_P(PSTR("<h2>&#9888; Update failed</h2>"
                                    "<div class='card'>"
                                    "<p style='color:#dc2626'>Error: "));
-        server.sendContent(otaError.length() ? otaError : String(Update.errorString()));
+        sendEscaped(otaError.length() ? otaError : String(Update.errorString()));
         server.sendContent_P(PSTR("</p><div class='actions'>"
                                    "<a class='btn btn-primary' href='/update'>&#8592; Try again</a>"
                                    "</div></div>"));

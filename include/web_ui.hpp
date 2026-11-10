@@ -3,6 +3,7 @@
 // and auth.  Include this in every HTTP handler .cpp file.
 
 #include <WebServer.h>
+#include <string>
 
 // The single WebServer instance, defined in web_ui.cpp.
 extern WebServer server;
@@ -16,7 +17,21 @@ WebServer* getWebServer();
 void sendPageHead(const char* title, const char* extraHead = "");
 void sendPageNav(const char* active);
 void sendPageFoot();
+// sendRow() escapes `value` (it is often device or config data);
+// sendRowHtml() is for trusted markup built from string literals only.
 void sendRow(const char* label, const char* value);
+void sendRowHtml(const char* label, const char* html);
+
+// Every dynamic value written into a page goes through this: config values
+// can come from MQTT /config, runtime values from the network. Escapes
+// & < > " and ' (attributes here are single-quoted); see html_utils.hpp.
+String htmlEscaped(const char* s);
+inline String htmlEscaped(const String& s) { return htmlEscaped(s.c_str()); }
+inline String htmlEscaped(const std::string& s) { return htmlEscaped(s.c_str()); }
+// Escape and send in one step.
+void sendEscaped(const char* s);
+inline void sendEscaped(const String& s) { sendEscaped(s.c_str()); }
+inline void sendEscaped(const std::string& s) { sendEscaped(s.c_str()); }
 
 // ── CSS endpoint ──────────────────────────────────────────────────────────────
 // Serves the shared stylesheet with a long-lived cache header.

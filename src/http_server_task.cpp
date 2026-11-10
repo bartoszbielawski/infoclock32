@@ -41,16 +41,14 @@ void handle_home()
 
     auto& ds = DataStore::getInstance();
     std::string mqttServer = ds.get_value("mqtt_server", "");
-    char mqttStatus[96];
+    // mqtt_server is config data (settable over MQTT): escaped.
+    String mqttStatus;
     if (mqttServer.empty())
-        snprintf(mqttStatus, sizeof(mqttStatus),
-                 "<span style='color:#94a3b8'>not configured</span>");
+        mqttStatus = "<span style='color:#94a3b8'>not configured</span>";
     else if (mqtt_is_connected())
-        snprintf(mqttStatus, sizeof(mqttStatus),
-                 "&#10003; connected to %s", mqttServer.c_str());
+        mqttStatus = "&#10003; connected to " + htmlEscaped(mqttServer);
     else
-        snprintf(mqttStatus, sizeof(mqttStatus),
-                 "&#9888; disconnected (%s)", mqttServer.c_str());
+        mqttStatus = "&#9888; disconnected (" + htmlEscaped(mqttServer) + ")";
 
     char brightStr[4];
     snprintf(brightStr, sizeof(brightStr), "%d",
@@ -68,7 +66,7 @@ void handle_home()
     server.sendContent_P(PSTR("<tr><td class='label'>Signal</td><td id='rssi'>"));
     server.sendContent(rssiStr);
     server.sendContent_P(PSTR("</td></tr>\n<tr><th colspan='2'>&#128421;&#65039; System</th></tr>"));
-    sendRow("Firmware",   APP_VERSION " &bull; built " BUILD_DATE);
+    sendRowHtml("Firmware",   APP_VERSION " &bull; built " BUILD_DATE);
     server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
     server.sendContent(uptime);
     server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));
@@ -193,7 +191,7 @@ void handle_status()
     server.sendContent_P(PSTR("</td></tr>\n"));
     sendRow("MAC address", WiFi.macAddress().c_str());
     server.sendContent_P(PSTR("<tr><th colspan='2'>&#9881;&#65039; System</th></tr>"));
-    sendRow("Firmware",    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME);
+    sendRowHtml("Firmware",    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME);
     server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
     server.sendContent(uptime);
     server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));
@@ -207,11 +205,11 @@ void handle_status()
         server.sendContent_P(PSTR("<tr><th colspan='2'>&#9889;&#65039; Runtime values</th></tr>"));
         for (const auto& kv : rtSnap) {
             server.sendContent_P(PSTR("<tr><td class='label'>"));
-            server.sendContent(kv.first.c_str());
+            sendEscaped(kv.first);
             server.sendContent_P(PSTR("</td><td id='rt-"));
-            server.sendContent(kv.first.c_str());
+            sendEscaped(kv.first);
             server.sendContent_P(PSTR("'>"));
-            server.sendContent(kv.second.c_str());
+            sendEscaped(kv.second);
             server.sendContent_P(PSTR("</td></tr>\n"));
         }
     }
@@ -234,22 +232,6 @@ void handle_status()
 }
 
 // ── /log ──────────────────────────────────────────────────────────────────────
-
-// HTML-escape a String and append to an Arduino String.
-static String htmlEscape(const String& s)
-{
-    String out;
-    out.reserve(s.length() + 16);
-    for (unsigned i = 0; i < s.length(); ++i) {
-        char c = s[i];
-        if      (c == '&') out += F("&amp;");
-        else if (c == '<') out += F("&lt;");
-        else if (c == '>') out += F("&gt;");
-        else if (c == '"') out += F("&quot;");
-        else               out += c;
-    }
-    return out;
-}
 
 void handle_log()
 {
@@ -277,17 +259,17 @@ void handle_log()
         if (tagOpen > 0 && tagClose > tagOpen)
         {
             server.sendContent_P(PSTR("<tr><td class='mono' style='white-space:nowrap'>"));
-            server.sendContent(line.substring(0, tagOpen - 1).c_str());
+            sendEscaped(line.substring(0, tagOpen - 1));
             server.sendContent_P(PSTR("</td><td><span class='tag tag-info'>"));
-            server.sendContent(line.substring(tagOpen + 1, tagClose).c_str());
+            sendEscaped(line.substring(tagOpen + 1, tagClose));
             server.sendContent_P(PSTR("</span></td><td class='mono'>"));
-            server.sendContent(htmlEscape(line.substring(tagClose + 2)).c_str());
+            sendEscaped(line.substring(tagClose + 2));
             server.sendContent_P(PSTR("</td></tr>\n"));
         }
         else
         {
             server.sendContent_P(PSTR("<tr><td colspan='3' class='mono'>"));
-            server.sendContent(line.c_str());
+            sendEscaped(line);
             server.sendContent_P(PSTR("</td></tr>\n"));
         }
     }

@@ -7,21 +7,9 @@
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-static String htmlEsc(const String& s)
-{
-    String out;
-    out.reserve(s.length() + 8);
-    for (unsigned i = 0; i < s.length(); i++) {
-        switch (s[i]) {
-            case '&': out += F("&amp;");  break;
-            case '<': out += F("&lt;");   break;
-            case '>': out += F("&gt;");   break;
-            case '"': out += F("&quot;"); break;
-            default:  out += s[i];        break;
-        }
-    }
-    return out;
-}
+// One escaper for the whole page (web_ui.hpp): it also escapes ', which the
+// single-quoted value attributes below depend on.
+static String htmlEsc(const String& s) { return htmlEscaped(s); }
 
 static bool validSlotName(const String& name)
 {
@@ -185,7 +173,7 @@ void handle_messages()
                                "Cycle interval</h3>"
                                "<div style='display:flex;align-items:center;gap:8px'>"
                                "<input name='interval' type='number' min='10' value='"));
-    server.sendContent(interval.c_str());
+    sendEscaped(interval);
     server.sendContent_P(PSTR("' style='width:80px;padding:6px 8px;border:1px solid #cbd5e1;"
                                "border-radius:6px;font-size:.9rem'>"
                                " <span style='color:#475569'>seconds between cycles</span>"
@@ -247,19 +235,19 @@ void handle_messages()
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='s"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            if (start.length()) server.sendContent(start.c_str());
+            sendEscaped(start);
             server.sendContent_P(PSTR("'></td>"));
 
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='e"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            if (end.length()) server.sendContent(end.c_str());
+            sendEscaped(end);
             server.sendContent_P(PSTR("'></td>"));
 
             server.sendContent_P(PSTR("<td><input class='md' type='date' name='c"));
             server.sendContent(idx);
             server.sendContent_P(PSTR("' value='"));
-            if (cntdn.length()) server.sendContent(cntdn.c_str());
+            sendEscaped(cntdn);
             server.sendContent_P(PSTR("'></td></tr>\n"));
         }
         server.sendContent_P(PSTR("</table></div></div>"));

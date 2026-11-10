@@ -164,7 +164,7 @@ void handle_actions()
             {
                 DataStore::getInstance().set_value("clock_style", style.c_str());
                 DataStore::getInstance().save_to_file("/config.txt");
-                result = "&#10003; Clock style set to " + style + ".";
+                result = "&#10003; Clock style set to " + htmlEscaped(style) + ".";
                 logPrintf("WEB", "clock_style=%s via /actions", style.c_str());
             }
             else
@@ -189,7 +189,7 @@ void handle_actions()
                 MDNS.end();
                 MDNS.begin(hn.c_str());
                 MDNS.addService("http", "tcp", 80);
-                result = "&#10003; Hostname set to &ldquo;" + hn + "&rdquo;. Now reachable at <a href='http://" + hn + ".local'>" + hn + ".local</a>.";
+                result = "&#10003; Hostname set to &ldquo;" + htmlEscaped(hn) + "&rdquo;. Now reachable at <a href='http://" + htmlEscaped(hn) + ".local'>" + htmlEscaped(hn) + ".local</a>.";
                 logPrintf("WEB", "hostname set to %s via /actions", hn.c_str());
             } else {
                 result = "&#9888;&#65039; Invalid hostname &mdash; use letters, digits and hyphens only (max 63 chars).";
@@ -204,7 +204,7 @@ void handle_actions()
                 DataStore::getInstance().set_value("timezone", tz.c_str());
                 DataStore::getInstance().save_to_file("/config.txt");
                 apply_timezone();
-                result = "&#10003; Timezone applied: " + tz;
+                result = "&#10003; Timezone applied: " + htmlEscaped(tz);
                 logPrintf("WEB", "timezone set to %s via /actions", tz.c_str());
             }
             else
@@ -311,11 +311,11 @@ void handle_actions()
                                "<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px'>"
                                "<label style='font-size:.9rem'>From</label>"
                                "<input type='time' name='night_start' value='"));
-    if (!nStart.isEmpty()) server.sendContent(nStart.c_str());
+    sendEscaped(nStart);
     server.sendContent_P(PSTR("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<label style='font-size:.9rem'>To</label>"
                                "<input type='time' name='night_end' value='"));
-    if (!nEnd.isEmpty()) server.sendContent(nEnd.c_str());
+    sendEscaped(nEnd);
     server.sendContent_P(PSTR("' style='padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px'>"
                                "<label style='font-size:.9rem'>Brightness</label>"
                                "<input type='number' name='night_brightness' min='0' max='15' value='"));
@@ -446,7 +446,7 @@ void handle_actions()
                                "</optgroup>"
                                "</select>"
                                "<input id='tzin' name='tz' type='text' value='"));
-    server.sendContent(curTz.c_str());
+    sendEscaped(curTz);
     server.sendContent_P(PSTR("' placeholder='e.g. CET-1CEST,M3.5.0,M10.5.0/3'"
                                " style='display:block;width:100%;padding:6px 8px;"
                                "border:1px solid #cbd5e1;border-radius:6px;"
@@ -465,7 +465,7 @@ void handle_actions()
                                "<input type='hidden' name='action' value='hostname'>"
                                "<div style='display:flex;gap:8px;align-items:center;margin-bottom:10px'>"
                                "<input name='hostname' type='text' value='"));
-    server.sendContent(curHostname.c_str());
+    sendEscaped(curHostname);
     server.sendContent_P(PSTR("' placeholder='infoclock32' maxlength='63'"
                                " style='flex:1;padding:6px 8px;border:1px solid #cbd5e1;"
                                "border-radius:6px;font-family:monospace;font-size:.9rem'>"

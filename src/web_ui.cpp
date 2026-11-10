@@ -6,6 +6,7 @@
 #include <web_ui.hpp>
 #include <uptime_utils.hpp>
 #include <security_utils.hpp>
+#include <html_utils.hpp>
 #include <logger.hpp>
 
 // ── Server instance ───────────────────────────────────────────────────────────
@@ -113,15 +114,15 @@ void sendPageHead(const char* title, const char* extraHead)
                                "<meta charset='utf-8'>"
                                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                                "<title>"));
-    server.sendContent(title);
+    sendEscaped(title);
     server.sendContent_P(PSTR(" \xe2\x80\x94 "));
-    server.sendContent(WiFi.getHostname());
+    sendEscaped(WiFi.getHostname());
     server.sendContent_P(PSTR("</title>"
         "<link rel='stylesheet' href='/style.css?v=" APP_VERSION "'>"));
     if (extraHead[0]) server.sendContent(extraHead);
     server.sendContent_P(PSTR("</head><body>"
                                "<header><h1>&#128336; "));
-    server.sendContent(WiFi.getHostname());
+    sendEscaped(WiFi.getHostname());
     server.sendContent_P(PSTR("</h1><span>"));
     server.sendContent(WiFi.localIP().toString().c_str());
     server.sendContent_P(PSTR("</span></header>"));
@@ -158,12 +159,31 @@ void sendPageFoot()
     server.sendContent_P(PAGE_FOOT);
 }
 
+String htmlEscaped(const char* s)
+{
+    return String(escapeHtml(s ? s : "").c_str());
+}
+
+void sendEscaped(const char* s)
+{
+    if (s && *s) server.sendContent(htmlEscaped(s));
+}
+
 void sendRow(const char* label, const char* value)
 {
     server.sendContent_P(PSTR("<tr><td class='label'>"));
     server.sendContent(label);
     server.sendContent_P(PSTR("</td><td>"));
-    server.sendContent(value);
+    sendEscaped(value);
+    server.sendContent_P(PSTR("</td></tr>\n"));
+}
+
+void sendRowHtml(const char* label, const char* html)
+{
+    server.sendContent_P(PSTR("<tr><td class='label'>"));
+    server.sendContent(label);
+    server.sendContent_P(PSTR("</td><td>"));
+    server.sendContent(html);
     server.sendContent_P(PSTR("</td></tr>\n"));
 }
 
