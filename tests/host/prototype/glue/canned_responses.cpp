@@ -34,7 +34,7 @@ const char kNovaeMenu[] =
     R"([
       {"model":{"service":"midi"},"title":{"en":"Roasted chicken with rosemary potatoes\nmixed green salad","fr":"Poulet rôti avec pommes de terre romarin"}},
       {"model":{"service":"soir"},"title":{"en":"Evening dish","fr":"Plat du soir"}},
-      {"model":{"service":"midi"},"title":{"en":"Mushroom risotto with parmesan and grilled zucchini"}},
+      {"model":{"service":"midi","price":{"chf":12.5},"allergens":["milk","celery"]},"title":{"en":"Mushroom risotto with parmesan and grilled zucchini"},"image":{"url":"https://example.invalid/r.jpg","w":640,"h":480},"nutrition":{"kcal":640,"protein":22}},
       {"model":{"service":"midi"},"title":{"en":"Baked cod filet with lemon butter sauce\nseasonal vegetables"}},
       {"model":{"service":"midi"},"title":{"en":"Vegetarian lasagna with tomato basil sauce"}},
       {"model":{"service":"midi"},"title":{"en":"Pasta arrabiata\nside salad","fr":"Pates arrabiata"}}

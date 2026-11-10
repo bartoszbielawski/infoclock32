@@ -126,9 +126,15 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
         return {};
     }
 
-    // Parse the JSON array, filtering for midi service only.
+    // Keep only the two fields used below: the API sends prices, allergens,
+    // images and more per item, and parsing all of it could run the heap dry
+    // on a long menu. The raw body is freed as soon as it is parsed.
+    JsonDocument filter;
+    filter[0]["title"] = true;
+    filter[0]["model"]["service"] = true;
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, body);
+    DeserializationError err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
+    body = String();
     if (err) {
         logPrintf(TAG, "R%d JSON error: %s", restaurantCode, err.c_str());
         return {};
