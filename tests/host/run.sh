@@ -23,6 +23,7 @@ c++ $CXXFLAGS message_utils_check.cpp   -o message_utils_check
 c++ $CXXFLAGS ca_bundle_check.cpp      -o ca_bundle_check
 c++ $CXXFLAGS ota_image_check.cpp      -o ota_image_check
 c++ $CXXFLAGS veml_range_check.cpp     -o veml_range_check
+c++ $CXXFLAGS wifi_policy_check.cpp    -o wifi_policy_check
 c++ $CXXFLAGS clock_face_check.cpp      -o clock_face_check
 c++ $CXXFLAGS wdt_check.cpp            -o wdt_check
 c++ $CXXFLAGS uptime_check.cpp         -o uptime_check
@@ -64,6 +65,7 @@ echo "config secrets guard passed"
 ./ca_bundle_check
 ./ota_image_check
 ./veml_range_check
+./wifi_policy_check
 ./clock_face_check
 ./wdt_check
 ./uptime_check

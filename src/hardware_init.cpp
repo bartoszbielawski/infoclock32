@@ -4,6 +4,7 @@
 #include <esp_wifi.h>
 #include <cstring>
 #include <wifi_cache.h>
+#include <wifi_policy.hpp>
 #include <ESPmDNS.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -52,8 +53,9 @@ static void apply_tx_power()
 }
 
 // Persistent watchdog. Survives the WiFiManager portal closing: whenever the
-// STA link drops (or boot ended offline), re-arms the connection with the last
-// credentials WiFi.begin()/WiFiManager used and keeps retrying every 30 s.
+// STA link drops (or boot ended offline) it retries every 30 s - with the
+// config.txt credentials when they exist (the driver's own copy may have been
+// erased), otherwise with whatever the driver holds (see wifi_policy.hpp).
 static void wifi_monitor_task(void* /*pv*/)
 {
     registerTask("WiFiMonitor", 4096, 90000);
@@ -119,7 +121,18 @@ static void wifi_monitor_task(void* /*pv*/)
 
         if (ticksToRetry-- <= 0)
         {
-            WiFi.reconnect();   // no-op if the device never had credentials
+            // Re-read each time: /wifi or the portal may have changed them.
+            auto& ds = DataStore::getInstance();
+            const std::string ssid = ds.get_value("wifi_ssid", "");
+            if (wifi_policy::retryMethod(!ssid.empty()) == wifi_policy::Retry::BeginWithConfig)
+            {
+                WiFi.persistent(false);   // never let a retry rewrite the NVS cache
+                WiFi.begin(ssid.c_str(), ds.get_value("wifi_password", "").c_str());
+            }
+            else
+            {
+                WiFi.reconnect();   // no-op if the device never had credentials
+            }
             ticksToRetry = 5;   // 6 ticks x 5 s = every 30 s
         }
         vTaskDelay(5000 / portTICK_PERIOD_MS);
@@ -188,18 +201,30 @@ void hardware_init()
 
     if (!connected)
     {
-        if (!ssid.empty())
+        const wifi_policy::BootFailurePlan plan =
+            wifi_policy::onBootFailure(!ssid.empty(), (int)WiFi.status());
+        if (plan.eraseDriverCache)
         {
-            // The file is the authority and it failed: erase the stored pair
+            // The AP rejected the file's credentials: erase the stored pair
             // so a stale cache cannot outvote it, and autoConnect() opens the
             // portal directly (no doomed stored-credentials attempt first).
             wifi_erase_cache();
-            logPrintf("WIFI", "opening setup portal at %s / 192.168.4.1",
+            logPrintf("WIFI", "credentials rejected - opening setup portal at %s / 192.168.4.1",
                       apName.c_str());
         }
-        // With wifi_ssid blank this still tries the NVS pair first — the
-        // recovery hatch for a freshly reflashed filesystem.
-        connected = wm.autoConnect(apName.c_str());
+        if (plan.openPortal)
+        {
+            // With wifi_ssid blank this still tries the NVS pair first — the
+            // recovery hatch for a freshly reflashed filesystem.
+            connected = wm.autoConnect(apName.c_str());
+        }
+        else
+        {
+            // Network not visible / slow (router still booting after a power
+            // cut, out of range): keep the credentials and go on offline; the
+            // monitor retries with them and opens the fallback AP if needed.
+            logPrintf("WIFI", "network not reachable yet - continuing offline, retrying every 30 s");
+        }
     }
 
     if (connected)
@@ -214,7 +239,7 @@ void hardware_init()
     else
     {
         s_ap_mode = true;
-        logPrintf("WIFI", "offline — reboot to reopen setup portal at %s / 192.168.4.1",
+        logPrintf("WIFI", "offline - retrying every 30 s; fallback AP %s after wifi_ap_after_s",
                   apName.c_str());
     }
 

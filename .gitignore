@@ -40,3 +40,4 @@ tests/host/time_valid_check
 tests/host/ca_bundle_check
 tests/host/ota_image_check
 tests/host/veml_range_check
+tests/host/wifi_policy_check
