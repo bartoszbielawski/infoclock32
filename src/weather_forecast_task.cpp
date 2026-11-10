@@ -24,22 +24,30 @@
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
 static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric&lang=%s";
-static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric&lang=%s";
+// cnt=3: only slot 2 (~6 h ahead) is used; the default 40 slots are ~16 KB.
+static const char OW_WEATHER_API_FORECAST[] PROGMEM = "https://api.openweathermap.org/data/2.5/forecast?id=%s&appid=%s&units=metric&lang=%s&cnt=3";
 
-static std::map<std::string, std::string> parseJsonWithPredicate(const String &json, const std::set<std::string> &keys)
+// Collects the wanted JSON paths straight from the response stream, so the
+// body is never buffered whole (one large String needs a contiguous heap
+// block, which a fragmented heap may not have - see httpGetStream). Missing
+// keys are caught by the caller's checks.
+static std::map<std::string, std::string> parseJsonStreamWithPredicate(Stream &body, const std::set<std::string> &keys)
 {
     // predicate used by MapCollector to decide which keys to keep, ignore values
     auto keep_pred = [&keys](const std::string& path, const std::string& value) -> bool {
         return keys.find(std::string(path)) != keys.end();
     };
 
-    MapCollector mc(keep_pred);   
-    for (auto ch : json) {
-        // missing error handling here
-        mc.parse(ch);
-    }
+    MapCollector mc(keep_pred);
+    char buf[64];
+    size_t n;
+    // readBytes() waits up to the stream timeout for slow network data and
+    // returns 0 at the end of the body (HTTP/1.0: the server closes).
+    while ((n = body.readBytes(buf, sizeof(buf))) > 0)
+        for (size_t i = 0; i < n; i++)
+            mc.parse(buf[i]);
 
-    return mc.getValues(); 
+    return mc.getValues();
 }
 
 static const std::set<std::string> weatherKeys = {
@@ -75,26 +83,27 @@ static std::string readWeatherFromOWM(int& iconIndex)
     char url[160];
     snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str(), lang);
 
-    String output;
-    auto response = HttpUtils::httpGet(url, output, true);
+    std::map<std::string, std::string> currentWeather;
+    auto response = HttpUtils::httpGetStream(url, [&](Stream& body) {
+        currentWeather = parseJsonStreamWithPredicate(body, weatherKeys);
+    });
     if (response != 200)
     {
         logPrintf("WTH", "current weather HTTP GET failed: %d", response);
         return std::string();
     }
 
-    auto currentWeather = parseJsonWithPredicate(output, weatherKeys);
-
     // read forecast
     snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str(), lang);
-    response = HttpUtils::httpGet(url, output, true);
+    std::map<std::string, std::string> forecastWeather;
+    response = HttpUtils::httpGetStream(url, [&](Stream& body) {
+        forecastWeather = parseJsonStreamWithPredicate(body, forecastKeys);
+    });
     if (response != 200)
     {
         logPrintf("WTH", "forecast HTTP GET failed: %d", response);
         return std::string();
     }
-
-    auto forecastWeather = parseJsonWithPredicate(output, forecastKeys);
 
     // create result string with the following format:
     // Name: temp ^C (forecast temperature ^C, forecast description))

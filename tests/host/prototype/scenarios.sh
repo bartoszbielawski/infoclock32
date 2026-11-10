@@ -109,6 +109,9 @@ start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5"
 # secrets never reach /api/runtime
 start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_api_key=TOPSECRET"
 
+# weather: the real task streams the canned OpenWeatherMap responses
+start weather "sensors=stub" "enable_weather=1"
+
 # menu: the real task parses the canned Novae menu through the JSON filter
 start resto "sensors=stub" "enable_resto=1" "resto_test_date=2026-01-01"
 
@@ -217,6 +220,9 @@ expect_code "empty /edit POST refused" 400 "$(code -u u:pw --data-urlencode "con
 after=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact after empty POST"; else fail "config changed by empty POST ($before -> $after)"; fi
 
+expect_log weather "\[WTH\] Prototype: 21.4"
+expect_log weather "18.7.*light rain"
+if grep -aq "failed to parse temperature\|missing city name" "$WORK/weather.log"; then fail "weather: parse failed"; else ok "weather: both responses parsed"; fi
 expect_log resto "R3: Roasted chicken with rosemary potatoes"
 expect_log resto "R3: Mushroom risotto with parmesan and grilled zucchini"
 if grep -aq "Evening dish" "$WORK/resto.log"; then fail "resto: non-midi dish shown"; else ok "resto: only midi dishes"; fi
