@@ -32,6 +32,7 @@ const char kLhcRss[] =
 // slice (display_min_hold_s) — that is the truncation this fixture guards.
 const char kNovaeMenu[] =
     R"([
+      {"model":{"service":"midi"},"title":{"en":"**MENU TABLE DU CHEF CE VENDREDI**"}},
       {"model":{"service":"midi"},"title":{"en":"Roasted chicken with rosemary potatoes\nmixed green salad","fr":"Poulet rôti avec pommes de terre romarin"}},
       {"model":{"service":"soir"},"title":{"en":"Evening dish","fr":"Plat du soir"}},
       {"model":{"service":"midi","price":{"chf":12.5},"allergens":["milk","celery"]},"title":{"en":"Mushroom risotto with parmesan and grilled zucchini"},"image":{"url":"https://example.invalid/r.jpg","w":640,"h":480},"nutrition":{"kcal":640,"protein":22}},

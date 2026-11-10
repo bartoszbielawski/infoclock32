@@ -214,6 +214,8 @@ if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact aft
 expect_log resto "R3: Roasted chicken with rosemary potatoes"
 expect_log resto "R3: Mushroom risotto with parmesan and grilled zucchini"
 if grep -aq "Evening dish" "$WORK/resto.log"; then fail "resto: non-midi dish shown"; else ok "resto: only midi dishes"; fi
+if grep -aq "R3: \*\*MENU TABLE" "$WORK/resto.log"; then fail "resto: header listed as a dish"; else ok "resto: header not listed as a dish"; fi
+expect_log resto "skipped header '\*\*MENU TABLE DU CHEF CE VENDREDI\*\*'"
 if grep -aq "JSON error" "$WORK/resto.log"; then fail "resto: JSON error"; else ok "resto: menu parsed without errors"; fi
 
 # display lines stay out of /log by default (Serial still has them);

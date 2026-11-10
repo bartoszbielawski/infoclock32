@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <menu_filter.hpp>
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -160,6 +161,11 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
 
         std::string dish = stripSuffix(normalizeFrench(raw));
 
+        // Headings ("**MENU TABLE DU CHEF ...**") come in as lunch items too.
+        if (isMenuHeader(dish)) {
+            logPrintf(TAG, "R%d: skipped header '%s'", restaurantCode, dish.c_str());
+            continue;
+        }
         if (dish.empty() || seen.count(dish)) continue;
         seen.insert(dish);
         dishes.push_back(dish);
