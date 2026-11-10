@@ -63,6 +63,18 @@ int main()
     CHECK(expand_placeholders("Started {} days ago", -3, true) == "Started 3 days ago", "{} abs");
     CHECK(expand_placeholders("In {} days", 45, true)          == "In 45 days",        "{} positive");
 
+    // --- {key} never expands a secret (display, preview and log) ---
+    DataStore::getInstance().set_value("wifi_password", "hunter2");
+    DataStore::getInstance().set_value("ow_api_key", "abcd1234");
+    DataStore::getInstance().set_value("hostname", "clock1");
+    CHECK(expand_placeholders("pw={wifi_password}", 0, false) == "pw={wifi_password}", "secret left unexpanded");
+    CHECK(expand_placeholders("{ow_api_key}", 0, false) == "{ow_api_key}", "api key left unexpanded");
+    CHECK(expand_placeholders("{WIFI_PASSWORD}", 0, false) == "{WIFI_PASSWORD}", "secret check ignores case");
+    CHECK(expand_placeholders("I am {hostname}", 0, false) == "I am clock1", "ordinary key still expands");
+    CHECK(build_display(slot("{wifi_password}", -1), NOW).find("hunter2") == std::string::npos,
+          "build_display never shows the secret");
+    DataStore::getInstance().clear();
+
     // --- build_display with an explicit clock ---
     CHECK(build_display(slot("Xmas", mk(2026,9,15,0)), NOW) == "Xmas: today!", "e2e target day");
     CHECK(build_display(slot("Xmas", mk(2026,9,17,0)), NOW) == "Xmas: 2d",     "e2e 2 days out");

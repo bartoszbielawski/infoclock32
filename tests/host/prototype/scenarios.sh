@@ -109,6 +109,13 @@ start offsets    "sensors=sim" "sim_temp=20" "sim_humidity=40" "temp_offset=1.5"
 # secrets never reach /api/runtime
 start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_api_key=TOPSECRET"
 
+# xss: hostile config values (as MQTT /config could set them) must come out
+# escaped on every page; a {secret} placeholder must never expand
+start xss  "sensors=stub" "message_hello_text=x' onfocus='alert(1)" \
+    "message_hello_start=2026-01-01' onfocus='a" "night_start=12:00' autofocus onfocus='b" \
+    "night_end=13:00\"><script>alert(2)</script>" "timezone=UTC0'><script>alert(3)</script>" \
+    "mqtt_server=<b>evil</b>" "message_leak_text=pw {wifi_password} end" "wifi_password=TOPSECRETPW"
+
 # sec: web password + push token, throttle, size cap, boot warnings
 start sec  "sensors=stub" "web_password=pw" "push_token=tok"
 start open "sensors=stub"
@@ -200,6 +207,17 @@ before=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 expect_code "empty /edit POST refused" 400 "$(code -u u:pw --data-urlencode "content=" "$U/edit")"
 after=$(curl -s -m 5 -u u:pw "$U/edit" | wc -c | tr -d ' ')
 if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact after empty POST"; else fail "config changed by empty POST ($before -> $after)"; fi
+
+eval "px=\$PORT_xss"; X="http://127.0.0.1:$px"
+pages=$(for u in / /messages /actions /status; do curl -s --max-time 15 "$X$u"; done)
+for raw in "onfocus='" "<script>alert" "<b>evil" "12:00' autofocus" "2026-01-01' onfocus"; do
+    if printf '%s' "$pages" | grep -qF -- "$raw"; then fail "xss: raw '$raw' reached a page"; else ok "xss: '$raw' escaped"; fi
+done
+if printf '%s' "$pages" | grep -qF "x&#39; onfocus=&#39;alert(1)"; then ok "xss: message text shown escaped"; else fail "xss: escaped message text not found"; fi
+if printf '%s' "$pages" | grep -qF "12:00&#39; autofocus onfocus=&#39;b"; then ok "xss: night start shown escaped"; else fail "xss: escaped night start not found"; fi
+if printf '%s' "$pages" | grep -qF "TOPSECRETPW"; then fail "xss: secret placeholder expanded on a page"; else ok "xss: {wifi_password} not expanded on pages"; fi
+sleep 2
+if grep -aqF "TOPSECRETPW" "$WORK/xss.log"; then fail "xss: secret placeholder expanded into the log"; else ok "xss: secret not in the log"; fi
 
 # CSRF: a browser POST from another site is refused, same-site works
 expect_code "cross-site POST /reboot"      403 "$(code -u u:pw -X POST -H 'Origin: https://evil.example' "$U/reboot")"

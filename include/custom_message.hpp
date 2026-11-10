@@ -1,5 +1,6 @@
 #pragma once
 
+#include <secret_keys.hpp>
 #include <string>
 #include <ctime>
 #include <cctype>
@@ -119,6 +120,13 @@ inline std::string expand_placeholders(const std::string& text, int days, bool h
             {
                 result += "{}";
             }
+        }
+        else if (isSecretKey(key))
+        {
+            // Never expand passwords / API keys / tokens: the result goes to
+            // the display, the /messages preview and the log, and message
+            // text can be set over MQTT /config.
+            result += text.substr(i, end - i + 1);
         }
         else
         {
