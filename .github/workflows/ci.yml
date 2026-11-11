@@ -42,8 +42,11 @@ jobs:
           python-version: '3.12'
       - run: pip install platformio
       - run: pio run -e ${{ matrix.env }}
+      # Firmware downloads only for pushes to main, kept a week: branch and
+      # PR builds still compile, and releases carry their own binaries.
       - uses: actions/upload-artifact@v7
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: firmware-${{ matrix.env }}
           path: .pio/build/${{ matrix.env }}/firmware*.bin
-          retention-days: 30
+          retention-days: 7
