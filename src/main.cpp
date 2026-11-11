@@ -176,8 +176,7 @@ void setup() {
   else
     logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
 
-  // Off by default: CERN's feed answers 401 (login required) since late 2026.
-  if (dataStore.get_value<int>("enable_lhc", 0))
+  if (dataStore.get_value<int>("enable_lhc", 1))
     xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "LHCStatusTask disabled (enable_lhc=0)");

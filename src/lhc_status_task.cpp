@@ -1,95 +1,105 @@
+// LHC status from CERN's public LHC Page 1 (webfd.app.cern.ch).
+//
+// The /history endpoint takes ?channels= and answers plain JSON unless the
+// client asks for gzip; status + comments is ~600 bytes. The latest entry of
+// each channel is the last element of its array.
 
-
-#include <pgmspace.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 #include <http_utils.hpp>
 #include <task_registry.hpp>
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
-#include <data_store.hpp>
 #include <logger.hpp>
-#include <string_utils.h>
+#include <lhc_text.hpp>
+#include <scroll_timing.hpp>
 #include <string>
 
-static const char pageUrl[] PROGMEM = "https://alicedcs.web.cern.ch/monitoring/screenshots/rss.xml";
+static const char kPageUrl[] =
+    "https://webfd.app.cern.ch/lhc-vistar-page1/history?channels=status,comments";
 
-static std::map<std::string, std::string> interesting_fields =
+static constexpr int kPollSeconds = 60;
+static constexpr int kScrollMs = 20;   // ms per pixel step
+
+// One scroll on its own display hold, with a slice sized to finish it
+// (scroll_timing.hpp): an operator comment easily outlasts the shared
+// display_min_hold_s slice, and a waiting clock would cut its tail.
+static void scrollOnce(const std::string& message)
 {
-    {"LhcPage1", ""},
-    {"LhcBeamMode", ""},
-    {"BeamEnergy", ""},
-    {"LhcMachineMode", ""}
-};
-
-static const char sentinel_char = '\x07';
-static const char sentinel_str[] = "\x07";
-static const char double_sentinel_char[] = "\x07\x07";
-
-void removeHTMLTags(String& str)
-{
-    str.trim();
-    String result;
-    result.reserve(str.length());
-    int i = 0;
-    while (i < str.length()) {
-
-        if (str[i] != '<') 
-        {
-            result += str[i++];
-            continue;
-        }
-
-        int close = str.indexOf('>', i);
-        if (close == -1) break;
-        String tag = str.substring(i + 1, close);
-        tag.trim();
-        if (tag.endsWith("/")) tag.remove(tag.length() - 1);
-        tag.trim();
-        tag.toUpperCase();
-        //replace <br> with a special char that will later be replaced with a space, this way we preserve intentional line breaks
-        if (tag == "BR") result += sentinel_char; 
-        i = close + 1;        
+    auto& rmd = ResourceManager<LMDS>::getInstance();
+    const uint32_t sliceMs = scroll_slice_ms(
+        scroll_duration_ms(message.size(), kScrollMs), display_min_hold_ms());
+    // Blocking acquire: cover the worst-case wait, then re-anchor the
+    // watchdog window once granted (clock-task pattern).
+    task_heartbeat_grace(90000);
+    if (auto display = rmd.acquire())
+    {
+        task_heartbeat();
+        task_heartbeat_grace(sliceMs + 30000);
+        scrollMessage(message, display, kScrollMs, 1, sliceMs);
     }
-
-    result.trim();
-
-    while (result.indexOf(double_sentinel_char) != -1)
-        result.replace(double_sentinel_char, sentinel_str);
-    
-    if (result.startsWith(sentinel_str)) result.remove(0, 1);
-    if (result.endsWith(sentinel_str)) result.remove(result.length() - 1, 1);
-
-    //replace remaining sentinel chars (originally <br>) with spaces, adding extra sentinels around them to preserve intentional multiple spaces
-    result.replace(sentinel_str, " \x07 "); 
-    result.trim();
-
-    // Decode HTML entities (&amp; must be last)
-    result.replace("&nbsp;",  " ");
-    result.replace("&lt;",    "<");
-    result.replace("&gt;",    ">");
-    result.replace("&quot;",  "\"");
-    result.replace("&apos;",  "'");
-    result.replace("&ndash;", "-");
-    result.replace("&mdash;", "-");
-    result.replace("&amp;",   "&");
-
-    str = result;
 }
 
+struct LhcState
+{
+    std::string status;   // "SHUTDOWN: NO BEAM"
+    std::string comment;  // operator comment, HTML stripped
+};
 
+// Fetches and parses the page; false (and `out` untouched) on any failure.
+static bool fetchLhc(LhcState& out, int& httpCode)
+{
+    JsonDocument filter;
+    JsonObject st = filter["channels"]["status"].add<JsonObject>();
+    st["mode_disp"] = true;
+    st["state_disp"] = true;
+    st["energy_gev"] = true;
+    filter["channels"]["comments"].add<JsonObject>()["comment"] = true;
+
+    JsonDocument doc;
+    DeserializationError err = DeserializationError::EmptyInput;
+    httpCode = HttpUtils::httpGetStream(kPageUrl, [&](Stream& body) {
+        err = deserializeJson(doc, body, DeserializationOption::Filter(filter));
+    }, true, {{"Accept", "application/json"}});
+
+    if (httpCode != 200)
+        return false;
+    if (err) {
+        logPrintf("LHC", "JSON error: %s", err.c_str());
+        return false;
+    }
+
+    JsonArray statuses = doc["channels"]["status"];
+    if (statuses.isNull() || statuses.size() == 0) {
+        logPrintf("LHC", "no status in the response");
+        return false;
+    }
+    JsonObject s = statuses[statuses.size() - 1];
+    std::string line = lhcStatusLine(s["mode_disp"] | "", s["state_disp"] | "",
+                                     s["energy_gev"] | 0.0);
+    if (line.empty()) {
+        logPrintf("LHC", "status without a machine mode");
+        return false;
+    }
+
+    std::string comment;
+    JsonArray comments = doc["channels"]["comments"];
+    if (!comments.isNull() && comments.size() > 0)
+        comment = lhcHtmlToText(comments[comments.size() - 1]["comment"] | "");
+
+    out.status = line;
+    out.comment = comment;
+    return true;
+}
 
 void lhc_status_task(void *parameter)
 {
-    // 60 s+ of work between beats is normal (30 s poll gate + GET + two
-    // scroll phases with delays), plus display contention can stack on top
+    // 60 s+ of work between beats is normal (poll + two scroll phases with
+    // delays), plus display contention can stack on top
     registerTask("LHC", 8192, 120000);
-    std::string modeAndEnergyMessage;
-    std::string page1Message;
-
+    LhcState state;
     time_t last_update = 0;
-
-    auto& rmd = ResourceManager<LMDS>::getInstance();
 
     while (true)
     {
@@ -99,93 +109,36 @@ void lhc_status_task(void *parameter)
             continue;
         }
 
-        if (difftime(time(nullptr), last_update) > 30)
+        if (last_update == 0 || difftime(time(nullptr), last_update) > kPollSeconds)
         {
-            String output;
-            auto response = HttpUtils::httpGet(pageUrl, output, true);
-            if (response != 200)
+            LhcState fresh;
+            int code = 0;
+            if (fetchLhc(fresh, code))
             {
-                logPrintf("LHC", "HTTP GET failed, response: %d", response);
-                if (response == 401 || response == 403)
-                    logPrintf("LHC", "the CERN feed now requires a login - set enable_lhc=0");
-                task_heartbeat_grace(320000);                // planned 5-minute cooldown below
-                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // 5-minute cooldown before retrying
-                continue;
-            }      
-            
-            bool fields_updated = false;
-
-            StringViewStream svs(output);  
-            while (svs.available())
-            {
-                String line = svs.readStringUntil('\n');
-                line.trim();
-                if (not line.startsWith("<title>"))
-                    continue; //line doesn't contain what we want
-                
-                int colonIndex = line.indexOf(':');
-                if (colonIndex == -1)
-                    continue; //the line has no colon, skip it too
-
-                //extract title
-                String title = line.substring(0, colonIndex);
-                title.replace("<title>", "");
-
-                //if the title is one of the interesting fields, extract the value and save back to the map
-                if (interesting_fields.find(title.c_str()) != interesting_fields.end())
-                {
-                    String value = line.substring(colonIndex + 1);
-                    value.replace("</title>", "");
-                    removeHTMLTags(value);                    
-                    value.trim();
-                    interesting_fields[title.c_str()] = value.c_str();
-                    logPrintf("LHC", "%s = %s", title.c_str(), value.c_str());
-                    fields_updated = true;
-                }
-            }
-
-            if (fields_updated)
-            {
-                //create message to be displayed
-                char buffer[128];
-                snprintf_P(buffer, sizeof(buffer), PSTR("%s: %s @ %s"),
-                    interesting_fields["LhcMachineMode"].c_str(),
-                    interesting_fields["LhcBeamMode"].c_str(),
-                    interesting_fields["BeamEnergy"].c_str());
-                
-                modeAndEnergyMessage = buffer;
-                    
-                page1Message = interesting_fields["LhcPage1"];
+                if (fresh.status != state.status)
+                    logPrintf("LHC", "status: %s", fresh.status.c_str());
+                if (fresh.comment != state.comment)
+                    logPrintf("LHC", "comment: %s", fresh.comment.c_str());
+                state = fresh;
                 last_update = time(nullptr);
             }
-        }   //end of update block
-
-        if (not modeAndEnergyMessage.empty())
-        {
-            // Blocking acquires: cover the worst-case wait + scroll hold, then
-            // re-anchor the watchdog window once granted (clock-task pattern).
-            task_heartbeat_grace(90000);
-            if (auto display = rmd.acquire())
+            else
             {
-                task_heartbeat();
-                task_heartbeat_grace(30000);
-                scrollMessage(modeAndEnergyMessage, display, 20);
+                if (code != 200)
+                    logPrintf("LHC", "HTTP GET failed, response: %d", code);
+                task_heartbeat_grace(320000);                // planned 5-minute cooldown below
+                vTaskDelay(300 * 1000 / portTICK_PERIOD_MS); // keep the last good data meanwhile
+                continue;
             }
         }
+
+        if (!state.status.empty())
+            scrollOnce("LHC " + state.status);
 
         vTaskDelay(10000 / portTICK_PERIOD_MS);
 
-        if (not page1Message.empty())
-        {
-            task_heartbeat_grace(90000);
-            if (auto display = rmd.acquire())
-            {
-                task_heartbeat();
-                task_heartbeat_grace(30000);
-                logPrintf("LHC", "Page1: %s", page1Message.c_str());
-                scrollMessage(page1Message, display, 20);
-            }
-        }
+        if (!state.comment.empty())
+            scrollOnce(state.comment);
 
         vTaskDelay(20000 / portTICK_PERIOD_MS);
     }

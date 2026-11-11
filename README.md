@@ -217,7 +217,7 @@ Key config keys:
 | `resto_scroll_ms` | `20` | Menu scroll speed, ms per step (10–100, higher = slower); each dish gets a display slice sized to finish its scroll (max 30 s), so the clock no longer cuts a long one |
 | `resto_test_date` | — | `YYYY-MM-DD` override for menu fetches; also bypasses the display window (testing) |
 | `enable_weather` / `enable_mqtt` / `enable_resto` / `enable_sun` | `1` | Enable/disable individual tasks |
-| `enable_lhc` | `0` | LHC beam status; off because CERN's feed requires a login since late 2026 |
+| `enable_lhc` | `1` | LHC beam status and operator comment from CERN's public LHC Page 1 (webfd.app.cern.ch), polled every 60 s |
 | `log_display` | `0` | `1` also keeps the display tasks' per-frame lines (`DISP`) in `/log` and syslog; they always go to Serial |
 | `enable_life` | `0` | Game of Life idle animation (off by default) |
 
@@ -419,7 +419,7 @@ infoclock32/
 │   ├── wifi_handler.cpp          # /wifi scan + credentials
 │   ├── update_handler.cpp        # /update firmware upload
 │   ├── mqtt_task.cpp             # MQTT client
-│   ├── lhc_status_task.cpp       # LHC beam status polling
+│   ├── lhc_status_task.cpp       # LHC Page 1 status + comment (webfd)
 │   ├── weather_forecast_task.cpp # OpenWeatherMap forecast
 │   ├── sensor_task.cpp           # Sensor polling + RuntimeStore publishing
 │   ├── custom_message_task.cpp   # Scheduled messages

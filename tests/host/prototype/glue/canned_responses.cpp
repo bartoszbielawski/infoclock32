@@ -1,5 +1,5 @@
 // Canned responses for --offline mode: deterministic bodies keyed by URL
-// patterns, shaped exactly like the real APIs (OWM JSON, LHC RSS HTML,
+// patterns, shaped exactly like the real APIs (OWM JSON, LHC Page 1 JSON,
 // Novae menu JSON).
 #include <WiFiClient.h>
 
@@ -18,14 +18,16 @@ const char kOwmForecast[] =
         {"main":{"temp":18.7},"weather":[{"description":"light rain"}]}
     ]})";
 
-// The LHC parser reads <title>Key: Value</title> lines.
-const char kLhcRss[] =
-    "<rss><channel>\n"
-    "<title>LhcMachineMode: STABLE</title>\n"
-    "<title>LhcBeamMode: PROTON PHYSICS</title>\n"
-    "<title>BeamEnergy: 6800</title>\n"
-    "<title>LhcPage1: Beam 1: 6800 GeV, Beam 2: 6800 GeV</title>\n"
-    "</channel></rss>\n";
+// LHC Page 1 /history?channels=status,comments (webfd.app.cern.ch). Two
+// entries per channel: the task must use the last (latest) one.
+const char kLhcPage1[] =
+    R"({"channels":{"status":[
+        {"_id":1,"mode_disp":"SETUP","state_disp":"NO BEAM","energy_gev":0.0,"fill_number":9999.0},
+        {"_id":2,"mode_disp":"PROTON PHYSICS","state_disp":"STABLE BEAMS","energy_gev":6799.6,"fill_number":10000.0,"beam_stable":true}],
+      "comments":[
+        {"_id":1,"comment":"old comment"},
+        {"_id":3,"comment":"<center>  <br>Stable beams&nbsp;&#8211; fill 10000<br>Let&#8217;s go!<br></center>"}]},
+      "current_id":4677,"total_events":4})";
 
 // Novae API: array of menu items, midi service only. Long enough that a
 // real-world menu joined into one string outlasts the display's minimum-hold
@@ -48,8 +50,8 @@ int host_http_canned(const char* url, String& outBody)
         outBody = String(kOwmWeather);
     else if (strstr(url, "/data/2.5/forecast"))
         outBody = String(kOwmForecast);
-    else if (strstr(url, "rss.xml") || strstr(url, "alicedcs"))
-        outBody = String(kLhcRss);
+    else if (strstr(url, "webfd.app.cern.ch"))
+        outBody = String(kLhcPage1);
     else if (strstr(url, "mynovae"))
         outBody = String(kNovaeMenu);
     else

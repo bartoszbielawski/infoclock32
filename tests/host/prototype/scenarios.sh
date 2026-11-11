@@ -112,6 +112,9 @@ start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_
 # weather: the real task streams the canned OpenWeatherMap responses
 start weather "sensors=stub" "enable_weather=1"
 
+# lhc: the real task streams the canned LHC Page 1 JSON
+start lhc "sensors=stub" "enable_lhc=1"
+
 # menu: the real task parses the canned Novae menu through the JSON filter
 start resto "sensors=stub" "enable_resto=1" "resto_test_date=2026-01-01"
 
@@ -223,6 +226,9 @@ if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact aft
 expect_log weather "\[WTH\] Prototype: 21.4"
 expect_log weather "18.7.*light rain"
 if grep -aq "failed to parse temperature\|missing city name" "$WORK/weather.log"; then fail "weather: parse failed"; else ok "weather: both responses parsed"; fi
+expect_log lhc "\[LHC\] status: PROTON PHYSICS: STABLE BEAMS @ 6800 GeV"
+expect_log lhc "\[LHC\] comment: Stable beams - fill 10000 .* Let's go!"
+if grep -aq "old comment\|SETUP\|JSON error" "$WORK/lhc.log"; then fail "lhc: stale entry or JSON error"; else ok "lhc: latest entries parsed"; fi
 expect_log resto "R3: Roasted chicken with rosemary potatoes"
 expect_log resto "R3: Mushroom risotto with parmesan and grilled zucchini"
 if grep -aq "Evening dish" "$WORK/resto.log"; then fail "resto: non-midi dish shown"; else ok "resto: only midi dishes"; fi
