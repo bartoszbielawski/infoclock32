@@ -625,6 +625,7 @@ static bool metrics_name_reserved(const std::string& name)
 {
     static const char* kReserved[] = {
         "build_info", "uptime_seconds", "heap_free_bytes", "heap_min_free_bytes",
+        "heap_largest_block_bytes",
         "wifi_rssi_dbm", "mqtt_connected", "display_drops_total",
         "display_force_handovers_total", "display_queue_depth"
     };
@@ -641,7 +642,7 @@ void handle_metrics()
     out.reserve(1536);
     // The fixed system block below is ~1.2 KB of HELP/TYPE text; a 192-byte
     // buffer silently cut /metrics off after the first few lines.
-    char sys[1536];
+    char sys[2048];
     char line[192];
 
     snprintf(sys, sizeof(sys),
@@ -657,6 +658,9 @@ void handle_metrics()
              "# HELP infoclock_heap_min_free_bytes Lowest free heap seen since boot.\n"
              "# TYPE infoclock_heap_min_free_bytes gauge\n"
              "infoclock_heap_min_free_bytes %u\n"
+             "# HELP infoclock_heap_largest_block_bytes Largest free heap block (a TLS handshake needs one big block).\n"
+             "# TYPE infoclock_heap_largest_block_bytes gauge\n"
+             "infoclock_heap_largest_block_bytes %u\n"
              "# HELP infoclock_wifi_rssi_dbm WiFi signal strength.\n"
              "# TYPE infoclock_wifi_rssi_dbm gauge\n"
              "infoclock_wifi_rssi_dbm %d\n"
@@ -674,6 +678,7 @@ void handle_metrics()
              (unsigned long long)(esp_timer_get_time() / 1000000ULL),
              (unsigned)esp_get_free_heap_size(),
              (unsigned)esp_get_minimum_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
              WiFi.RSSI(),
              (unsigned long)rmd.getDropCount(),
              (unsigned long)rmd.getForceHandoverCount(),

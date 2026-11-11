@@ -23,6 +23,7 @@ uint32_t esp_random() { return rng(); }
 
 uint32_t esp_get_free_heap_size() { return 180000; }
 uint32_t esp_get_minimum_free_heap_size() { return 120000; }
+size_t heap_caps_get_largest_free_block(uint32_t) { return 110000; }
 
 int64_t esp_timer_get_time()
 {

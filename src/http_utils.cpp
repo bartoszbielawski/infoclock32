@@ -10,6 +10,8 @@
 #include <vector>
 #include <utility>
 #include <functional>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <http_utils.hpp>
 #if __has_include(<WiFiClientSecure.h>)
   #include <WiFiClientSecure.h>
@@ -28,6 +30,26 @@
 
 namespace HttpUtils {
 
+// One request at a time, device-wide. A TLS handshake needs ~40 KB of heap
+// in one go; weather, LHC, menu and push fetches starting together ran the
+// heap down to a few KB and failed with "SSL - Memory allocation failed".
+// Requests take seconds, so a waiting task just starts a little later.
+static constexpr TickType_t kRequestWaitTicks = 45000 / portTICK_PERIOD_MS;
+
+static SemaphoreHandle_t requestMutex()
+{
+    static SemaphoreHandle_t m = xSemaphoreCreateMutex();  // thread-safe static init
+    return m;
+}
+
+namespace {
+struct RequestLock {
+    bool held;
+    RequestLock() : held(xSemaphoreTake(requestMutex(), kRequestWaitTicks) == pdTRUE) {}
+    ~RequestLock() { if (held) xSemaphoreGive(requestMutex()); }
+};
+}
+
 // One request path for both body modes: `outBody` (buffered) or `onBody`
 // (streamed). The clients live here so they outlive the body handler.
 static int doGet(const String &url, bool insecure,
@@ -36,6 +58,15 @@ static int doGet(const String &url, bool insecure,
     if (outBody) *outBody = String();
 
     if (url.length() == 0) {
+        return -1;
+    }
+
+    // Declared before the clients so it is released after they free their
+    // TLS buffers (destructors run in reverse order).
+    RequestLock lock;
+    if (!lock.held) {
+        logPrintf("HTTP", "GET %s skipped: another request held the line for 45 s",
+                  redactUrl(url.c_str()).c_str());
         return -1;
     }
 
@@ -61,6 +92,7 @@ static int doGet(const String &url, bool insecure,
 #endif
         if (insecure)
             secureClient.setInsecure();
+        secureClient.setHandshakeTimeout(15);   // seconds; the default is 120
         ok = http.begin(secureClient, url);
 #else
         logPrintf("HTTP", "HTTPS not supported on this build (no WiFiClientSecure)");
@@ -74,6 +106,9 @@ static int doGet(const String &url, bool insecure,
         logPrintf("HTTP", "http.begin() failed for %s", redactUrl(url.c_str()).c_str());
         return -1;
     }
+
+    http.setConnectTimeout(8000);
+    http.setTimeout(10000);
 
     for (const auto &h : headers)
         http.addHeader(h.first, h.second);
@@ -98,7 +133,17 @@ static int doGet(const String &url, bool insecure,
         }
         if (outBody) *outBody = body;
     } else {
-        logPrintf("HTTP", "GET %s -> err %d", redactUrl(url.c_str()).c_str(), httpCode);
+        // Say why: a TLS handshake needs one large heap block, and mbedTLS
+        // reports its own reason (DNS failures show up as a plain -1 there).
+        char why[96] = "";
+#ifdef HAS_WIFI_CLIENT_SECURE
+        if (url.startsWith("https") && secureClient.lastError(why, sizeof(why)) == 0)
+            why[0] = '\0';
+#endif
+        logPrintf("HTTP", "GET %s -> err %d (%s; heap %u free, largest block %u)",
+                  redactUrl(url.c_str()).c_str(), httpCode, why[0] ? why : "no TLS error",
+                  (unsigned)esp_get_free_heap_size(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     }
 
     http.end();

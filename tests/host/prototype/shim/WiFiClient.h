@@ -35,6 +35,8 @@ public:
     void setInsecure() {}
     void setCACertBundle(const uint8_t*) {}   // device parity; curl does TLS on the host
     void setCACert(const char*) {}
+    void setHandshakeTimeout(unsigned long) {}
+    int lastError(char* buf, size_t size) { if (size) buf[0] = 0; return 0; }
 };
 
 // ── HTTP transport hook ──────────────────────────────────────────────────────
@@ -66,6 +68,8 @@ public:
     bool begin(Client&, const String& url) { url_ = url; return true; }
     void addHeader(const String&, const String&) {}
     void useHTTP10(bool) {}
+    void setConnectTimeout(int32_t) {}
+    void setTimeout(uint16_t) {}
     int GET();
     String getString() const { return body_; }
     int getSize() const { return (int)body_.length(); }
