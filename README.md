@@ -281,6 +281,25 @@ Placeholders are expanded at display time: `{}` inserts the countdown day count,
 
 Push a one-off message via the `/` dashboard, `/push`, MQTT, or `/actions`.
 
+## Timed status ("ON AIR")
+
+One tap replaces the whole rotation (clock, weather, menus, sensors, messages) with fixed text, then returns to normal by itself. Long text scrolls instead of being truncated. Nothing is saved: a reboot or WiFi loss goes back to the normal rotation, and anything the other tasks prepared while the status was up is dropped, not shown afterwards.
+
+- **Phone page:** open `http://<hostname>.local/s` (add it to the home screen or link a QR code). One big button per preset, a duration choice (preset default, 30 min, 1 h, 2 h, until end of hour), and Cancel.
+- **HTTP:** `/status/set?preset=1` or `/status/set?text=ON%20AIR&minutes=60&cue=blink`, `/status/cancel`, `/status/info`. `minutes` is 1–720 or `eoh`. GET or POST. With `push_token` set, add `&token=<value>`.
+- **MQTT:** `…/set_status` with `1` or `1,30` (preset, optional minutes) or `text;minutes;cue`; `…/clear_status` cancels.
+
+There is no authentication beyond the optional `push_token`, and the traffic is plain HTTP: anyone who can reach the device can set or cancel a status. Set `push_token` if that matters.
+
+Presets are config keys, `N` = 1…8; with none defined the built-ins are `ON AIR` (blinking border), `IN MEETING` (border) and `DO NOT DISTURB` (scrolls):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `status_<N>_text` | — | Text shown (ASCII, max 64 chars); a slot without text is unused |
+| `status_<N>_cue` | `none` | `none`, `border`, `blink` (blinking border) or `invert` (whole frame inverts each second) |
+| `status_<N>_minutes` | `60` | Duration in minutes (1–720) or `eoh` (until the end of the hour; needs a synced clock) |
+| `status_<N>_time` | `0` | Show the time for 3 s every N minutes during the status (0 = never) |
+
 ## Restaurant menu (CERN Novae)
 
 Fetches lunch (`midi`) menus from api.mynovae.ch for the configured restaurants and scrolls them between `resto_start_hour` and `resto_end_hour` (the window wraps midnight). Restaurant numbers map to Novae salepoints: `1` = R1, `2` = R2, `3` = R3. Dishes are deduplicated per restaurant and shown in the configured `language` (`fr` falls back to `en`; there is no Polish menu). Each dish takes the display on its own, so a long menu is never truncated by the clock's minimum-hold slice, and consecutive restaurants are separated by a pause so other tasks can display in between. Menus refresh hourly. `novae_codes` identifies your CERN group to the API (default `CER103`).
@@ -322,6 +341,8 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 | `…/config` | `key=value` | Set DataStore key (keys containing `password`/`secret` are blocked) |
 | `…/reboot` | — | Restart device |
 | `…/flash` | `full` (default)\|`neg` | Attention strobe for ~2.4 s (8 blinks): `full` takes over the display strobing the whole matrix lit↔blank; `neg` strobes the current frame against its pixel-inverted negative. Both force the display on for the strobe, then restore the previous frame and the power state. Works at any brightness |
+| `…/set_status` | `1`, `1,30`, or `text;minutes;cue` | Start a timed status (preset slot with optional minutes/`eoh`, or free text), see [Timed status](#timed-status-on-air) |
+| `…/clear_status` | — | Cancel the timed status |
 | `…/request` | key name | Reply to `…/publish/<name>`; looks up DeviceStore (system values like `ip`, `heap`, `uptime`, `ssid`, `rssi`, `mac`, `version`, …), then RuntimeStore (sensor readings, `weather_*`, `wdt_culprit`, `display_brightness`), then DataStore config keys. Keys are case-sensitive; any key containing `assword` is refused |
 | `…/status` | — | Device publishes heartbeat JSON (`ip`, `heap`, `uptime`, `ssid`) here every 60 s |
 

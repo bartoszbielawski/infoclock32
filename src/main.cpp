@@ -28,6 +28,7 @@
 #include <resto_menu_task.h>
 #include <ota_task.h>
 #include <screen_wipe_task.h>
+#include <status_task.h>
 #include <task_entry_points.hpp>
 #include <task_registry.hpp>
 #include <display_strings.hpp>
@@ -165,6 +166,9 @@ void setup() {
 
   // Always-on local display task
   xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
+
+  // Timed status (ON AIR ...): idle until triggered over web/MQTT
+  xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
 
   // Optional tasks controlled via config flags
   if (dataStore.get_value<int>("enable_weather", 1))

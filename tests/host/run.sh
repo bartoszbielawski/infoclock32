@@ -40,6 +40,7 @@ c++ $CXXFLAGS display_strings_check.cpp -o display_strings_check
 c++ $CXXFLAGS serial_cmd_check.cpp      -o serial_cmd_check
 c++ $CXXFLAGS time_valid_check.cpp      -o time_valid_check
 c++ $CXXFLAGS scroll_timing_check.cpp   -o scroll_timing_check
+c++ $CXXFLAGS status_state_check.cpp    -o status_state_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
@@ -87,6 +88,7 @@ echo "config secrets guard passed"
 ./serial_cmd_check
 ./time_valid_check
 ./scroll_timing_check
+./status_state_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

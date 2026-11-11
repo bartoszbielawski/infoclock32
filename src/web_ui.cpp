@@ -137,6 +137,7 @@ void sendPageNav(const char* active)
         {"/edit",     "Config"},
         {"/actions",  "Actions"},
         {"/messages", "Messages"},
+        {"/s",        "Presence"},
         {"/wifi",     "WiFi"},
         {"/update",   "Update"},
     };

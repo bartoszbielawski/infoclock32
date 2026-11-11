@@ -12,6 +12,7 @@
 #include <uptime_utils.hpp>
 #include <logger.hpp>
 #include <night_mode_task.h>
+#include <status_task.h>
 #include <mqtt_discovery.hpp>
 #include <mqtt_config.hpp>
 #include <version.hpp>
@@ -176,6 +177,42 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
         p.toLowerCase();
         pendingFlashFull = !(p == "neg" || p == "negative");
         pendingFlash = true;
+    }
+    else if (topicStr.endsWith("/set_status"))
+    {
+        // "<preset>" or "<preset>,<minutes|eoh>" starts a configured preset;
+        // anything else is "<text>[;<minutes|eoh>[;<cue>]]". (Not "/status":
+        // that is the device's own heartbeat topic, which the wildcard
+        // subscription delivers back to us.)
+        std::string p(buf);
+        size_t semi = p.find(';');
+        size_t comma = p.find(',');
+        bool presetForm = !p.empty() && p.find_first_not_of("0123456789,eoh ") == std::string::npos &&
+                          isdigit((unsigned char)p[0]);
+        StatusError e;
+        if (presetForm)
+        {
+            std::string dur = comma == std::string::npos ? "" : p.substr(comma + 1);
+            while (!dur.empty() && dur[0] == ' ') dur.erase(0, 1);
+            e = status_request_preset(atoi(p.c_str()), dur);
+        }
+        else
+        {
+            std::string text = p.substr(0, semi), dur, cue;
+            if (semi != std::string::npos)
+            {
+                size_t semi2 = p.find(';', semi + 1);
+                dur = p.substr(semi + 1, semi2 == std::string::npos ? std::string::npos : semi2 - semi - 1);
+                if (semi2 != std::string::npos) cue = p.substr(semi2 + 1);
+            }
+            e = status_request_custom(text, cue, dur);
+        }
+        logPrintf("MQT", "set_status: %s", status_error_text(e));
+    }
+    else if (topicStr.endsWith("/clear_status"))
+    {
+        status_cancel();
+        logPrintf("MQT", "status cancelled");
     }
     else if (topicStr.endsWith("/looped"))
     {
@@ -352,7 +389,10 @@ void mqtt_task(void *parameter)
 
         // Push messages next — drain the whole queue
         char *pushMsg = nullptr;
-        while (xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
+        // (Not during a timed status: each attempt would block this task for
+        // 10 s waiting for a display the status owns, delaying a cancel. The
+        // messages stay queued.)
+        while (!status_info().active && xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
         {
             if (auto display = rmd.acquire(pdMS_TO_TICKS(10000), true))
             {
@@ -383,6 +423,11 @@ void mqtt_task(void *parameter)
         // Both force the display on for the strobe, restore the frame and
         // the configured power state afterwards, and work at any brightness
         // (they toggle enable/fill, not intensity).
+        if (pendingFlash && status_info().active)
+        {
+            pendingFlash = false;
+            logPrintf("MQT", "flash skipped - status active");
+        }
         if (pendingFlash)
         {
             pendingFlash = false;
@@ -444,7 +489,7 @@ void mqtt_task(void *parameter)
         }
 
         // Display looped message
-        if (!loopedMessage.empty())
+        if (!loopedMessage.empty() && !status_info().active)
         {
             // Wait long enough to outlast a clock hold (7-9 s, cut short once
             // anyone is queued); a shorter timeout almost never got a turn.

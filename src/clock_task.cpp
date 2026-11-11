@@ -54,7 +54,8 @@ void displayClock(void *parameter)
       task_heartbeat_grace(30000);
       // Show day name and date for 2 seconds (skipped until SNTP has synced:
       // the 1970 epoch date would be shown as if it were real)
-      if (wall_time_valid())
+      // A status trigger waiting for the display (urgent) skips the date.
+      if (wall_time_valid() && !rmd.urgentRequested())
       {
         time_t now = time(nullptr);
         struct tm timeinfoBuf;
@@ -87,7 +88,7 @@ void displayClock(void *parameter)
       static constexpr int kIdleFrames = 2;
       for (int i = 0; i < 5 + kIdleFrames; i++)
       {
-        if (i >= 5 && displayWanted())
+        if (rmd.urgentRequested() || (i >= 5 && displayWanted()))
           break;
 
         display->clear();

@@ -25,6 +25,10 @@
 void handle_push();
 void handle_actions();
 void handle_messages();
+void handle_status_page();
+void handle_status_set();
+void handle_status_cancel();
+void handle_status_info();
 void handle_update_get();
 void handle_update_post();
 void handle_update_upload();
@@ -793,6 +797,10 @@ void web_server_task(void* pvParameters)
 #endif
     server.on("/actions",            handle_actions);
     server.on("/messages",           handle_messages);
+    server.on("/s",                  handle_status_page);
+    server.on("/status/set",         handle_status_set);
+    server.on("/status/cancel",      handle_status_cancel);
+    server.on("/status/info", HTTP_GET, handle_status_info);
     server.on("/update",  HTTP_GET,  handle_update_get);
     server.on("/update",  HTTP_POST, handle_update_post, handle_update_upload);
     server.on("/wifi",    HTTP_GET,  handle_wifi_get);

@@ -122,6 +122,7 @@ int main(int argc, char** argv)
         sensors->push_back(new StubSensor());
     xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr);
     xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
+    xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
     xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
     xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
 
