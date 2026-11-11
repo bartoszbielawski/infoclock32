@@ -27,6 +27,8 @@ int main()
     CHECK(redactUrl("http://h/path") == "http://h/path", "no query untouched");
     CHECK(redactUrl("http://h/p?a=1&b=2") == "http://h/p?a=1&b=2", "plain query untouched");
     CHECK(redactUrl("http://h/p?appid=") == "http://h/p?appid=***", "empty secret still masked");
+    CHECK(urlWithoutQuery("http://h/p?lat=1&lon=2") == "http://h/p", "query stripped");
+    CHECK(urlWithoutQuery("http://h/p") == "http://h/p", "no query kept");
 
     if (failures) { printf("%d config util check(s) FAILED\n", failures); return 1; }
     printf("all config util checks passed\n");

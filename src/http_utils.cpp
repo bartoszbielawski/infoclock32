@@ -203,7 +203,7 @@ static int doGet(const String &url, bool insecure,
         // Heap profile of the fetch: what the connection costs vs. the body.
         logPrintf("HTTP", "GET %s: %u B in %lu ms; heap before %u, after headers %u, "
                   "min while reading %u (largest %u)",
-                  redactUrl(url.c_str()).c_str(), (unsigned)counted.count,
+                  urlWithoutQuery(url.c_str()).c_str(), (unsigned)counted.count,
                   (unsigned long)(millis() - t0), (unsigned)heapBefore, (unsigned)heapHeaders,
                   (unsigned)counted.minFree, (unsigned)counted.minLargest);
     } else if (httpCode > 0) {

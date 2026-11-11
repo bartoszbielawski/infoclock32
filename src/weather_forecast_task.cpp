@@ -21,6 +21,8 @@
 #include <LMDS.hpp>
 #include <task_registry.hpp>
 #include <display_strings.hpp>
+#include <weather_wmo.hpp>
+#include <cmath>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
 static const char OW_WEATHER_API_CURRENT[]  PROGMEM = "https://api.openweathermap.org/data/2.5/weather?id=%s&appid=%s&units=metric&lang=%s";
@@ -62,6 +64,110 @@ static const std::set<std::string> forecastKeys = {
     "/root/list/2/weather/0/description",
     "/root/city/name"
 };
+
+// ── Open-Meteo (no API key, plain HTTP) ──────────────────────────────────────
+// Free and keyless, and served over plain HTTP, so a fetch costs a couple of
+// KB of heap instead of a ~55 KB TLS session. Location: weather_lat/lon, or
+// the sun_lat/lon the sunrise task already uses.
+
+static const char OPEN_METEO_URL[] PROGMEM =
+    "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+    "&current=temperature_2m,weather_code,is_day"
+    "&hourly=temperature_2m,weather_code&forecast_hours=7&timezone=auto";
+
+// hourly[0] is the current hour, so [6] is ~6 h ahead (like OWM's slot 2).
+static const std::set<std::string> openMeteoKeys = {
+    "/root/current/temperature_2m",
+    "/root/current/weather_code",
+    "/root/current/is_day",
+    "/root/hourly/temperature_2m/6",
+    "/root/hourly/weather_code/6",
+};
+
+static bool weather_location(float& lat, float& lon)
+{
+    auto& ds = DataStore::getInstance();
+    lat = ds.get_value<float>("weather_lat", NAN);
+    lon = ds.get_value<float>("weather_lon", NAN);
+    if (std::isnan(lat) || std::isnan(lon)) {
+        lat = ds.get_value<float>("sun_lat", NAN);
+        lon = ds.get_value<float>("sun_lon", NAN);
+    }
+    return !std::isnan(lat) && !std::isnan(lon) &&
+           lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+enum class WeatherProvider { None, Owm, OpenMeteo };
+
+// weather_provider: auto (default: OWM when its key and city are set,
+// otherwise Open-Meteo when a location is set), owm, open-meteo.
+static WeatherProvider weather_provider()
+{
+    auto& ds = DataStore::getInstance();
+    const std::string p = ds.get_value("weather_provider", "auto");
+    const bool owmReady = !ds.get_value("ow_api_key", "").empty() &&
+                          !ds.get_value("ow_city_id", "").empty();
+    float lat, lon;
+    const bool omReady = weather_location(lat, lon);
+    if (p == "owm")        return owmReady ? WeatherProvider::Owm : WeatherProvider::None;
+    if (p == "open-meteo") return omReady ? WeatherProvider::OpenMeteo : WeatherProvider::None;
+    if (owmReady) return WeatherProvider::Owm;
+    if (omReady)  return WeatherProvider::OpenMeteo;
+    return WeatherProvider::None;
+}
+
+bool weather_configured() { return weather_provider() != WeatherProvider::None; }
+
+static std::string readWeatherFromOpenMeteo(int& iconIndex)
+{
+    auto& ds = DataStore::getInstance();
+    float lat, lon;
+    if (!weather_location(lat, lon)) {
+        logPrintf("WTH", "no location: set weather_lat/weather_lon (or sun_lat/sun_lon)");
+        return std::string();
+    }
+    char url[256];
+    snprintf_P(url, sizeof(url), OPEN_METEO_URL, lat, lon);
+
+    std::map<std::string, std::string> v;
+    int response = HttpUtils::httpGetStream(url, [&](Stream& body) {
+        v = parseJsonStreamWithPredicate(body, openMeteoKeys);
+    });
+    if (response != 200) {
+        logPrintf("WTH", "Open-Meteo HTTP GET failed: %d", response);
+        return std::string();
+    }
+
+    const float nowT  = parse_value(v["/root/current/temperature_2m"], NAN);
+    const float laterT = parse_value(v["/root/hourly/temperature_2m/6"], NAN);
+    const int nowCode  = parse_value(v["/root/current/weather_code"], -1);
+    const int laterCode = parse_value(v["/root/hourly/weather_code/6"], -1);
+    if (std::isnan(nowT) || std::isnan(laterT) || nowCode < 0 || laterCode < 0) {
+        logPrintf("WTH", "Open-Meteo response missing fields");
+        return std::string();
+    }
+    const bool night = parse_value(v["/root/current/is_day"], 1) == 0;
+    const Lang lang = parse_lang(ds.get_value("language", "en"));
+    const int owmId = wmo_to_owm(nowCode);
+    const std::string description = wmo_description(laterCode, lang);
+    iconIndex = weatherIconIndex(owmId, night);
+
+    RuntimeStore::getInstance().set("weather_id", std::to_string(owmId));
+    RuntimeStore::getInstance().set("weather_desc", description);
+    char t[16];
+    snprintf(t, sizeof(t), "%.1f", nowT);
+    RuntimeStore::getInstance().set("weather_temp", t);
+
+    // Same layout as the OWM message; the label is optional (Open-Meteo has
+    // no place names).
+    const std::string name = ascii_fold(ds.get_value("weather_name", "").c_str());
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s%s%.1f\xF7" "C (%.1f\xF7" "C, %s)",
+             name.c_str(), name.empty() ? "" : ": ", nowT, laterT, description.c_str());
+    logPrintf("WTH", "Open-Meteo: %.1f C now (code %d), %.1f C in 6 h, %s",
+              nowT, nowCode, laterT, description.c_str());
+    return msg;
+}
 
 // Returns the display message, or an empty string on failure.
 // iconIndex (out): index into kWeatherIcons for the current condition,
@@ -179,7 +285,10 @@ void open_weather_map_task(void *parameter)
             uint32_t intervalMs = (uint32_t)max(10, min(1440,
                 DataStore::getInstance().get_value<int>("ow_interval_min", 30))) * (uint32_t)60000;
 
-            auto newWeather = readWeatherFromOWM(iconIndex);
+            const WeatherProvider provider = weather_provider();
+            auto newWeather = provider == WeatherProvider::OpenMeteo ? readWeatherFromOpenMeteo(iconIndex)
+                            : provider == WeatherProvider::Owm       ? readWeatherFromOWM(iconIndex)
+                            : std::string();
             if (not newWeather.empty())
             {
                 messageToBeDisplayed = newWeather;

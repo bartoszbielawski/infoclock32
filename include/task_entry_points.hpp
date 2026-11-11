@@ -15,6 +15,8 @@
 void displayClock(void *parameter);
 const char* localizedDayName(int wday);
 void open_weather_map_task(void *parameter);
+// True when a weather provider has what it needs (OWM key+city, or a location for Open-Meteo).
+bool weather_configured();
 void lhc_status_task(void *parameter);
 void mqtt_task(void *parameter);
 void web_server_task(void *parameter);

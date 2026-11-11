@@ -32,6 +32,14 @@ inline bool isValidConfigKey(const std::string& key)
     return true;
 }
 
+// The URL without its query string: short enough for a one-line log entry
+// and free of parameters (keys, coordinates) for routine success logs.
+inline std::string urlWithoutQuery(const std::string& url)
+{
+    size_t q = url.find('?');
+    return q == std::string::npos ? url : url.substr(0, q);
+}
+
 // Mask the value of secret query parameters (appid=, api_key=, token=, ...)
 // so request URLs can be logged without leaking credentials.
 inline std::string redactUrl(const std::string& url)

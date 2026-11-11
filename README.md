@@ -28,7 +28,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Feature | Config key(s) |
 |---------|--------------|
 | Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`/`it`/`es`/`pt`/`de`), `timezone`, `clock_style` |
-| Weather forecast (OpenWeatherMap) | `enable_weather`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc` placeholders) |
+| Weather forecast (Open-Meteo, no key; or OpenWeatherMap) | `enable_weather`, `weather_provider`, `sun_lat`/`sun_lon` or `weather_lat`/`weather_lon`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc`/`weather_temp` placeholders) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Sensors (multiple drivers) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
@@ -185,7 +185,10 @@ Key config keys:
 | `web_password` | — | HTTP Basic Auth password (blank = open) |
 | `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
 | `syslog_server` | — | UDP syslog destination IP (port 514) |
-| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials; the weather task only starts (at boot) when both are set |
+| `weather_provider` | `auto` | `auto` (OpenWeatherMap when its key and city are set, otherwise Open-Meteo when a location is set), `owm`, or `open-meteo`. The weather task only starts at boot when the chosen provider is configured |
+| `weather_lat` / `weather_lon` | `sun_lat` / `sun_lon` | Location for Open-Meteo (free, no API key, plain HTTP so no TLS heap cost); falls back to the sunrise location |
+| `weather_name` | *(empty)* | Optional label in front of the Open-Meteo scroll, e.g. `Geneva` |
+| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |

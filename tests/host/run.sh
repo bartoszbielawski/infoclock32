@@ -9,6 +9,7 @@ c++ $CXXFLAGS custom_message_check.cpp -o custom_message_check
 c++ $CXXFLAGS sun_times_check.cpp     -o sun_times_check
 c++ $CXXFLAGS life_step_check.cpp     -o life_step_check
 c++ $CXXFLAGS weather_icons_check.cpp -o weather_icons_check
+c++ $CXXFLAGS weather_wmo_check.cpp   -o weather_wmo_check
 c++ $CXXFLAGS pressure_trend_check.cpp -o pressure_trend_check
 c++ $CXXFLAGS sensor_display_check.cpp    -o sensor_display_check
 c++ $CXXFLAGS sensor_factory_check.cpp  -o sensor_factory_check
@@ -59,6 +60,7 @@ echo "config secrets guard passed"
 ./display_strings_check
 ./life_step_check
 ./weather_icons_check
+./weather_wmo_check
 ./pressure_trend_check
 ./sensor_display_check
 ./sensor_factory_check

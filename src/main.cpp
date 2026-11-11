@@ -173,12 +173,13 @@ void setup() {
   xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
 
   // Optional tasks controlled via config flags
-  // Without an API key and city the task can never fetch anything: don't
-  // spend its 8 KB stack on it (setting both takes effect after a reboot).
+  // Without a usable provider (OWM key + city, or a location for Open-Meteo)
+  // the task can never fetch anything: don't spend its 8 KB stack on it
+  // (configuring one takes effect after a reboot).
   if (!dataStore.get_value<int>("enable_weather", 1))
     logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
-  else if (dataStore.get_value("ow_api_key", "").empty() || dataStore.get_value("ow_city_id", "").empty())
-    logPrintf("SYS", "WeatherTask not started: set ow_api_key and ow_city_id, then reboot");
+  else if (!weather_configured())
+    logPrintf("SYS", "WeatherTask not started: set sun_lat/sun_lon (Open-Meteo) or ow_api_key + ow_city_id, then reboot");
   else
     xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
 
