@@ -165,7 +165,15 @@ static void sendTasksSection()
     char buf[128];
     for (int i = 0; i < n; ++i) {
         const RegisteredTask& t = reg.get(i);
-        UBaseType_t watermark = uxTaskGetStackHighWaterMark(t.handle);
+        // An exited task's stack is freed: there is no watermark to read.
+        TaskHandle_t handle = t.handle;
+        if (t.exited || !handle) {
+            snprintf(buf, sizeof(buf),
+                "<tr><td class='label mono'>%s</td><td>exited</td></tr>\n", t.name);
+            server.sendContent(buf);
+            continue;
+        }
+        UBaseType_t watermark = uxTaskGetStackHighWaterMark(handle);
 
         uint32_t freeBytes = (uint32_t)watermark * sizeof(StackType_t);
         snprintf(buf, sizeof(buf),

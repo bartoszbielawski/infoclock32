@@ -185,7 +185,7 @@ Key config keys:
 | `web_password` | — | HTTP Basic Auth password (blank = open) |
 | `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
 | `syslog_server` | — | UDP syslog destination IP (port 514) |
-| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
+| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials; the weather task only starts (at boot) when both are set |
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |

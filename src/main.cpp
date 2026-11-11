@@ -154,6 +154,8 @@ void setup() {
       snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: wdt (%s)", wdtCulprit);
     else
       snprintf(bootMsg, sizeof(bootMsg), APP_VERSION " | rst: %s", resetReasonStr[reasonIdx]);
+    // Also in /log: the matrix line is gone once it has scrolled past.
+    logPrintf("SYS", "reset reason: %s", resetReasonStr[reasonIdx]);
     scrollMessage(bootMsg, display, 30);
     // In setup mode the AP instructions repeat from hardware_init's setup-hint task.
     if (!wifi_is_ap_mode() && dataStore.get_value<int>("show_ip_on_boot", 1) && WiFi.status() == WL_CONNECTED) {
@@ -171,10 +173,14 @@ void setup() {
   xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
 
   // Optional tasks controlled via config flags
-  if (dataStore.get_value<int>("enable_weather", 1))
-    xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
-  else
+  // Without an API key and city the task can never fetch anything: don't
+  // spend its 8 KB stack on it (setting both takes effect after a reboot).
+  if (!dataStore.get_value<int>("enable_weather", 1))
     logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
+  else if (dataStore.get_value("ow_api_key", "").empty() || dataStore.get_value("ow_city_id", "").empty())
+    logPrintf("SYS", "WeatherTask not started: set ow_api_key and ow_city_id, then reboot");
+  else
+    xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
 
   if (dataStore.get_value<int>("enable_lhc", 1))
     xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);

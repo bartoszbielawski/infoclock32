@@ -3,6 +3,7 @@
 #include <WiFiManager.h>
 #include <esp_wifi.h>
 #include <cstring>
+#include <atomic>
 #include <wifi_cache.h>
 #include <wifi_policy.hpp>
 #include <ESPmDNS.h>
@@ -59,12 +60,31 @@ static void apply_tx_power()
 // boot portal blocks setup() and while the fallback AP is up. Unprovisioned
 // devices repeat it back to back; a device whose saved network is merely
 // unreachable shows it every 30 s so the clock stays readable in between.
+//
+// The task only exists while the device is offline: enter_ap_mode() starts
+// it and it deletes itself once connected, returning its 4 KB stack to the
+// heap for the normal (online) case.
+static std::atomic<bool> s_hint_running{false};
+
 static void setup_hint_task(void* /*pv*/)
 {
     registerTask("SetupHint", 4096, 120000);
     for (;;)
     {
         task_heartbeat();
+        if (!s_ap_mode)
+        {
+            // Drop the flag before the final check: an enter_ap_mode() racing
+            // with this exit either sees the flag down and starts a new task,
+            // or this task sees s_ap_mode back up and keeps going.
+            s_hint_running = false;
+            if (!s_ap_mode)
+            {
+                task_mark_exited();
+                vTaskDelete(nullptr);
+            }
+            s_hint_running = true;
+        }
         if (s_ap_mode)
         {
             const DisplayStrings& tr = display_strings(
@@ -81,6 +101,21 @@ static void setup_hint_task(void* /*pv*/)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
+    }
+}
+
+// Mark the device offline and make sure the setup hint is scrolling. Cheap to
+// call repeatedly (the monitor does, every pass while offline).
+static void enter_ap_mode()
+{
+    s_ap_mode = true;
+    bool expected = false;
+    if (s_hint_running.compare_exchange_strong(expected, true) &&
+        xTaskCreate(setup_hint_task, "SetupHint", 4096, nullptr, 1, nullptr) != pdPASS)
+    {
+        s_hint_running = false;
+        logPrintf("WIFI", "setup hint task could not start (heap %u)",
+                  (unsigned)esp_get_free_heap_size());
     }
 }
 
@@ -141,7 +176,7 @@ static void wifi_monitor_task(void* /*pv*/)
             offlineSinceMs = millis();
         }
         wasConnected = false;
-        s_ap_mode = true;
+        enter_ap_mode();
 
         if (!apUp && apAfterS > 0 && millis() - offlineSinceMs >= (uint32_t)apAfterS * 1000)
         {
@@ -208,8 +243,7 @@ void hardware_init()
 
     // The portal blocks this function; the hint task keeps the instructions
     // scrolling meanwhile (the display is initialised before hardware_init).
-    wm.setAPCallback([](WiFiManager*) { s_ap_mode = true; });
-    xTaskCreate(setup_hint_task, "SetupHint", 4096, nullptr, 1, nullptr);
+    wm.setAPCallback([](WiFiManager*) { enter_ap_mode(); });
 
     bool connected = false;
     WiFi.mode(WIFI_STA);
@@ -287,7 +321,7 @@ void hardware_init()
     }
     else
     {
-        s_ap_mode = true;
+        enter_ap_mode();
         logPrintf("WIFI", "offline - retrying every 30 s; fallback AP %s after wifi_ap_after_s",
                   apName.c_str());
     }

@@ -44,6 +44,7 @@ static constexpr size_t kNumRestaurants = sizeof(kRestaurants) / sizeof(kRestaur
 static const int kDefaultStartHour  = 9;
 static const int kDefaultEndHour    = 14;
 static const uint32_t kFetchIntervalMs = 60UL * 60UL * 1000UL; // 1 hour
+static const uint32_t kBootSettleMs    = 60UL * 1000UL;        // first fetch >= 1 min after boot
 // Milliseconds per scroll step (config key resto_scroll_ms). 10 ms suited the
 // old single long menu line; with one hold per dish 20 ms reads comfortably
 // and each dish gets a display slice sized to finish its scroll
@@ -218,6 +219,15 @@ void resto_menu_task(void* pvParameters) {
 
         if (WiFi.status() != WL_CONNECTED) {
             vTaskDelay(30000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        // Let boot settle first: a ~55 KB TLS fetch overlapping MQTT,
+        // discovery and sensor start-up stalled mid-body and drained the heap
+        // to ~10 KB, while the same fetch a few minutes later took 150 ms.
+        if (millis() < kBootSettleMs) {
+            task_heartbeat_grace(kBootSettleMs + 10000);
+            vTaskDelay((kBootSettleMs - millis()) / portTICK_PERIOD_MS + 1);
             continue;
         }
 

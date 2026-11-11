@@ -48,6 +48,64 @@ struct RequestLock {
     RequestLock() : held(xSemaphoreTake(requestMutex(), kRequestWaitTicks) == pdTRUE) {}
     ~RequestLock() { if (held) xSemaphoreGive(requestMutex()); }
 };
+
+// The response body as a Stream for a streaming parser. It reads the client in
+// chunks and, while waiting for data, sleeps a tick instead of spinning:
+// Arduino's Stream::timedRead() busy-waits, and on the single-core C3 a TLS
+// read stalled for more than 5 s starved the idle task until the task watchdog
+// reset the chip. It also counts the bytes consumed (a body cut short shows as
+// "IncompleteInput" in the parser) and records the heap low point while reading.
+class BodyStream : public Stream {
+public:
+    BodyStream(WiFiClient &c, uint32_t timeoutMs) : c_(c), timeoutMs_(timeoutMs) {}
+    int available() override { return (int)(len_ - pos_) + max(0, c_.available()); }
+    int read() override { return fill() ? (++count, buf_[pos_++]) : -1; }
+    int peek() override { return fill() ? buf_[pos_] : -1; }
+    size_t readBytes(char *out, size_t n) override {
+        size_t got = 0;
+        while (got < n && fill()) {
+            size_t k = min(n - got, len_ - pos_);
+            memcpy(out + got, buf_ + pos_, k);
+            pos_ += k; got += k;
+        }
+        count += got;
+        return got;
+    }
+    size_t write(uint8_t) override { return 0; }
+    void flush() override {}
+
+    size_t count = 0;
+    uint32_t minFree = UINT32_MAX;     // lowest free heap seen while reading
+    uint32_t minLargest = UINT32_MAX;  // smallest "largest block" seen
+
+private:
+    // Make sure the buffer holds at least one byte; false on timeout / close.
+    bool fill() {
+        if (pos_ < len_) return true;
+        const uint32_t start = millis();
+        for (;;) {
+            const int avail = c_.available();
+            if (avail > 0) {
+                const int r = c_.read(buf_, min((size_t)avail, sizeof(buf_)));
+                if (r > 0) { pos_ = 0; len_ = (size_t)r; sample(); return true; }
+            } else if (!c_.connected()) {
+                return false;
+            }
+            if (millis() - start >= timeoutMs_) return false;
+            vTaskDelay(1);   // yield: let the idle task (and its watchdog) run
+        }
+    }
+    void sample() {
+        uint32_t f = esp_get_free_heap_size();
+        uint32_t l = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+        if (f < minFree) minFree = f;
+        if (l < minLargest) minLargest = l;
+    }
+    WiFiClient &c_;
+    const uint32_t timeoutMs_;
+    uint8_t buf_[256];
+    size_t pos_ = 0, len_ = 0;
+};
 }
 
 // One request path for both body modes: `outBody` (buffered) or `onBody`
@@ -116,9 +174,38 @@ static int doGet(const String &url, bool insecure,
     // Streaming needs the plain body: HTTP/1.0 rules out chunked encoding.
     if (onBody) http.useHTTP10(true);
 
+    const uint32_t heapBefore = esp_get_free_heap_size();
     int httpCode = http.GET();
     if (httpCode == 200 && onBody) {
-        (*onBody)(http.getStream());
+        const int expected = http.getSize();   // -1 when the server sent no length
+        const uint32_t heapHeaders = esp_get_free_heap_size();
+        const uint32_t t0 = millis();
+        // The body reader owns the read timeout: http.setTimeout() does not
+        // reach the client's Stream timeout (it stays at the 1 s default on
+        // WiFiClientSecure), and a parser reading a 20 KB body gave up at
+        // the first 1 s pause in the transfer ("IncompleteInput").
+        BodyStream counted(http.getStream(), 10000);
+        (*onBody)(counted);
+        if (expected > 0 && counted.count < (size_t)expected) {
+            char why[96] = "";
+#ifdef HAS_WIFI_CLIENT_SECURE
+            if (url.startsWith("https") && secureClient.lastError(why, sizeof(why)) == 0)
+                why[0] = '\0';
+#endif
+            logPrintf("HTTP", "GET %s: body cut at %u of %d bytes after %lu ms "
+                      "(%s; connected %d, heap %u, largest %u)",
+                      redactUrl(url.c_str()).c_str(), (unsigned)counted.count, expected,
+                      (unsigned long)(millis() - t0), why[0] ? why : "no TLS error",
+                      (int)http.connected(),
+                      (unsigned)esp_get_free_heap_size(),
+                      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        }
+        // Heap profile of the fetch: what the connection costs vs. the body.
+        logPrintf("HTTP", "GET %s: %u B in %lu ms; heap before %u, after headers %u, "
+                  "min while reading %u (largest %u)",
+                  redactUrl(url.c_str()).c_str(), (unsigned)counted.count,
+                  (unsigned long)(millis() - t0), (unsigned)heapBefore, (unsigned)heapHeaders,
+                  (unsigned)counted.minFree, (unsigned)counted.minLargest);
     } else if (httpCode > 0) {
         String body = http.getString();
         if (httpCode == 200 && body.length() == 0 && http.getSize() > 0) {

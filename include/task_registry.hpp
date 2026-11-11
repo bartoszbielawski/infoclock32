@@ -35,8 +35,15 @@ public:
     void add(const char* displayName, uint32_t totalStack, uint32_t watchdogTimeoutMs = 0) {
         uint32_t now = millis();
         taskENTER_CRITICAL(&mux_);
-        if (count_ < kTaskRegistryMax) {
-            RegisteredTask& t = tasks_[count_];
+        // A task that exited and is started again (SetupHint) takes its old
+        // slot back instead of using up a new one on every restart.
+        RegisteredTask* slot = nullptr;
+        for (int i = 0; i < count_ && !slot; i++)
+            if (tasks_[i].exited && strncmp(tasks_[i].name, displayName, sizeof(tasks_[i].name)) == 0)
+                slot = &tasks_[i];
+        if (!slot && count_ < kTaskRegistryMax) slot = &tasks_[count_++];
+        if (slot) {
+            RegisteredTask& t = *slot;
             strlcpy(t.name, displayName, sizeof(t.name));
             t.handle     = xTaskGetCurrentTaskHandle();
             t.totalStack = totalStack;
@@ -45,7 +52,6 @@ public:
             t.graceMs    = 0;
             t.warned     = false;
             t.exited     = false;
-            count_++;
         }
         taskEXIT_CRITICAL(&mux_);
     }
@@ -80,11 +86,12 @@ public:
         taskEXIT_CRITICAL(&mux_);
     }
 
-    // The caller's task is about to delete itself — stop watching it.
+    // The caller's task is about to delete itself — stop watching it. The
+    // handle is cleared so nothing queries the deleted task (its TCB is freed).
     void markExited() {
         taskENTER_CRITICAL(&mux_);
         RegisteredTask* t = findLocked(xTaskGetCurrentTaskHandle());
-        if (t) t->exited = true;
+        if (t) { t->exited = true; t->handle = nullptr; }
         taskEXIT_CRITICAL(&mux_);
     }
 
