@@ -110,8 +110,11 @@ struct RestaurantMenu
 };
 
 // Fetch and return deduplicated dish titles for one restaurant on a given date.
+// `answered` is set when the API replied with valid JSON, even an empty menu
+// (weekend, holiday): that is a final answer for the hour, not a failure.
 static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
-                                const std::string& lang) {
+                                const std::string& lang, bool& answered) {
+    answered = false;
     const char* restaurantId = codeToId(restaurantCode);
     // API path language: "en" or "fr" (no Polish menu available).
     const char* apiLang = (lang == "fr") ? "fr" : "en";
@@ -149,6 +152,7 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
         logPrintf(TAG, "R%d JSON error: %s", restaurantCode, err.c_str());
         return {};
     }
+    answered = true;
 
     std::set<std::string> seen;
     std::vector<std::string> dishes;
@@ -248,20 +252,29 @@ void resto_menu_task(void* pvParameters) {
         bool stale = (fetchDate != cachedDate) ||
                      (currentTime > 3600 && difftime(currentTime, lastFetch) > kFetchIntervalMs / 1000.0); // sanity check to avoid treating an invalid clock as stale
 
-        if (stale) {
+        // Fetch only from an hour before the display window until it ends:
+        // each fetch is a ~55 KB TLS session, and fetching around the clock
+        // made 24 of them a day for a menu shown 5 hours.
+        const bool inFetchWindow = testing || withinWindow((startHour + 23) % 24, endHour);
+
+        if (stale && inFetchWindow) {
             cachedDate  = fetchDate;
             lastFetch   = time(nullptr);
             cachedMenus.clear();
             std::string lang = ds.get_value("language", "en");
             // each fetch can take up to ~15 s (HTTP timeout + TLS handshake)
             task_heartbeat_grace((codes.size() + 1) * 15000);
+            bool anyAnswered = false;
             for (int code : codes) {
-                RestaurantMenu menu = fetchMenu(code, fetchDate, lang);
+                bool answered = false;
+                RestaurantMenu menu = fetchMenu(code, fetchDate, lang, answered);
+                anyAnswered |= answered;
                 if (!menu.dishes.empty()) cachedMenus.push_back(menu);
             }
-            // Nothing fetched (network not ready, API error, weekend): retry
-            // in 5 minutes instead of waiting out the full fetch interval.
-            if (cachedMenus.empty() && currentTime > 3600)
+            // Nothing fetched because of a failure (network not ready, API
+            // error): retry in 5 minutes. A valid empty answer (weekend,
+            // holiday) waits the normal hour.
+            if (cachedMenus.empty() && !anyAnswered && currentTime > 3600)
                 lastFetch = currentTime - (time_t)(kFetchIntervalMs / 1000) + 300;
         }
 
