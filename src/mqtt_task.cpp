@@ -13,6 +13,7 @@
 #include <logger.hpp>
 #include <night_mode_task.h>
 #include <status_task.h>
+#include <push_display.h>
 #include <mqtt_discovery.hpp>
 #include <mqtt_config.hpp>
 #include <version.hpp>
@@ -35,7 +36,6 @@ static void enlarge_mqtt_buffer()
 bool mqtt_is_connected() { return mqttClient.connected(); }
 
 static std::string loopedMessage;
-static QueueHandle_t pushQueue;
 
 // Set in the callback, acted on in the main loop.
 static bool    pendingReboot     = false;
@@ -159,13 +159,9 @@ static void onMessage(char *topic, byte *payload, unsigned int length)
 
     if (topicStr.endsWith("/push"))
     {
-        char *copy = (char *)malloc(length + 1);
-        if (copy)
-        {
-            memcpy(copy, buf, length + 1);
-            if (xQueueSend(pushQueue, &copy, 0) != pdTRUE)
-                free(copy);
-        }
+        // Scrolled by the short-lived push task: this loop keeps pumping
+        // MQTT (keepalive, other topics) meanwhile.
+        show_once(std::string(buf), 40);
     }
     else if (topicStr.endsWith("/flash"))
     {
@@ -348,7 +344,6 @@ static void pumpLoop(int ms)
 void mqtt_task(void *parameter)
 {
     registerTask("MQTT", 6144, 90000);
-    pushQueue = xQueueCreate(4, sizeof(char *));
 
     // The display boots enabled — seed the power state before anything reads it.
     RuntimeStore::getInstance().set("display_power", "on");
@@ -385,34 +380,6 @@ void mqtt_task(void *parameter)
         if (pendingReboot)
         {
             reboot_with_message();
-        }
-
-        // Push messages next — drain the whole queue
-        char *pushMsg = nullptr;
-        // (Not during a timed status: each attempt would block this task for
-        // 10 s waiting for a display the status owns, delaying a cancel. The
-        // messages stay queued.)
-        while (!status_info().active && xQueueReceive(pushQueue, &pushMsg, 0) == pdTRUE && pushMsg)
-        {
-            if (auto display = rmd.acquire(pdMS_TO_TICKS(10000), true))
-            {
-                scrollMessage(std::string(pushMsg), display, 40);
-                free(pushMsg);
-                pumpLoop(50);
-            }
-            else if (xQueueSend(pushQueue, &pushMsg, 0) == pdTRUE)
-            {
-                // Display busy — put the message back and retry after the
-                // next pump cycle instead of blocking or losing it.
-                logPrintf("MQT", "display busy, push re-queued");
-                break;
-            }
-            else
-            {
-                logPrintf("MQT", "push queue full, message dropped");
-                free(pushMsg);
-                pumpLoop(50);
-            }
         }
 
         // Attention strobe, two modes (~2.4 s, 8 blinks at 150 ms):

@@ -140,7 +140,7 @@ Access at `http://<device-ip>/` or `http://<hostname>.local/`
 | `GET /api/runtime` | ✓ | JSON RuntimeStore snapshot |
 | `GET /metrics` | — | Prometheus scrape endpoint (system gauges + numeric RuntimeStore values) |
 | `GET /frame` | ✓ | Matrix framebuffer as ASCII art (diagnostic) |
-| `GET /push` · `POST /push` | — | JSON message push: `?msg=Hello&speed=<ms>` (10–500); 503 "display busy" when the display can't be acquired |
+| `GET /push` · `POST /push` | — | JSON message push: `?msg=Hello&speed=<ms>` (10–500). Answers at once with `{"ok":true,"queued":true}`; the message scrolls when the display is free (up to 4 waiting, in order). 503 "push queue full", or "status active" while a timed status is showing |
 
 Auth: HTTP Basic with any username and the `web_password` config value. Leave `web_password` empty to disable auth entirely. Note that `/push` is intentionally unauthenticated so scripts and automations can post messages without credentials, and `/metrics` is open for the same reason — it carries only non-sensitive system gauges, never config keys or secrets.
 
@@ -338,7 +338,7 @@ Client ID defaults to `mqtt_client_id` config key (default: `infoclock32`). All 
 
 | Topic | Payload | Action |
 |-------|---------|--------|
-| `…/push` | text | Scroll once immediately |
+| `…/push` | text | Scroll once, as soon as the display is free (queued while a timed status is showing) |
 | `…/looped` | text | Store and repeat; shown whenever the display is free |
 | `…/clear` | — | Clear the looped message |
 | `…/brightness` | `0`–`15` | Set display intensity. By day it is saved as `brightness`; during night mode it only lasts until night mode ends |

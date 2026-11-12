@@ -27,6 +27,7 @@
 #include <night_mode_task.h>
 #include <serial_console_task.h>
 #include <housekeeping_task.h>
+#include <push_display.h>
 #include <resto_menu_task.h>
 #include <ota_task.h>
 #include <screen_wipe_task.h>
@@ -128,6 +129,7 @@ void setup() {
   lmds->begin();
   ResourceManager<LMDS>::getInstance().initialize(lmds);
   ResourceManager<LMDS>::getInstance().setPreReleaseHook(wipe_on_release);
+  push_display_init();   // web/MQTT one-time messages (push_display.h)
 
   // Restore display brightness from config, clamp to valid [0..15]
   apply_display_brightness(max(0, min(15, dataStore.get_value<int>("brightness", 7))));

@@ -57,6 +57,7 @@ test/                   PlatformIO test dir (effectively unused)
 | CustomMessageTask | `custom_message_task` (custom_message_task.cpp) | message slots, date windows/countdowns | always | set in file |
 | Housekeeping | `housekeeping_task` (housekeeping_task.cpp) | serial console (20 ms), `night_mode_tick()` (1 s, armed by `night_mode_start()`), `wifi_monitor_tick()` (5 s, armed at the end of `hardware_init()`); started before `hardware_init()` | always | 90 s |
 | StatusTask | `status_task` (status_task.cpp) | timed status; created by `status_start()`, exits when nothing is pending | on demand | 120 s |
+| PushTask | `push_task` (push_display.cpp) | one-time messages from web `/push`, `/actions`, MQTT `/push` via `show_once()`; exits when the queue is empty or a status is up (status end kicks it) | on demand | 120 s |
 | NetInfo / SetupHint | hardware_init.cpp | short-lived: IP scroll after a reconnect / setup-AP hint while offline | on demand | 120 s |
 | OTATask | `ota_task` (ota_task.cpp) | ArduinoOTA | `ota_password` set | — |
 | RestoMenuTask | `resto_menu_task` (resto_menu_task.cpp) | restaurant menu fetch/scroll | `enable_resto` | set in file |
@@ -146,7 +147,7 @@ without hardware.
 ### MQTT — mqtt_task.cpp
 
 Topics prefixed with client id (`mqtt_client_id`, default `infoclock32`):
-`/push` (queued, depth 4), `/looped`, `/clear`, `/brightness`, `/power`, `/config`,
+`/push` (→ `show_once()`, push_display.cpp: queue depth 4, on-demand Push task), `/looped`, `/clear`, `/brightness`, `/power`, `/config`,
 `/reboot`, `/request` → answers on `/publish/<var>` (DeviceStore → RuntimeStore →
 DataStore). Hardware commands are deferred to the task loop via pending flags.
 **Gap:** `/config` sets values in memory but never persists them.

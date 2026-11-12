@@ -12,6 +12,7 @@
 #include <web_ui.hpp>
 #include <night_mode_task.h>
 #include <status_task.h>
+#include <push_display.h>
 #include <sensor_display.hpp>
 
 // ── /push ─────────────────────────────────────────────────────────────────────
@@ -21,7 +22,8 @@
 //   POST /push   (body: msg=Hello+World)
 //
 // Optional: &speed=<ms>  — scroll delay in ms, 10–500 (default 50).
-// Returns: {"ok":true} or {"ok":false,"error":"..."}
+// Returns at once: {"ok":true,"queued":true} (scrolls when the display is
+// free) or {"ok":false,"error":"..."}
 // No authentication required.
 
 void handle_push()
@@ -60,22 +62,17 @@ void handle_push()
         return;
     }
 
-    auto& rmd = ResourceManager<LMDS>::getInstance();
-    // Bounded priority wait: fail with "display busy" instead of blocking the
-    // single web-server task forever. The clock holds the display 7–9 s at a
-    // time (it cuts the extra seconds when anyone is queued), so the wait must
-    // span one full fast-lane cycle —
-    // shorter timeouts make dashboard pushes fail most of the time.
-    if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
+    // Queued for the short-lived push task: the single web task answers at
+    // once instead of waiting for the display and the whole scroll.
+    if (show_once(std::string(msg.c_str()), speed))
     {
-        scrollMessage(std::string(msg.c_str()), display, speed);
         logPrintf("WEB", "push via /push: %.48s", msg.c_str());
-        server.send(200, "application/json", "{\"ok\":true}");
+        server.send(200, "application/json", "{\"ok\":true,\"queued\":true}");
     }
     else
     {
         server.send(503, "application/json",
-                    "{\"ok\":false,\"error\":\"display busy\"}");
+                    "{\"ok\":false,\"error\":\"push queue full\"}");
     }
 }
 
@@ -101,13 +98,12 @@ void handle_actions()
             }
             else if (!msg.isEmpty())
             {
-                if (auto display = rmd.acquire(pdMS_TO_TICKS(11000), true))
+                if (show_once(std::string(msg.c_str()), 50))
                 {
-                    scrollMessage(std::string(msg.c_str()), display, 50);
-                    result = "&#10003; Message displayed.";
+                    result = "&#10003; Message queued.";
                     logPrintf("WEB", "push message via /actions");
                 }
-                else { result = "&#9888; Display busy &mdash; try again."; }
+                else { result = "&#9888; Too many messages waiting &mdash; try again."; }
             }
         }
         else if (action == "brightness")

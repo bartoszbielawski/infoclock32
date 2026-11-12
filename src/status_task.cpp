@@ -11,6 +11,7 @@
 #include <task_registry.hpp>
 #include <time_valid.hpp>
 #include <status_task.h>
+#include <push_display.h>
 
 // Shared state between the triggers (web, MQTT) and the task. The task is the
 // only writer of g_running; triggers only post a request and read the info.
@@ -56,6 +57,7 @@ static void ensure_task()
         g_taskRunning = false;
         drop_request();
         g_active = false;
+        push_display_kick();   // pushes parked behind the status
         logPrintf("STS", "status task could not start (heap %u)",
                   (unsigned)esp_get_free_heap_size());
     }
@@ -86,7 +88,10 @@ void status_cancel()
     g_cancel = true;
     // Not on screen yet (or already over): nothing for the task to unwind.
     if (!g_running)
+    {
         g_active = false;
+        push_display_kick();
+    }
 }
 
 StatusInfo status_info()
@@ -224,6 +229,7 @@ static void run_status(ResourceManager<LMDS>& rmd, Status s)
     {
         logPrintf("STS", "display busy - status not shown");
         g_active = false;
+        push_display_kick();
         return;
     }
 
@@ -309,6 +315,7 @@ static void run_status(ResourceManager<LMDS>& rmd, Status s)
     rmd.endExclusive();
     g_running = false;
     g_active  = false;
+    push_display_kick();   // messages queued during the status
 }
 
 void status_task(void* /*parameter*/)
