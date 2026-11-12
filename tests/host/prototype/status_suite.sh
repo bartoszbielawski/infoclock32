@@ -90,7 +90,10 @@ has "push refused" "$r" "status active"; [ $d -le 2 ] && ok "push answered in ${
 t0=$(now); cancel >/dev/null; w=$(wait_inactive 30); ok "cancel took ${w}s to clear"
 
 echo "== long text scrolls, cancel latency"
-set_ "text=THIS IS A MUCH TOO LONG STATUS TEXT FOR THE MATRIX&cue=none&minutes=2" >/dev/null; sleep 4
+# %20, not raw spaces: curl rejects a URL with spaces before sending it, and
+# this check then only passed when something else changed the frame.
+r=$(set_ "text=THIS%20IS%20A%20MUCH%20TOO%20LONG%20STATUS%20TEXT%20FOR%20THE%20MATRIX&cue=none&minutes=2")
+has "long text accepted" "$r" '"ok":true'; sleep 4
 f1=$(frame); sleep 0.8; f2=$(frame); [ "$f1" != "$f2" ] && ok "long text scrolls" || no "scroll" "frames equal"
 t0=$(now); cancel >/dev/null; w=$(wait_inactive 30); [ $? -eq 0 ] && ok "scroll cancel cleared in ${w}s" || no "scroll cancel" "still active after ${w}s"
 

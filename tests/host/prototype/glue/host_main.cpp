@@ -25,6 +25,7 @@
 #include <security_utils.hpp>
 #include <sim_sensor.hpp>
 #include <watchdog_task.h>
+#include <push_display.h>
 
 #include "display.hpp"
 
@@ -82,6 +83,7 @@ int main(int argc, char** argv)
     host_display::init(lmds, !staticText);
     auto& rmd = ResourceManager<LMDS>::getInstance();
     rmd.initialize(lmds);
+    push_display_init();   // web/MQTT pushes (on-demand Push task)
     rmd.setPreReleaseHook(wipe_on_release);
 
     int brightness = DataStore::getInstance().get_value<int>("brightness", 7);
@@ -122,7 +124,7 @@ int main(int argc, char** argv)
         sensors->push_back(new StubSensor());
     xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr);
     xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
-    xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
+    // StatusTask: created on demand by status_start(), as on the device.
     xTaskCreate(night_mode_task, "NightModeTask", 2048, nullptr, 1, nullptr);
     xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
 

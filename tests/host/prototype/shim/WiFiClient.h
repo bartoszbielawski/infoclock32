@@ -15,6 +15,19 @@ public:
     int connect(IPAddress ip, uint16_t port) override;
     int available() override;
     int read() override;
+    // Bulk read, as on the device (virtual there too): drains what is
+    // available without blocking; -1 when nothing is.
+    virtual int read(uint8_t* buf, size_t size)
+    {
+        size_t n = 0;
+        while (n < size && available() > 0)
+        {
+            int c = read();
+            if (c < 0) break;
+            buf[n++] = (uint8_t)c;
+        }
+        return n ? (int)n : -1;
+    }
     int peek() override;
     size_t write(uint8_t) override;
     size_t write(const uint8_t* buffer, size_t size) override;
@@ -48,15 +61,22 @@ int host_http_fetch(const char* url, String& outBody);
 int host_http_canned(const char* url, String& outBody);
 void host_set_http_transport(int (*transport)(const char*, String&));
 
-// Reads a String as a Stream (the shim fetches the whole body up front).
-class StringBodyStream : public Stream
+// Reads a String as a client stream (the shim fetches the whole body up
+// front). A WiFiClient like on the device, where HTTPClient::getStream()
+// returns WiFiClient&; "connected" until the body is consumed.
+class StringBodyStream : public WiFiClient
 {
 public:
+    using WiFiClient::read;
     void reset(const String* s) { s_ = s; pos_ = 0; }
     int available() override { return s_ ? (int)(s_->length() - pos_) : 0; }
     int read() override { return available() > 0 ? (unsigned char)(*s_)[pos_++] : -1; }
     int peek() override { return available() > 0 ? (unsigned char)(*s_)[pos_] : -1; }
     size_t write(uint8_t) override { return 0; }
+    size_t write(const uint8_t*, size_t) override { return 0; }
+    uint8_t connected() override { return available() > 0; }
+    operator bool() override { return true; }
+    void stop() override { s_ = nullptr; pos_ = 0; }
 private:
     const String* s_ = nullptr;
     size_t pos_ = 0;
@@ -73,7 +93,8 @@ public:
     int GET();
     String getString() const { return body_; }
     int getSize() const { return (int)body_.length(); }
-    Stream& getStream() { stream_.reset(&body_); return stream_; }
+    WiFiClient& getStream() { stream_.reset(&body_); return stream_; }
+    bool connected() { return stream_.connected(); }
     void end() { body_.clear(); url_.clear(); }
 
 private:

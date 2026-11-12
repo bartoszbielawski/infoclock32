@@ -221,6 +221,23 @@ BaseType_t xQueueReceive(QueueHandle_t queue, void* out, TickType_t ticks)
     return pdTRUE;
 }
 
+BaseType_t xQueuePeek(QueueHandle_t queue, void* out, TickType_t ticks)
+{
+    HostQueue* q = (HostQueue*)queue;
+    if (!q || !out) return pdFALSE;
+    std::unique_lock<std::mutex> lock(q->mutex);
+    if (q->items.empty())
+    {
+        if (ticks == portMAX_DELAY)
+            q->cv.wait(lock, [&] { return !q->items.empty(); });
+        else if (!q->cv.wait_for(lock, std::chrono::milliseconds(ticks),
+                                 [&] { return !q->items.empty(); }))
+            return pdFALSE;
+    }
+    memcpy(out, q->items.front().data(), q->itemSize);
+    return pdTRUE;
+}
+
 UBaseType_t uxQueueMessagesWaiting(QueueHandle_t queue)
 {
     HostQueue* q = (HostQueue*)queue;
