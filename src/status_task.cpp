@@ -207,11 +207,13 @@ static void draw_static(LMDS& d, const Status& s, int w, uint32_t sec)
     d.display();
 }
 
-static int text_width(LMDS& d, const std::string& text)
+// Width of `text` in the built-in 6 px font (5 px glyph + 1 px gap), the same
+// rule scrollMessage() sizes its canvas with. Not getTextBounds(): with text
+// wrap on (the GFX default) it wraps at the display edge, so a long status
+// measured as fitting and was drawn cropped instead of scrolled.
+static int text_width(LMDS& /*d*/, const std::string& text)
 {
-    int16_t x1, y1; uint16_t tw, th;
-    d.getTextBounds(text.c_str(), 0, 0, &x1, &y1, &tw, &th);
-    return (int)tw;
+    return (int)text.size() * 6;
 }
 
 static void run_status(ResourceManager<LMDS>& rmd, Status s)
