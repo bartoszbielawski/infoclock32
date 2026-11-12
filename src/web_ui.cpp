@@ -74,7 +74,8 @@ static const char PAGE_FOOT[] PROGMEM =
     "</main>"
     "<footer style='text-align:center;padding:10px 0 14px;"
     "font-size:.75rem;color:#94a3b8'>"
-    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME
+    APP_VERSION " &bull; built ";
+static const char PAGE_FOOT_END[] PROGMEM =
     "</footer>"
     "</body></html>";
 
@@ -158,6 +159,10 @@ void sendPageNav(const char* active)
 void sendPageFoot()
 {
     server.sendContent_P(PAGE_FOOT);
+    server.sendContent(BUILD_DATE);
+    server.sendContent(" ");
+    server.sendContent(BUILD_TIME);
+    server.sendContent_P(PAGE_FOOT_END);
 }
 
 String htmlEscaped(const char* s)

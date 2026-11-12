@@ -101,7 +101,11 @@ void handle_home()
     server.sendContent_P(PSTR("<tr><td class='label'>Signal</td><td id='rssi'>"));
     server.sendContent(rssiStr);
     server.sendContent_P(PSTR("</td></tr>\n<tr><th colspan='2'>&#128421;&#65039; System</th></tr>"));
-    sendRowHtml("Firmware",   APP_VERSION " &bull; built " BUILD_DATE);
+    {
+        char fw[64];
+        snprintf(fw, sizeof(fw), APP_VERSION " &bull; built %s", BUILD_DATE);
+        sendRowHtml("Firmware", fw);
+    }
     server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
     server.sendContent(uptime);
     server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));
@@ -235,7 +239,11 @@ void handle_status()
     server.sendContent_P(PSTR("</td></tr>\n"));
     sendRow("MAC address", WiFi.macAddress().c_str());
     server.sendContent_P(PSTR("<tr><th colspan='2'>&#9881;&#65039; System</th></tr>"));
-    sendRowHtml("Firmware",    APP_VERSION " &bull; built " BUILD_DATE " " BUILD_TIME);
+    {
+        char fw[64];
+        snprintf(fw, sizeof(fw), APP_VERSION " &bull; built %s %s", BUILD_DATE, BUILD_TIME);
+        sendRowHtml("Firmware", fw);
+    }
     server.sendContent_P(PSTR("<tr><td class='label'>Uptime</td><td id='uptime'>"));
     server.sendContent(uptime);
     server.sendContent_P(PSTR("</td></tr>\n<tr><td class='label'>Free heap</td><td id='heap'>"));

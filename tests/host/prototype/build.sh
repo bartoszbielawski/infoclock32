@@ -18,7 +18,7 @@ FW_TASKS="clock_task weather_forecast_task lhc_status_task mqtt_task \
   sensor_task custom_message_task night_mode_task sun_times_task \
   game_of_life_task resto_menu_task watchdog_task http_server_task status_task"
 
-FW_UTIL="logger graphic_utils http_utils screen_wipe_task push_display \
+FW_UTIL="logger graphic_utils http_utils screen_wipe_task push_display build_stamp\
   web_ui actions_handler messages_handler status_handler wifi_handler"
 # update_handler.cpp is replaced by the host stub glue/web_stub.cpp (no flash)
 

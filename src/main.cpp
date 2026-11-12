@@ -105,7 +105,7 @@ void setup() {
   // Logging first, so the Wi-Fi start-up in hardware_init() reaches /log and
   // syslog too, not only Serial. Syslog sends are skipped until Wi-Fi is up.
   logger_init();
-  logPrintf("SYS", "firmware v" APP_VERSION " built " BUILD_DATE " " BUILD_TIME);
+  logPrintf("SYS", "firmware v" APP_VERSION " built %s %s", BUILD_DATE, BUILD_TIME);
 
   pinMode(LED_BLINK_PIN, OUTPUT);
 
