@@ -199,7 +199,7 @@ static RestaurantMenu fetchMenu(int restaurantCode, const std::string& dateStr,
 // ── task ─────────────────────────────────────────────────────────────────────
 
 void resto_menu_task(void* pvParameters) {
-    registerTask("RestoMenu", 8192, 60000);
+    registerTask("RestoMenu", 7168, 60000);
     (void)pvParameters;
 
     auto& rmd = ResourceManager<LMDS>::getInstance();

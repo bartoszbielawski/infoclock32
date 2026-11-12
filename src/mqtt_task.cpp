@@ -347,7 +347,7 @@ static void pumpLoop(int ms)
 
 void mqtt_task(void *parameter)
 {
-    registerTask("MQTT", 8192, 90000);
+    registerTask("MQTT", 6144, 90000);
     pushQueue = xQueueCreate(4, sizeof(char *));
 
     // The display boots enabled — seed the power state before anything reads it.

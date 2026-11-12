@@ -31,7 +31,7 @@ bool wdt_take_culprit(char* out, size_t len)
 
 static void watchdog_task(void*)
 {
-    registerTask("Watchdog", 3072);
+    registerTask("Watchdog", 4096);
     // The supervisor guards itself with the hardware task watchdog: if it ever
     // wedges, it stops feeding and the TWDT panics → reboot.
     esp_task_wdt_add(nullptr);
@@ -69,5 +69,5 @@ static void watchdog_task(void*)
 
 void start_watchdog_task()
 {
-    xTaskCreate(watchdog_task, "Watchdog", 3072, nullptr, 3, nullptr);
+    xTaskCreate(watchdog_task, "Watchdog", 4096, nullptr, 3, nullptr);
 }

@@ -58,7 +58,7 @@ static const char* const kMeasurementKey[MEAS_COUNT] =
 
 void sensor_task(void* parameter)
 {
-    registerTask("Sensor", 4096, 60000);
+    registerTask("Sensor", 5120, 60000);
     std::vector<Sensor*>* list = static_cast<std::vector<Sensor*>*>(parameter);
 
     // Initialise every sensor up front. A single bad bus read (e.g. a missing

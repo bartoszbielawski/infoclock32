@@ -181,7 +181,7 @@ void setup() {
   else if (!weather_configured())
     logPrintf("SYS", "WeatherTask not started: set sun_lat/sun_lon (Open-Meteo) or ow_api_key + ow_city_id, then reboot");
   else
-    xTaskCreate(open_weather_map_task, "WeatherTask", 8192, nullptr, 1, nullptr);
+    xTaskCreate(open_weather_map_task, "WeatherTask", 7168, nullptr, 1, nullptr);
 
   if (dataStore.get_value<int>("enable_lhc", 1))
     xTaskCreate(lhc_status_task, "LHCStatusTask", 8192, nullptr, 1, nullptr);
@@ -189,7 +189,7 @@ void setup() {
     logPrintf("SYS", "LHCStatusTask disabled (enable_lhc=0)");
 
   if (dataStore.get_value<int>("enable_mqtt", 1))
-    xTaskCreate(mqtt_task, "MQTTTask", 8192, nullptr, 1, nullptr);
+    xTaskCreate(mqtt_task, "MQTTTask", 6144, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "MQTTTask disabled (enable_mqtt=0)");
 
@@ -212,7 +212,7 @@ void setup() {
       logPrintf("SYS", "config key '%s' is obsolete and ignored - see sensors / sensor_* in config.example.txt", legacy);
 
   auto* sensors = new std::vector<Sensor*>(createSensorList());
-  if (xTaskCreate(sensor_task, "SensorTask", 4096, sensors, 1, nullptr) != pdPASS)
+  if (xTaskCreate(sensor_task, "SensorTask", 5120, sensors, 1, nullptr) != pdPASS)
   {
     // The task never started, so it can't free what it owns.
     logPrintf("SYS", "failed to create SensorTask (out of memory)");
@@ -230,7 +230,7 @@ void setup() {
 
   // Optional restaurant menu task
   if (dataStore.get_value<int>("enable_resto", 1))
-    xTaskCreate(resto_menu_task, "RestoMenuTask", 8192, nullptr, 1, nullptr);
+    xTaskCreate(resto_menu_task, "RestoMenuTask", 7168, nullptr, 1, nullptr);
   else
     logPrintf("SYS", "RestoMenuTask disabled (enable_resto=0)");
 

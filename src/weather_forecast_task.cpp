@@ -261,7 +261,7 @@ static std::string readWeatherFromOWM(int& iconIndex)
 
 void open_weather_map_task(void *parameter)
 {
-    registerTask("Weather", 8192, 120000);
+    registerTask("Weather", 7168, 120000);
     std::string messageToBeDisplayed;
     int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
     // Fetch scheduling on millis(): the wall clock reads ~uptime until NTP
