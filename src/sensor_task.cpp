@@ -9,6 +9,7 @@
 #include <logger.hpp>
 #include <sensor.hpp>
 #include <pressure_history.hpp>
+#include <sensor_history_store.hpp>
 #include <sensor_display.hpp>
 #include <sensor_merge.hpp>
 #include <sensor_round.hpp>
@@ -226,6 +227,18 @@ void sensor_task(void* parameter)
             }
         }
 
+        // 24 h chart on the dashboard: one sample per history bucket, from the
+        // readings that are fresh right now (offsets applied, as displayed).
+        if (got && time_is_valid(time(nullptr)))
+        {
+            SensorHistoryStore::getInstance().offer(make_history_sample(
+                (uint32_t)time(nullptr),
+                data.slots[MEAS_TEMP].have     ? data.temp     : NAN,
+                data.slots[MEAS_HUMIDITY].have ? data.humidity : NAN,
+                data.slots[MEAS_PRESSURE].have ? data.pressure : NAN,
+                data.slots[MEAS_CO2].have      ? data.co2      : 0), history_step_s());
+        }
+
         // Drop readings whose provider has gone quiet: the placeholders and
         // MQTT state disappear instead of repeating the last value forever.
         {
@@ -310,4 +323,12 @@ void sensor_task(void* parameter)
                                 ? (lastDisplay + show_interval_s - now) : -1;
         vTaskDelay(wakeDelayMs(round.nextPollAt() - now, untilShow) / portTICK_PERIOD_MS);
     }
+}
+
+uint32_t history_step_s()
+{
+    int m = DataStore::getInstance().get_value<int>("history_step_min", 5);
+    if (m < 1) m = 1;
+    if (m > 60) m = 60;
+    return (uint32_t)m * 60;
 }

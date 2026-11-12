@@ -136,6 +136,7 @@ Access at `http://<device-ip>/` or `http://<hostname>.local/`
 | `GET /update` · `POST /update` | ✓ | HTTP firmware upload (.bin) |
 | `POST /reboot` | ✓ | Restart device |
 | `GET /api/status` | ✓ | JSON status (uptime, heap, RSSI, MQTT, display diagnostics) |
+| `GET /api/history` | ✓ | JSON of the last 24 h of sensor readings (`t`, `temp`, `rh`, `hpa`, `co2` arrays, `null` = no value); drawn as the "Last 24 h" chart on the dashboard |
 | `GET /api/runtime` | ✓ | JSON RuntimeStore snapshot |
 | `GET /metrics` | — | Prometheus scrape endpoint (system gauges + numeric RuntimeStore values) |
 | `GET /frame` | ✓ | Matrix framebuffer as ASCII art (diagnostic) |
@@ -203,6 +204,7 @@ Key config keys:
 | `co2_offset` | `0` | CO2 correction in ppm added to readings |
 | `sensor_display` | `auto` | Ordered comma list of what scrolls: `temp`, `humidity`, `pressure`, `co2`, or `auto` for everything the attached sensors provide (in that order; mixes with items, e.g. `pressure,auto`); empty = never scroll (placeholders still update) |
 | `sensor_readout_interval` | `0` | Seconds between scrolls, decoupled from `sensor_interval`; `0` = after every poll wake |
+| `history_step_min` | `5` | Minutes per sample in the 24 h dashboard chart (1–60; 288 samples kept, ~3.4 KB of RAM, so steps under 5 min cover less than 24 h) |
 | `sensor_hold_s` | `0` | Seconds each reading stays centered on screen (0 = quick ~2 s flash); wider readouts (pressure with trend icon) scroll past first, then park |
 | `msg_interval` | `60` | Custom message cycle interval (seconds) |
 | `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |

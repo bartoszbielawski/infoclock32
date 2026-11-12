@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <sensor_history_store.hpp>
 
 // Handlers defined in other translation units
 void handle_push();
@@ -37,6 +38,36 @@ void handle_wifi_post();
 void handle_forget_wifi();
 
 // ── / (home dashboard) ────────────────────────────────────────────────────────
+
+// Dashboard "Last 24 h" card: the browser fetches /api/history and draws one
+// SVG line per measurement that has data (gaps longer than 3 buckets break
+// the line). All drawing happens client-side; the device only streams numbers.
+static const char HISTORY_CARD[] PROGMEM =
+    "<h2>&#128200; Last 24 h</h2><div class='card' id='hist'>"
+    "<span style='color:#94a3b8'>Loading&hellip;</span></div>"
+    "<script>"
+    "fetch('/api/history').then(r=>r.json()).then(d=>{"
+    "const S=[['temp','Temperature','\\u00b0C','#f97316',1],['rh','Humidity','%','#38bdf8',0],"
+    "['hpa','Pressure','hPa','#a78bfa',1],['co2','CO\\u2082','ppm','#4ade80',0]];"
+    "const W=600,H=90,t1=d.now,t0=t1-86400;let h='';"
+    "for(const[k,n,u,c,dp]of S){const v=d[k];if(!v)continue;"
+    "const p=v.map((x,i)=>[d.t[i],x]).filter(q=>q[1]!==null&&q[0]>=t0);if(!p.length)continue;"
+    "let lo=Math.min(...p.map(q=>q[1])),hi=Math.max(...p.map(q=>q[1]));"
+    "if(hi-lo<1){hi+=.5;lo-=.5}"
+    "const X=s=>((s-t0)/86400*W).toFixed(1),Y=x=>(H-4-(x-lo)/(hi-lo)*(H-8)).toFixed(1);"
+    "let path='',prev=null;"
+    "for(const[s,x]of p){path+=(prev!==null&&s-prev<=d.step*3?'L':'M')+X(s)+' '+Y(x);prev=s}"
+    "const last=p[p.length-1][1];"
+    "h+=`<div style='margin:6px 0 14px'><div class='flex-between'><b>${n}</b>"
+    "<span>${last.toFixed(dp)} ${u} <small style='color:#94a3b8'>(${lo.toFixed(dp)}&ndash;${hi.toFixed(dp)})</small></span></div>"
+    "<svg viewBox='0 0 ${W} ${H}' preserveAspectRatio='none' "
+    "style='width:100%;height:${H}px;background:rgba(148,163,184,.08);border-radius:6px'>"
+    "<path d='${path}' fill='none' stroke='${c}' stroke-width='2' vector-effect='non-scaling-stroke'/></svg>"
+    "<div class='flex-between' style='font-size:11px;color:#94a3b8'><span>-24 h</span><span>-12 h</span><span>now</span></div></div>`}"
+    "document.getElementById('hist').innerHTML=h||"
+    "`<span style='color:#94a3b8'>No sensor history yet (one sample every ${d.step/60} min)</span>`"
+    "}).catch(()=>{document.getElementById('hist').textContent='History unavailable'});"
+    "</script>";
 
 void handle_home()
 {
@@ -81,8 +112,9 @@ void handle_home()
                                "<tr><td class='label'>Status</td><td id='mqtt'>"));
     server.sendContent(mqttStatus);
     server.sendContent_P(PSTR("</td></tr>\n"));
-    server.sendContent_P(PSTR("</table>"
-                               "<h2>&#9889;&#65039; Actions</h2>"
+    server.sendContent_P(PSTR("</table>"));
+    server.sendContent_P(HISTORY_CARD);
+    server.sendContent_P(PSTR("<h2>&#9889;&#65039; Actions</h2>"
                                "<div class='card'>"
                                "<h3 class='card-title'>&#128172; Push message</h3>"
                                "<form method='POST' action='/actions'>"
@@ -558,6 +590,50 @@ void handle_reboot()
 
 // ── /api/status ───────────────────────────────────────────────────────────────
 
+// ── /api/history ──────────────────────────────────────────────────────────────
+// 24 h of sensor samples for the dashboard chart:
+// {"now":<epoch>,"step":<s>,"t":[...],"temp":[...],"rh":[...],"hpa":[...],"co2":[...]}
+// (null where a sample lacks the value). The ring is copied to a temporary
+// buffer first (~3.4 KB), so every series has the same length and the sensor
+// task never waits on a slow client.
+void handle_api_history()
+{
+    if (!is_authenticated()) {
+        server.send(401, "application/json", "{\"error\":\"unauthorized\"}");
+        return;
+    }
+    HistorySample* snap = (HistorySample*)malloc(sizeof(HistorySample) * SensorHistory::kCapacity);
+    if (!snap) {
+        server.send(503, "application/json", "{\"error\":\"low memory\"}");
+        return;
+    }
+    const size_t n = SensorHistoryStore::getInstance().snapshot(snap, SensorHistory::kCapacity);
+
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    char buf[320];
+    int len = snprintf(buf, sizeof(buf), "{\"now\":%lu,\"step\":%lu",
+                       (unsigned long)time(nullptr), (unsigned long)history_step_s());
+    server.sendContent(buf, len);
+
+    static const char* const kSeries[] = {"t", "temp", "rh", "hpa", "co2"};
+    for (int f = -1; f < 4; f++) {
+        len = snprintf(buf, sizeof(buf), ",\"%s\":[", kSeries[f + 1]);
+        for (size_t i = 0; i < n; i++) {
+            if (len > (int)sizeof(buf) - 24) { server.sendContent(buf, len); len = 0; }
+            if (i) buf[len++] = ',';
+            if (f < 0)
+                len += snprintf(buf + len, sizeof(buf) - len, "%lu", (unsigned long)snap[i].t);
+            else
+                len += history_value_json(snap[i], f, buf + len, sizeof(buf) - len);
+        }
+        buf[len++] = ']';
+        server.sendContent(buf, len);
+    }
+    server.sendContent("}");
+    free(snap);
+}
+
 void handle_api_status()
 {
     if (!is_authenticated()) {
@@ -803,6 +879,7 @@ void web_server_task(void* pvParameters)
     server.on("/log/entries", HTTP_GET,  handle_log_entries);
     server.on("/api/status",  HTTP_GET, handle_api_status);
     server.on("/api/runtime", HTTP_GET, handle_api_runtime);
+    server.on("/api/history", HTTP_GET, handle_api_history);
     server.on("/metrics",     HTTP_GET, handle_metrics);
     server.on("/frame",       HTTP_GET, handle_frame);
 #ifdef INFOCLOCK_TEST_HOOKS
