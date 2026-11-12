@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_timer.h>
 
 #include <pins.hpp>
 
@@ -25,6 +26,7 @@
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <serial_console_task.h>
+#include <housekeeping_task.h>
 #include <resto_menu_task.h>
 #include <ota_task.h>
 #include <screen_wipe_task.h>
@@ -61,6 +63,19 @@ void listFiles(const char* dirname) {
   Serial.println("End of file list");
 }
 
+// Status LED: 1 s on, 1 s off, toggled by an esp_timer callback (runs on the
+// existing esp_timer task, so no stack of its own).
+static void start_led_blink()
+{
+  static bool ledOn = false;
+  const esp_timer_create_args_t args = {
+    [](void*) { ledOn = !ledOn; digitalWrite(LED_BLINK_PIN, ledOn ? HIGH : LOW); },
+    nullptr, ESP_TIMER_TASK, "led", false};
+  esp_timer_handle_t timer = nullptr;
+  if (esp_timer_create(&args, &timer) != ESP_OK || esp_timer_start_periodic(timer, 1000000) != ESP_OK)
+    logPrintf("SYS", "LED blink timer could not start");
+}
+
 void setup() {
   Serial.begin(1000000);
 #if ARDUINO_USB_CDC_ON_BOOT
@@ -93,9 +108,11 @@ void setup() {
 
   pinMode(LED_BLINK_PIN, OUTPUT);
 
-  // Serial console first: hardware_init() can block in the Wi-Fi setup portal,
-  // and credentials must stay editable (or erasable) over USB meanwhile.
-  xTaskCreate(serial_console_task, "SerialConsole", 4096, nullptr, 1, nullptr);
+  // Housekeeping (serial console, night mode, Wi-Fi monitor) first:
+  // hardware_init() can block in the Wi-Fi setup portal, and credentials must
+  // stay editable (or erasable) over USB meanwhile. Night mode and the Wi-Fi
+  // monitor stay idle until night_mode_start() / hardware_init() arm them.
+  xTaskCreate(housekeeping_task, "Housekeeping", kHousekeepingStack, nullptr, 1, nullptr);
 
   // Display before Wi-Fi: hardware_init() can block in the setup portal, and
   // an uninitialised MAX7219 powers up with every LED lit (issue #9).
@@ -169,8 +186,7 @@ void setup() {
   // Always-on local display task
   xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
 
-  // Timed status (ON AIR ...): idle until triggered over web/MQTT
-  xTaskCreate(status_task, "StatusTask", 4096, nullptr, 1, nullptr);
+  // Timed status (ON AIR ...): status_start() creates its task on demand.
 
   // Optional tasks controlled via config flags
   // Without a usable provider (OWM key + city, or a location for Open-Meteo)
@@ -220,7 +236,7 @@ void setup() {
     delete sensors;
   }
   xTaskCreate(custom_message_task, "CustomMessageTask", 4096, nullptr, 1, nullptr);
-  xTaskCreate(night_mode_task, "NightModeTask", 4096, nullptr, 1, nullptr);
+  night_mode_start();   // ticked by the housekeeping task
 
 
   if (!dataStore.get_value("ota_password", "").empty())
@@ -274,17 +290,17 @@ void setup() {
   }
 
   // Watchdog goes last: the supervisor starts enforcing once every task is
-  // registered, and enableLoopWDT() only takes effect when loop() begins
-  // feeding it (the wrapper doesn't feed during setup()).
-  enableLoopWDT();
+  // registered.
   start_watchdog_task();
+
+  // setup() runs in Arduino's loopTask, whose 8 KB stack would otherwise sit
+  // idle behind an empty loop(): the status LED blinks from an esp_timer
+  // instead, and the task deletes itself here (loop() never runs).
+  start_led_blink();
+  vTaskDelete(nullptr);
 }
 
-// loopTask is a real FreeRTOS task so vTaskDelay yields properly here.
 void loop()
 {
-  digitalWrite(LED_BLINK_PIN, HIGH);
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-  digitalWrite(LED_BLINK_PIN, LOW);
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  vTaskDelete(nullptr);   // not reached: setup() deletes loopTask
 }

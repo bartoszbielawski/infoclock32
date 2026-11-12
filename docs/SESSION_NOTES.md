@@ -39,9 +39,8 @@ test/                   PlatformIO test dir (effectively unused)
 7. `logger_init()`, boot banner scroll (version + reset reason; `rst: wdt (<task>)` if RTC-memory culprit present; AP-setup hint in WiFi AP mode)
 8. Task creation (table below) — most gated by `enable_*` config flags
 9. Boot date check (waits ≤10 s for NTP)
-10. `enableLoopWDT()` + `start_watchdog_task()` LAST — supervisor starts enforcing only once tasks are registered
-
-`loop()` just blinks the LED (loopTask is a real FreeRTOS task; `enableLoopWDT()` watches it).
+10. `start_watchdog_task()` LAST — supervisor starts enforcing only once tasks are registered
+11. `start_led_blink()` (esp_timer, 1 s toggle), then `vTaskDelete(nullptr)`: setup() runs in Arduino's loopTask, deleting it returns its 8 KB stack; `loop()` never runs.
 
 ## Runtime architecture
 
@@ -56,7 +55,9 @@ test/                   PlatformIO test dir (effectively unused)
 | WebServerTask | `web_server_task` (http_server_task.cpp) | all HTTP routes (single task) | always | set in file |
 | TempSensorTask | `sensor_task` (sensor_task.cpp) | round-robin sensor list, RuntimeStore + display | always (list via `sensors` key + `createSensorList()`) | set in file |
 | CustomMessageTask | `custom_message_task` (custom_message_task.cpp) | message slots, date windows/countdowns | always | set in file |
-| NightModeTask | `night_mode_task` (night_mode_task.cpp) | brightness by HH:MM window | always | 120 s |
+| Housekeeping | `housekeeping_task` (housekeeping_task.cpp) | serial console (20 ms), `night_mode_tick()` (1 s, armed by `night_mode_start()`), `wifi_monitor_tick()` (5 s, armed at the end of `hardware_init()`); started before `hardware_init()` | always | 90 s |
+| StatusTask | `status_task` (status_task.cpp) | timed status; created by `status_start()`, exits when nothing is pending | on demand | 120 s |
+| NetInfo / SetupHint | hardware_init.cpp | short-lived: IP scroll after a reconnect / setup-AP hint while offline | on demand | 120 s |
 | OTATask | `ota_task` (ota_task.cpp) | ArduinoOTA | `ota_password` set | — |
 | RestoMenuTask | `resto_menu_task` (resto_menu_task.cpp) | restaurant menu fetch/scroll | `enable_resto` | set in file |
 | SunTimesTask | `sun_times_task` (sun_times_task.cpp) | sunrise/sunset line | `enable_sun` + `sun_lat/sun_lon` | set in file |

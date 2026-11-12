@@ -89,28 +89,23 @@ static void handle_command(const SerialCommand& c)
     }
 }
 
-void serial_console_task(void* /*pv*/)
+// Called every ~20 ms by the housekeeping task: handles whatever arrived.
+void serial_console_poll()
 {
-    registerTask("SerialConsole", 4096);
-    SerialLineBuffer buffer(256);
-    std::string line;
-    for (;;)
+    static SerialLineBuffer buffer(256);
+    static std::string line;
+    while (Serial.available() > 0)
     {
-        task_heartbeat();
-        while (Serial.available() > 0)
+        switch (buffer.feed((char)Serial.read(), line))
         {
-            switch (buffer.feed((char)Serial.read(), line))
-            {
-            case SerialLineBuffer::Result::Line:
-                handle_command(parseSerialCommand(line));
-                break;
-            case SerialLineBuffer::Result::Overflow:
-                Serial.println("ERR line too long (max 256 characters), ignored");
-                break;
-            default:
-                break;
-            }
+        case SerialLineBuffer::Result::Line:
+            handle_command(parseSerialCommand(line));
+            break;
+        case SerialLineBuffer::Result::Overflow:
+            Serial.println("ERR line too long (max 256 characters), ignored");
+            break;
+        default:
+            break;
         }
-        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }

@@ -1,6 +1,11 @@
 #pragma once
 
-void night_mode_task(void* parameter);
+void night_mode_task(void* parameter);   // stand-alone loop (host prototype)
+
+// Device: night_mode_start() arms it, the housekeeping task calls
+// night_mode_tick() every second (night window, auto-brightness, saves).
+void night_mode_start();
+void night_mode_tick();
 
 // True while the night-mode window is in effect (night_start..night_end).
 bool night_mode_active();

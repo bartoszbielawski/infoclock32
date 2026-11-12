@@ -121,108 +121,121 @@ static int scheduled_level()
                    : ds.get_value("brightness",        7);
 }
 
-void night_mode_task(void* parameter)
+// Housekeeping calls night_mode_tick() every second; it starts acting 15 s
+// after night_mode_start() (let DataStore load and NTP sync first).
+static int s_firstTickS = -1;
+
+void night_mode_start()
 {
-    registerTask("NightMode", 4096, 120000);
+    s_firstTickS = monoS() + 15;
+}
 
-    // Let DataStore load and NTP sync before first check.
-    vTaskDelay(15000 / portTICK_PERIOD_MS);
+void night_mode_tick()
+{
+    static bool last_was_night = false;
+    static bool was_auto = false;
+    static int  next_night_check = 0;
+    static AutoBrightness autob;
 
-    bool last_was_night = false;
-    bool was_auto = false;
-    int  next_night_check = 0;
-    AutoBrightness autob;
+    if (s_firstTickS < 0 || monoS() < s_firstTickS)
+        return;
 
-    // 1 s tick: auto-brightness needs it; the night window is still only
-    // evaluated once a minute.
-    while (true)
+    DataStore& ds = DataStore::getInstance();
+    const int now_s = monoS();
+    const bool auto_on = auto_brightness_active();
+
+    if (now_s >= next_night_check)
     {
-        task_heartbeat();
-        DataStore& ds = DataStore::getInstance();
-        const int now_s = monoS();
-        const bool auto_on = auto_brightness_active();
+        next_night_check = now_s + 60;
 
-        if (now_s >= next_night_check)
+        int start_min = parse_hhmm(ds.get_value("night_start", ""));
+        int end_min   = parse_hhmm(ds.get_value("night_end",   ""));
+
+        if (!wall_time_valid())
         {
-            next_night_check = now_s + 60;
-
-            int start_min = parse_hhmm(ds.get_value("night_start", ""));
-            int end_min   = parse_hhmm(ds.get_value("night_end",   ""));
-
-            if (!wall_time_valid())
-            {
-                // Unsynced clock: keep the current brightness, re-check in a minute.
-            }
-            else if (start_min < 0 || end_min < 0)
-            {
-                // Night mode not configured — reset state.
-                last_was_night = false;
-                g_night = false;
-            }
-            else
-            {
-                time_t now = time(nullptr);
-                struct tm tBuf;
-                struct tm* t = localtime_r(&now, &tBuf);
-                int now_min = t->tm_hour * 60 + t->tm_min;
-
-                bool is_night = in_night_window(now_min, start_min, end_min);
-
-                if (is_night != last_was_night)
-                {
-                    last_was_night = is_night;
-                    g_night = is_night;
-                    if (auto_on)
-                    {
-                        logPrintf("NGT", "night mode %s (brightness left to auto)",
-                                  is_night ? "on" : "off");
-                    }
-                    else
-                    {
-                        int level = scheduled_level();
-                        apply_display_brightness(level);
-                        logPrintf("NGT", "night mode %s → brightness %d",
-                                  is_night ? "on" : "off", level);
-                    }
-                }
-            }
+            // Unsynced clock: keep the current brightness, re-check in a minute.
         }
-
-        const bool paused = now_s < g_manualUntil;
-
-        if (was_auto && !auto_on && !paused)
+        else if (start_min < 0 || end_min < 0)
         {
-            // The light sensor went quiet (or auto was switched off): back to
-            // the schedule.
-            int level = scheduled_level();
-            apply_display_brightness(level);
-            logPrintf("NGT", "auto-brightness inactive → brightness %d", level);
-        }
-        if (!was_auto && auto_on)
-            logPrintf("NGT", "auto-brightness active");
-        was_auto = auto_on;
-
-        if (auto_on)
-        {
-            if (!paused)
-            {
-                int cur  = g_level;
-                int next = autob.update(now_s, g_luxCenti / 100.0f, cur, auto_params());
-                if (next != cur)
-                {
-                    apply_display_brightness(next);
-                    logPrintf("NGT", "auto-brightness %.1f lx → %d", g_luxCenti / 100.0f, next);
-                }
-            }
+            // Night mode not configured — reset state.
+            last_was_night = false;
+            g_night = false;
         }
         else
         {
-            autob.reset();
+            time_t now = time(nullptr);
+            struct tm tBuf;
+            struct tm* t = localtime_r(&now, &tBuf);
+            int now_min = t->tm_hour * 60 + t->tm_min;
+
+            bool is_night = in_night_window(now_min, start_min, end_min);
+
+            if (is_night != last_was_night)
+            {
+                last_was_night = is_night;
+                g_night = is_night;
+                if (auto_on)
+                {
+                    logPrintf("NGT", "night mode %s (brightness left to auto)",
+                              is_night ? "on" : "off");
+                }
+                else
+                {
+                    int level = scheduled_level();
+                    apply_display_brightness(level);
+                    logPrintf("NGT", "night mode %s → brightness %d",
+                              is_night ? "on" : "off", level);
+                }
+            }
         }
+    }
 
-        if (brightnessSaveDue())
-            DataStore::getInstance().save_to_file("/config.txt");
+    const bool paused = now_s < g_manualUntil;
 
+    if (was_auto && !auto_on && !paused)
+    {
+        // The light sensor went quiet (or auto was switched off): back to
+        // the schedule.
+        int level = scheduled_level();
+        apply_display_brightness(level);
+        logPrintf("NGT", "auto-brightness inactive → brightness %d", level);
+    }
+    if (!was_auto && auto_on)
+        logPrintf("NGT", "auto-brightness active");
+    was_auto = auto_on;
+
+    if (auto_on)
+    {
+        if (!paused)
+        {
+            int cur  = g_level;
+            int next = autob.update(now_s, g_luxCenti / 100.0f, cur, auto_params());
+            if (next != cur)
+            {
+                apply_display_brightness(next);
+                logPrintf("NGT", "auto-brightness %.1f lx → %d", g_luxCenti / 100.0f, next);
+            }
+        }
+    }
+    else
+    {
+        autob.reset();
+    }
+
+    if (brightnessSaveDue())
+        DataStore::getInstance().save_to_file("/config.txt");
+}
+
+// Stand-alone loop, used by the host prototype; the device runs the ticks
+// from the housekeeping task.
+void night_mode_task(void* /*parameter*/)
+{
+    registerTask("NightMode", 4096, 120000);
+    night_mode_start();
+    for (;;)
+    {
+        task_heartbeat();
+        night_mode_tick();
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }

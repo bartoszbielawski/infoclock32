@@ -119,91 +119,119 @@ static void enter_ap_mode()
     }
 }
 
-// Persistent watchdog. Survives the WiFiManager portal closing: whenever the
-// STA link drops (or boot ended offline) it retries every 30 s - with the
-// config.txt credentials when they exist (the driver's own copy may have been
-// erased), otherwise with whatever the driver holds (see wifi_policy.hpp).
-static void wifi_monitor_task(void* /*pv*/)
+// Short-lived task for the "SSID  IP  hostname.local" scroll after a
+// reconnect: the scroll can wait in the display FIFO for a minute, which the
+// housekeeping tick must not.
+static void net_info_task(void* pv)
 {
-    registerTask("WiFiMonitor", 4096, 90000);
+    registerTask("NetInfo", 4096, 120000);
+    std::string* msg = static_cast<std::string*>(pv);
+    task_heartbeat_grace(120000);   // FIFO wait + scroll
+    if (auto display = ResourceManager<LMDS>::getInstance().acquire())
+        scrollMessage(*msg, display, 30);
+    delete msg;
+    task_mark_exited();
+    vTaskDelete(nullptr);
+}
+
+// Persistent Wi-Fi watchdog, ticked every 5 s by the housekeeping task once
+// hardware_init() has finished. Survives the WiFiManager portal closing:
+// whenever the STA link drops (or boot ended offline) it retries every 30 s -
+// with the config.txt credentials when they exist (the driver's own copy may
+// have been erased), otherwise with whatever the driver holds (see
+// wifi_policy.hpp).
+//
+// Fallback AP: the WiFiManager portal only lives for its boot-time timeout,
+// so while offline we raise a plain soft-AP (web UI at 192.168.4.1, /wifi
+// page edits the credentials) after wifi_ap_after_s and drop it on reconnect.
+static std::atomic<bool> s_monStarted{false};   // set last by wifi_monitor_start()
+static struct
+{
+    bool        wasConnected = false;
+    int         apAfterS = 60;
+    std::string apName;
+    bool        apUp = false;
+    uint32_t    offlineSinceMs = 0;
+    int         ticksToRetry = 0;
+} s_mon;
+
+static void wifi_monitor_start()
+{
     // Connected at boot: main.cpp already scrolls the network info after the banner.
-    bool wasConnected = WiFi.status() == WL_CONNECTED;
-    // Fallback AP: the WiFiManager portal only lives for its boot-time timeout,
-    // so while offline we raise a plain soft-AP (web UI at 192.168.4.1, /wifi
-    // page edits the credentials) after wifi_ap_after_s and drop it on reconnect.
-    const int apAfterS = max(0, DataStore::getInstance().get_value<int>("wifi_ap_after_s", 60));
-    const std::string apName = s_hostname + "-setup";
-    bool apUp = false;
-    uint32_t offlineSinceMs = millis();
-    int ticksToRetry = 0;
-    for (;;)
+    s_mon.wasConnected   = WiFi.status() == WL_CONNECTED;
+    s_mon.apAfterS       = max(0, DataStore::getInstance().get_value<int>("wifi_ap_after_s", 60));
+    s_mon.apName         = s_hostname + "-setup";
+    s_mon.offlineSinceMs = millis();
+    s_monStarted         = true;
+}
+
+void wifi_monitor_tick()
+{
+    if (!s_monStarted)
+        return;   // hardware_init() still running (setup portal)
+
+    if (WiFi.status() == WL_CONNECTED)
     {
-        task_heartbeat();
-        if (WiFi.status() == WL_CONNECTED)
+        if (s_mon.apUp)
         {
-            if (apUp)
-            {
-                WiFi.softAPdisconnect(true);
-                WiFi.mode(WIFI_STA);
-                apUp = false;
-                logPrintf("WIFI", "fallback AP closed");
-            }
-            if (!wasConnected)
-            {
-                wasConnected = true;
-                s_ap_mode = false;
-                s_unprovisioned = false;
-                logPrintf("WIFI", "connected, IP=%s",
-                          WiFi.localIP().toString().c_str());
-                start_mdns();
-                if (DataStore::getInstance().get_value<int>("show_ip_on_boot", 1))
-                {
-                    std::string msg = std::string(WiFi.SSID().c_str()) + "  " +
-                                      WiFi.localIP().toString().c_str() + "  " + s_hostname + ".local";
-                    task_heartbeat_grace(90000);   // FIFO wait + scroll
-                    if (auto display = ResourceManager<LMDS>::getInstance().acquire())
-                        scrollMessage(msg, display, 30);
-                    task_heartbeat();
-                }
-            }
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
-            continue;
+            WiFi.softAPdisconnect(true);
+            WiFi.mode(WIFI_STA);
+            s_mon.apUp = false;
+            logPrintf("WIFI", "fallback AP closed");
         }
+        if (!s_mon.wasConnected)
+        {
+            s_mon.wasConnected = true;
+            s_ap_mode = false;
+            s_unprovisioned = false;
+            logPrintf("WIFI", "connected, IP=%s",
+                      WiFi.localIP().toString().c_str());
+            start_mdns();
+            if (DataStore::getInstance().get_value<int>("show_ip_on_boot", 1))
+            {
+                auto* msg = new std::string(std::string(WiFi.SSID().c_str()) + "  " +
+                                            WiFi.localIP().toString().c_str() + "  " +
+                                            s_hostname + ".local");
+                if (xTaskCreate(net_info_task, "NetInfo", 4096, msg, 1, nullptr) != pdPASS)
+                    delete msg;
+            }
+        }
+        return;
+    }
 
-        if (wasConnected)
-        {
-            logPrintf("WIFI", "link lost — retrying every 30 s");
-            offlineSinceMs = millis();
-        }
-        wasConnected = false;
-        enter_ap_mode();
+    if (s_mon.wasConnected)
+    {
+        logPrintf("WIFI", "link lost — retrying every 30 s");
+        s_mon.offlineSinceMs = millis();
+    }
+    s_mon.wasConnected = false;
+    enter_ap_mode();
 
-        if (!apUp && apAfterS > 0 && millis() - offlineSinceMs >= (uint32_t)apAfterS * 1000)
-        {
-            WiFi.mode(WIFI_AP_STA);
-            apUp = WiFi.softAP(apName.c_str());
-            apply_tx_power();
-            logPrintf("WIFI", "offline for %d s — fallback AP %s at %s",
-                      apAfterS, apName.c_str(), WiFi.softAPIP().toString().c_str());
-        }
+    if (!s_mon.apUp && s_mon.apAfterS > 0 &&
+        millis() - s_mon.offlineSinceMs >= (uint32_t)s_mon.apAfterS * 1000)
+    {
+        WiFi.mode(WIFI_AP_STA);
+        s_mon.apUp = WiFi.softAP(s_mon.apName.c_str());
+        apply_tx_power();
+        logPrintf("WIFI", "offline for %d s — fallback AP %s at %s",
+                  s_mon.apAfterS, s_mon.apName.c_str(), WiFi.softAPIP().toString().c_str());
+    }
 
-        if (ticksToRetry-- <= 0)
+    if (s_mon.ticksToRetry-- <= 0)
+    {
+        // Re-read each time: /wifi or the portal may have changed them.
+        auto& ds = DataStore::getInstance();
+        const std::string ssid = ds.get_value("wifi_ssid", "");
+        if (wifi_policy::retryMethod(!ssid.empty()) == wifi_policy::Retry::BeginWithConfig)
         {
-            // Re-read each time: /wifi or the portal may have changed them.
-            auto& ds = DataStore::getInstance();
-            const std::string ssid = ds.get_value("wifi_ssid", "");
-            if (wifi_policy::retryMethod(!ssid.empty()) == wifi_policy::Retry::BeginWithConfig)
-            {
-                WiFi.persistent(false);   // never let a retry rewrite the NVS cache
-                WiFi.begin(ssid.c_str(), ds.get_value("wifi_password", "").c_str());
-            }
-            else
-            {
-                WiFi.reconnect();   // no-op if the device never had credentials
-            }
-            ticksToRetry = 5;   // 6 ticks x 5 s = every 30 s
+            WiFi.persistent(false);   // never let a retry rewrite the NVS cache
+            WiFi.begin(ssid.c_str(), ds.get_value("wifi_password", "").c_str());
         }
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        else
+        {
+            WiFi.reconnect();   // no-op if the device never had credentials
+        }
+        s_mon.ticksToRetry = 5;   // 6 ticks x 5 s = every 30 s
     }
 }
 
@@ -326,5 +354,5 @@ void hardware_init()
                   apName.c_str());
     }
 
-    xTaskCreate(wifi_monitor_task, "WiFiMonitor", 4096, nullptr, 1, nullptr);
+    wifi_monitor_start();
 }

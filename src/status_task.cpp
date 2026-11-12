@@ -28,6 +28,39 @@ static constexpr uint32_t kTimeShowMs       = 3000;
 static constexpr uint32_t kAcquireTimeoutMs = 30000;
 static constexpr int      kScrollSpeedMs    = 30;
 
+// The task only exists while a status is requested or showing: a trigger
+// starts it, and it deletes itself once nothing is pending, so the idle case
+// costs no stack.
+static std::atomic<bool>      g_taskRunning{false};
+static constexpr uint32_t     kTaskStack = 4096;
+
+static void drop_request()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_hasPending = false;
+}
+
+static bool has_request()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return g_hasPending;
+}
+
+static void ensure_task()
+{
+    bool expected = false;
+    if (!g_taskRunning.compare_exchange_strong(expected, true))
+        return;   // already running; it picks the request up
+    if (xTaskCreate(status_task, "StatusTask", kTaskStack, nullptr, 1, nullptr) != pdPASS)
+    {
+        g_taskRunning = false;
+        drop_request();
+        g_active = false;
+        logPrintf("STS", "status task could not start (heap %u)",
+                  (unsigned)esp_get_free_heap_size());
+    }
+}
+
 // ── triggers ─────────────────────────────────────────────────────────────────
 
 void status_start(const Status& s)
@@ -41,6 +74,7 @@ void status_start(const Status& s)
     g_endMs  = millis() + s.durationS * 1000UL;
     g_cancel = false;
     g_active = true;
+    ensure_task();
 }
 
 void status_cancel()
@@ -279,7 +313,7 @@ static void run_status(ResourceManager<LMDS>& rmd, Status s)
 
 void status_task(void* /*parameter*/)
 {
-    registerTask("Status", 4096, 120000);
+    registerTask("Status", kTaskStack, 120000);
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
     while (true)
@@ -287,8 +321,22 @@ void status_task(void* /*parameter*/)
         task_heartbeat();
         Status s;
         if (take_request(s))
+        {
             run_status(rmd, s);   // guard releases the display on return
-        else
-            vTaskDelay(200 / portTICK_PERIOD_MS);
+            continue;
+        }
+        // Nothing pending: exit. Drop the flag first, then look again - a
+        // trigger racing with this exit either sees the flag down and starts
+        // a new task (then our CAS fails and we still exit), or its request
+        // is already visible here and this task takes the flag back.
+        task_mark_exited();
+        g_taskRunning = false;
+        bool expected = false;
+        if (has_request() && g_taskRunning.compare_exchange_strong(expected, true))
+        {
+            registerTask("Status", kTaskStack, 120000);
+            continue;
+        }
+        vTaskDelete(nullptr);
     }
 }
