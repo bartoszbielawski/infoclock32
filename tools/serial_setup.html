@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>infoclock32 serial setup</title>
+<!--
+  Configure an infoclock32 over USB with the Web Serial API (Chrome / Edge,
+  desktop). Open this file straight from disk; nothing is sent anywhere but
+  the serial port.
+
+  Talks to the firmware's serial console (src/serial_console_task.cpp,
+  parser in include/serial_cmd.hpp):
+    set key=value   -> "OK" (saved to /config.txt at once)
+    get key         -> value | "(unset)" | "***" for secrets
+    wifi_scan       -> "<ssid> ch<N> <rssi>dBm" lines, then "<n> network(s)"
+    wifi_forget     -> "OK"
+    reboot          -> no reply
+  Log lines ("YYYY-MM-DDTHH:MM:SS [TAG] ...") are interleaved and skipped
+  when waiting for a reply. Lines are limited to 256 characters.
+-->
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --fg: #1d2430; --muted: #667085;
+    --border: #d9dee7; --accent: #c2410c; --accent-fg: #fff;
+    --ok: #15803d; --err: #b91c1c; --term-bg: #10141b; --term-fg: #cfd8e3;
+    --input-bg: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --card: #171b23; --fg: #e4e8ef; --muted: #8b95a7;
+      --border: #2a313d; --accent: #f97316; --accent-fg: #111;
+      --ok: #4ade80; --err: #f87171; --term-bg: #0a0d12; --term-fg: #b9c4d2;
+      --input-bg: #10141b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 { font-size: 1rem; margin: 0 0 12px; }
+  p.sub { margin: 0 0 18px; color: var(--muted); }
+  section {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 14px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grid {
+    display: grid; grid-template-columns: minmax(150px, 210px) 1fr;
+    gap: 8px 12px; align-items: center;
+  }
+  .grid label { color: var(--muted); font-size: .9rem; }
+  .grid label code { color: var(--fg); }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } .grid label { margin-top: 6px; } }
+  input, select, button {
+    font: inherit; color: var(--fg); background: var(--input-bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px;
+  }
+  input[type=text], input[type=password], input[type=number], select { width: 100%; min-width: 0; }
+  input.dirty { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  button { cursor: pointer; background: var(--card); }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--err); }
+  button:disabled { opacity: .45; cursor: default; }
+  .status { font-size: .9rem; color: var(--muted); }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); }
+  .hint { font-size: .85rem; color: var(--muted); margin: 10px 0 0; }
+  .pw { display: flex; gap: 6px; }
+  .range { display: flex; gap: 10px; align-items: center; }
+  .range input { flex: 1; }
+  #term {
+    background: var(--term-bg); color: var(--term-fg); border-radius: 8px;
+    font: 12.5px/1.4 ui-monospace, Consolas, monospace; height: 260px;
+    overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-all;
+  }
+  #term .tx { color: #fbbf24; } #term .log { opacity: .6; }
+  .unsupported { border-color: var(--err); color: var(--err); }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .flex1 { flex: 1; min-width: 140px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>infoclock32 serial setup</h1>
+  <p class="sub">Set Wi-Fi and clock settings over USB. Chrome or Edge on desktop.</p>
+
+  <section id="noSerial" class="unsupported" hidden>
+    This browser has no Web Serial API. Open the file in Chrome or Edge on a desktop computer.
+  </section>
+
+  <section>
+    <h2>1. Connect</h2>
+    <div class="row">
+      <select id="baud" title="Baud rate (ESP32-C3/S3 USB ignore it)">
+        <option value="1000000" selected>1000000 baud</option>
+        <option value="115200">115200 baud</option>
+      </select>
+      <button id="btnConnect" class="primary">Connect</button>
+      <button id="btnDisconnect" disabled>Disconnect</button>
+      <span id="connStatus" class="status">Not connected</span>
+    </div>
+    <p class="hint">Plug the clock in, click Connect and pick its port (USB JTAG/serial debug unit, CP210x or CH340).</p>
+  </section>
+
+  <section>
+    <h2>2. Wi-Fi</h2>
+    <div class="grid">
+      <label for="wifi_ssid">Network (<code>wifi_ssid</code>)</label>
+      <div class="row">
+        <input class="flex1" type="text" id="wifi_ssid" list="ssidList" autocomplete="off" spellcheck="false">
+        <datalist id="ssidList"></datalist>
+        <button id="btnScan" data-needs-port disabled>Scan</button>
+      </div>
+      <label for="wifi_password">Password (<code>wifi_password</code>)</label>
+      <div class="pw">
+        <input type="password" id="wifi_password" autocomplete="new-password" spellcheck="false">
+        <button id="btnShowPw" type="button" title="Show / hide">Show</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnWifiSave" class="primary" data-needs-port disabled>Save Wi-Fi and reboot</button>
+      <button id="btnWifiForget" class="danger" data-needs-port disabled>Forget Wi-Fi</button>
+      <span id="wifiStatus" class="status"></span>
+    </div>
+    <p class="hint">Forget Wi-Fi erases the network from the config and the Wi-Fi driver; after a reboot the clock opens its <code>&lt;hostname&gt;-setup</code> access point.</p>
+  </section>
+
+  <section>
+    <h2>3. Clock settings</h2>
+    <div class="grid" id="settings"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnRead" data-needs-port disabled>Read from clock</button>
+      <button id="btnSave" class="primary" data-needs-port disabled>Save changes</button>
+      <span id="setStatus" class="status"></span>
+    </div>
+    <p class="hint">Only changed fields (outlined) are sent. Passwords are never read back: leave them empty to keep the current one. Most settings take effect after a reboot.</p>
+  </section>
+
+  <section>
+    <h2>4. Any key</h2>
+    <div class="row">
+      <input class="flex1" type="text" id="anyKey" placeholder="key, e.g. ow_city_id" spellcheck="false">
+      <input class="flex1" type="text" id="anyVal" placeholder="value" spellcheck="false">
+      <button id="btnAnyGet" data-needs-port disabled>Get</button>
+      <button id="btnAnySet" data-needs-port disabled>Set</button>
+    </div>
+    <p class="hint">All keys are listed in <code>config.example.txt</code> and the project README.</p>
+  </section>
+
+  <section>
+    <h2>5. Device</h2>
+    <div class="row">
+      <button id="btnReboot" data-needs-port disabled>Reboot</button>
+      <span id="devStatus" class="status"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Console</h2>
+    <div class="stack">
+      <div id="term"></div>
+      <div class="row">
+        <input class="flex1" type="text" id="rawCmd" placeholder="raw command, e.g. help" spellcheck="false">
+        <button id="btnRaw" data-needs-port disabled>Send</button>
+        <label class="status"><input type="checkbox" id="showLogs" checked> show log lines</label>
+        <button id="btnClear">Clear</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ── settings form ─────────────────────────────────────────────────────────
+const TIMEZONES = [
+  ["CET-1CEST,M3.5.0,M10.5.0/3", "Central Europe (Geneva, Warsaw, Paris, Berlin)"],
+  ["GMT0BST,M3.5.0/1,M10.5.0", "UK / Ireland"],
+  ["WET0WEST,M3.5.0/1,M10.5.0", "Portugal"],
+  ["EET-2EEST,M3.5.0/3,M10.5.0/4", "Eastern Europe (Helsinki, Athens)"],
+  ["EST5EDT,M3.2.0,M11.1.0", "US Eastern"],
+  ["PST8PDT,M3.2.0,M11.1.0", "US Pacific"],
+  ["UTC0", "UTC"],
+];
+
+// type: text | password | number | select | bool | range | tz
+const FIELDS = [
+  // An empty string key stays empty on the device (no default kicks in).
+  { key: "hostname", label: "Hostname", type: "text", ph: "infoclock32", noEmpty: true },
+  { key: "timezone", label: "Time zone", type: "tz" },
+  { key: "language", label: "Language", type: "select",
+    opts: [["en","English"],["pl","Polski"],["fr","Français"],["de","Deutsch"],["it","Italiano"],["es","Español"],["pt","Português"]] },
+  { key: "clock_style", label: "Clock face", type: "select",
+    opts: [["hhmmss","HH:MM:SS"],["hhmm","HH:MM, blinking colon"],["sweep","Seconds bar"],["thick","Thick digits"],["bcd","BCD"]] },
+  { key: "brightness", label: "Brightness", type: "range", min: 0, max: 15, def: 7 },
+  { key: "show_ip_on_boot", label: "Show IP after connecting", type: "bool", def: "1" },
+  { key: "wifi_tx_dbm", label: "Wi-Fi TX power cap (dBm)", type: "number", ph: "unset, e.g. 8.5", step: "0.25" },
+  { key: "wifi_ap_after_s", label: "Fallback AP after (s, 0 = off)", type: "number", ph: "60" },
+  { key: "web_password", label: "Web UI password", type: "password" },
+  { key: "sun_lat", label: "Latitude (weather, sun)", type: "number", ph: "e.g. 46.23", step: "any" },
+  { key: "sun_lon", label: "Longitude (weather, sun)", type: "number", ph: "e.g. 6.05", step: "any" },
+  { key: "mqtt_server", label: "MQTT broker", type: "text", ph: "host or IP" },
+  { key: "mqtt_client_id", label: "MQTT client ID", type: "text" },
+  { key: "mqtt_user", label: "MQTT user", type: "text" },
+  { key: "mqtt_password", label: "MQTT password", type: "password" },
+];
+
+const $ = (id) => document.getElementById(id);
+const loaded = {};          // key -> value last read from the clock ("" = unset)
+
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const c of children) e.append(c);
+  return e;
+}
+
+function buildSettings() {
+  const grid = $("settings");
+  for (const f of FIELDS) {
+    const id = "f_" + f.key;
+    const label = el("label", { for: id });
+    label.append(f.label + " (", el("code", { text: f.key }), ")");
+    let control, input;
+    if (f.type === "select") {
+      input = el("select", { id });
+      input.append(el("option", { value: "", text: "(default)" }));
+      for (const [v, t] of f.opts) input.append(el("option", { value: v, text: t }));
+      control = input;
+    } else if (f.type === "tz") {
+      input = el("input", { id, type: "text", list: "tzList", spellcheck: "false",
+                            placeholder: "POSIX TZ string" });
+      const dl = el("datalist", { id: "tzList" });
+      for (const [v, t] of TIMEZONES) dl.append(el("option", { value: v, label: t }));
+      control = el("div", {}, [input, dl]);
+    } else if (f.type === "bool") {
+      input = el("select", { id });
+      input.append(el("option", { value: "", text: "(default)" }),
+                   el("option", { value: "1", text: "Yes" }),
+                   el("option", { value: "0", text: "No" }));
+      control = input;
+    } else if (f.type === "range") {
+      input = el("input", { id, type: "range", min: f.min, max: f.max, value: f.def });
+      const out = el("span", { text: String(f.def) });
+      input.addEventListener("input", () => (out.textContent = input.value));
+      input._out = out;
+      control = el("div", { class: "range" }, [input, out]);
+    } else {
+      input = el("input", { id, type: f.type === "password" ? "password" : (f.type === "number" ? "number" : "text"),
+                            spellcheck: "false", autocomplete: f.type === "password" ? "new-password" : "off" });
+      if (f.ph) input.placeholder = f.ph;
+      if (f.step) input.step = f.step;
+      control = input;
+    }
+    input.addEventListener("input", () => markDirty(f));
+    input.addEventListener("change", () => markDirty(f));
+    f.input = input;
+    grid.append(label, control);
+  }
+}
+
+function fieldValue(f) { return f.input.value.trim(); }
+
+function setField(f, value) {
+  if (f.type === "password") {
+    f.input.value = "";
+    f.input.placeholder = value === "***" ? "(set: leave empty to keep)" : "(not set)";
+  } else if (f.type === "range") {
+    const v = value === "" ? f.def : Number(value);
+    f.input.value = v; f.input._out.textContent = String(f.input.value);
+  } else {
+    f.input.value = value;
+  }
+  markDirty(f);
+}
+
+function isDirty(f) {
+  if (f.type === "password") return fieldValue(f) !== "";
+  if (!(f.key in loaded)) {
+    // Not read yet: only fields the user actually touched count.
+    return f.input.dataset.touched === "1";
+  }
+  const base = loaded[f.key];
+  if (f.type === "range" && base === "") return String(f.input.value) !== String(f.def) && f.input.dataset.touched === "1";
+  return fieldValue(f) !== base;
+}
+
+function markDirty(f) {
+  if (document.activeElement === f.input) f.input.dataset.touched = "1";
+  f.input.classList.toggle("dirty", isDirty(f));
+}
+
+// ── serial port ───────────────────────────────────────────────────────────
+let port = null, reader = null, writer = null, readLoopDone = null;
+let lineBuf = "";
+let waiter = null;          // { onLine(line) -> bool done }
+let chain = Promise.resolve();
+const LOG_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d \[[^\]]+\] /;
+const enc = new TextEncoder();
+
+function term(text, cls) {
+  const t = $("term");
+  const atBottom = t.scrollTop + t.clientHeight >= t.scrollHeight - 4;
+  const line = el("div", { text });
+  if (cls) line.className = cls;
+  if (cls === "log" && !$("showLogs").checked) line.hidden = true;
+  t.append(line);
+  while (t.childElementCount > 1500) t.firstChild.remove();
+  if (atBottom) t.scrollTop = t.scrollHeight;
+}
+
+function status(id, text, kind) {
+  const s = $(id);
+  s.textContent = text;
+  s.className = "status" + (kind ? " " + kind : "");
+}
+
+function setConnected(on) {
+  document.querySelectorAll("[data-needs-port]").forEach((b) => (b.disabled = !on));
+  $("btnConnect").disabled = on;
+  $("btnDisconnect").disabled = !on;
+  $("baud").disabled = on;
+}
+
+function onLine(line) {
+  const isLog = LOG_RE.test(line);
+  term(line, isLog ? "log" : "");
+  if (!isLog && waiter && line.trim() !== "") waiter.onLine(line.trim());
+}
+
+async function readLoop() {
+  const decoder = new TextDecoder();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      lineBuf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = lineBuf.indexOf("\n")) >= 0) {
+        const line = lineBuf.slice(0, nl).replace(/\r$/, "");
+        lineBuf = lineBuf.slice(nl + 1);
+        onLine(line);
+      }
+      if (lineBuf.length > 4096) lineBuf = "";
+    }
+  } catch (e) {
+    term("! read error: " + e.message, "tx");
+  } finally {
+    try { reader.releaseLock(); } catch (_) {}
+  }
+}
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: Number($("baud").value) });
+    // Keep DTR/RTS released: on boards with the auto-reset circuit they
+    // would hold the ESP32 in reset or in the bootloader.
+    try { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch (_) {}
+    reader = port.readable.getReader();
+    writer = port.writable.getWriter();
+    readLoopDone = readLoop();
+    setConnected(true);
+    status("connStatus", "Connected", "ok");
+    port.addEventListener("disconnect", () => disconnect(true));
+    // Some devices print nothing until asked: a help request proves the link.
+    try {
+      await command("help", { reply: true, timeout: 2500 });
+      status("connStatus", "Connected, console answers", "ok");
+      readAll();
+    } catch (_) {
+      status("connStatus", "Connected, but no answer yet (wrong baud, or still booting?)", "err");
+    }
+  } catch (e) {
+    if (e.name !== "NotFoundError") status("connStatus", "Could not open: " + e.message, "err");
+    port = null;
+  }
+}
+
+async function disconnect(lost) {
+  if (!port) return;
+  const p = port; port = null;
+  setConnected(false);
+  try { if (reader) await reader.cancel(); } catch (_) {}
+  try { if (readLoopDone) await readLoopDone; } catch (_) {}
+  try { if (writer) { writer.releaseLock(); } } catch (_) {}
+  try { await p.close(); } catch (_) {}
+  reader = writer = null;
+  if (waiter) waiter.fail(new Error("disconnected"));
+  status("connStatus", lost ? "Device disconnected" : "Not connected", lost ? "err" : "");
+}
+
+// Commands run one at a time; each resolves with its reply line(s).
+function command(cmd, { reply = true, timeout = 2500, multi = null } = {}) {
+  const run = async () => {
+    if (!writer) throw new Error("not connected");
+    if (/[\r\n]/.test(cmd)) throw new Error("line breaks are not allowed");
+    if (enc.encode(cmd).length > 250) throw new Error("command longer than the 256-character console limit");
+    const shown = cmd.replace(/^(set \S*(password|secret|token|key)\S*=).*/i, "$1***");
+    term("> " + shown, "tx");
+    if (!reply) { await writer.write(enc.encode(cmd + "\n")); return null; }
+    const result = new Promise((resolve, reject) => {
+      const lines = [];
+      const timer = setTimeout(() => { waiter = null; reject(new Error("no answer from the clock")); }, timeout);
+      waiter = {
+        onLine(line) {
+          lines.push(line);
+          if (!multi || multi(line)) { clearTimeout(timer); waiter = null; resolve(multi ? lines : line); }
+        },
+        fail(err) { clearTimeout(timer); waiter = null; reject(err); },
+      };
+    });
+    await writer.write(enc.encode(cmd + "\n"));
+    return result;
+  };
+  const p = chain.then(run, run);
+  chain = p.catch(() => {});
+  return p;
+}
+
+async function setKey(key, value) {
+  const r = await command(`set ${key}=${value}`);
+  if (r !== "OK") throw new Error(`${key}: ${r}`);
+}
+
+async function getKey(key) {
+  const r = await command(`get ${key}`);
+  return r === "(unset)" ? "" : r;
+}
+
+function validKey(k) { return /^[A-Za-z0-9_.-]+$/.test(k); }
+
+// ── actions ───────────────────────────────────────────────────────────────
+async function readAll() {
+  status("setStatus", "Reading…");
+  try {
+    for (const f of FIELDS) {
+      const v = await getKey(f.key);
+      loaded[f.key] = f.type === "password" ? "" : v;
+      delete f.input.dataset.touched;
+      setField(f, v);
+    }
+    $("wifi_ssid").value = await getKey("wifi_ssid");
+    const pw = await getKey("wifi_password");
+    $("wifi_password").value = "";
+    $("wifi_password").placeholder = pw === "***" ? "(set: leave empty to keep)" : "(not set)";
+    status("setStatus", "Read from clock", "ok");
+  } catch (e) {
+    status("setStatus", "Read failed: " + e.message, "err");
+  }
+}
+
+async function saveChanges() {
+  const changed = FIELDS.filter(isDirty);
+  if (!changed.length) { status("setStatus", "Nothing changed"); return; }
+  const blank = changed.find((f) => f.noEmpty && fieldValue(f) === "");
+  if (blank) { status("setStatus", `${blank.key} must not be empty`, "err"); return; }
+  status("setStatus", "Saving…");
+  try {
+    for (const f of changed) {
+      const v = f.type === "range" ? String(f.input.value) : fieldValue(f);
+      await setKey(f.key, v);
+      loaded[f.key] = f.type === "password" ? "" : v;
+      delete f.input.dataset.touched;
+      if (f.type === "password") setField(f, "***"); else markDirty(f);
+    }
+    status("setStatus", `Saved ${changed.length} setting(s). Reboot to apply.`, "ok");
+  } catch (e) {
+    status("setStatus", "Save failed: " + e.message, "err");
+  }
+}
+
+async function scan() {
+  status("wifiStatus", "Scanning…");
+  $("btnScan").disabled = true;
+  try {
+    const lines = await command("wifi_scan", { timeout: 20000, multi: (l) => /^\d+ network\(s\)$/.test(l) });
+    const best = new Map();
+    for (const l of lines) {
+      const m = /^(.*) ch(\d+) (-?\d+)dBm$/.exec(l);
+      if (!m || !m[1]) continue;
+      const rssi = Number(m[3]);
+      if (!best.has(m[1]) || best.get(m[1]).rssi < rssi) best.set(m[1], { rssi, ch: m[2] });
+    }
+    const dl = $("ssidList");
+    dl.replaceChildren();
+    [...best.entries()].sort((a, b) => b[1].rssi - a[1].rssi).forEach(([ssid, n]) =>
+      dl.append(el("option", { value: ssid, label: `${n.rssi} dBm, ch ${n.ch}` })));
+    status("wifiStatus", `${best.size} network(s) found: pick one in the Network field`, "ok");
+  } catch (e) {
+    status("wifiStatus", "Scan failed: " + e.message, "err");
+  } finally {
+    $("btnScan").disabled = !port;
+  }
+}
+
+async function saveWifi() {
+  const ssid = $("wifi_ssid").value;
+  const pw = $("wifi_password").value;
+  if (!ssid.trim()) { status("wifiStatus", "Enter the network name", "err"); return; }
+  if (ssid !== ssid.trim() || (pw && pw !== pw.replace(/\s+$/, "")))
+    { status("wifiStatus", "Trailing spaces are not supported by the serial console", "err"); return; }
+  status("wifiStatus", "Saving…");
+  try {
+    await setKey("wifi_ssid", ssid);
+    if (pw) await setKey("wifi_password", pw);
+    else if (!confirm("Password is empty. Keep the stored password? (Cancel = network without password)"))
+      await setKey("wifi_password", "");
+    await command("reboot", { reply: false });
+    status("wifiStatus", "Saved, the clock is rebooting and will join " + ssid, "ok");
+  } catch (e) {
+    status("wifiStatus", "Save failed: " + e.message, "err");
+  }
+}
+
+async function forgetWifi() {
+  if (!confirm("Erase the Wi-Fi network and password from the clock?")) return;
+  try {
+    const r = await command("wifi_forget", { timeout: 5000 });
+    if (r !== "OK") throw new Error(r);
+    $("wifi_ssid").value = ""; $("wifi_password").value = "";
+    if (confirm("Wi-Fi erased. Reboot now to open the setup access point?"))
+      await command("reboot", { reply: false });
+    status("wifiStatus", "Wi-Fi erased", "ok");
+  } catch (e) {
+    status("wifiStatus", "Failed: " + e.message, "err");
+  }
+}
+
+// ── wiring ────────────────────────────────────────────────────────────────
+buildSettings();
+if (!("serial" in navigator)) {
+  $("noSerial").hidden = false;
+  $("btnConnect").disabled = true;
+}
+$("btnConnect").onclick = connect;
+$("btnDisconnect").onclick = () => disconnect(false);
+$("btnRead").onclick = readAll;
+$("btnSave").onclick = saveChanges;
+$("btnScan").onclick = scan;
+$("btnWifiSave").onclick = saveWifi;
+$("btnWifiForget").onclick = forgetWifi;
+$("btnShowPw").onclick = () => {
+  const i = $("wifi_password");
+  i.type = i.type === "password" ? "text" : "password";
+  $("btnShowPw").textContent = i.type === "password" ? "Show" : "Hide";
+};
+$("btnReboot").onclick = async () => {
+  if (!confirm("Reboot the clock?")) return;
+  try { await command("reboot", { reply: false }); status("devStatus", "Rebooting…", "ok"); }
+  catch (e) { status("devStatus", e.message, "err"); }
+};
+$("btnAnyGet").onclick = async () => {
+  const k = $("anyKey").value.trim();
+  if (!validKey(k)) { alert("Enter a key (letters, digits, _ . -)"); return; }
+  try { const v = await getKey(k); $("anyVal").value = v === "***" ? "" : v;
+        $("anyVal").placeholder = v === "***" ? "(secret, not shown)" : (v === "" ? "(unset)" : "value"); }
+  catch (e) { alert(e.message); }
+};
+$("btnAnySet").onclick = async () => {
+  const k = $("anyKey").value.trim();
+  if (!validKey(k)) { alert("Enter a key (letters, digits, _ . -)"); return; }
+  try { await setKey(k, $("anyVal").value.trim()); $("anyVal").placeholder = "saved"; }
+  catch (e) { alert(e.message); }
+};
+const sendRaw = async () => {
+  const c = $("rawCmd").value.trim();
+  if (!c) return;
+  $("rawCmd").value = "";
+  try { await command(c, { reply: c !== "reboot", timeout: c === "wifi_scan" ? 20000 : 2500,
+                           multi: c === "wifi_scan" ? (l) => /^\d+ network\(s\)$/.test(l) : null }); }
+  catch (e) { term("! " + e.message, "tx"); }
+};
+$("btnRaw").onclick = sendRaw;
+$("rawCmd").addEventListener("keydown", (e) => { if (e.key === "Enter") sendRaw(); });
+$("btnClear").onclick = () => $("term").replaceChildren();
+$("showLogs").onchange = () =>
+  document.querySelectorAll("#term .log").forEach((d) => (d.hidden = !$("showLogs").checked));
+</script>
+</body>
+</html>

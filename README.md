@@ -119,6 +119,12 @@ On a freshly flashed device LittleFS is empty — all settings use defaults unti
 
 Connection is handled by [WiFiManager](https://github.com/tzapu/WiFiManager). On boot, `wifi_ssid`/`wifi_password` from config are tried first (without touching the stored cache); if they fail, the setup portal AP `<hostname>-setup` (default: `infoclock32-setup`) opens at `192.168.4.1` for `wifi_portal_timeout_s` seconds (default 180), then the device boots offline — a background monitor keeps retrying and reconnects whenever the network returns. Reboot the device to reopen the setup portal. All three editors — the `/wifi` web page, `/edit`, and the setup portal (its save is mirrored back into config) — write the same config keys, so the file always matches what the device uses. With `wifi_ssid` blank, a previously provisioned portal pair still connects first (useful after a filesystem reflash).
 
+### Setup over USB
+
+**[Serial setup page](https://bartoszbielawski.github.io/infoclock32/)** (Chrome or Edge on a desktop, Web Serial API): plug the clock in, click Connect, then scan for and save the Wi-Fi network, edit the common settings or any config key, and reboot. Nothing leaves the browser except the USB serial port. The same page is in the repo as [`tools/serial_setup.html`](tools/serial_setup.html) and also works opened from disk.
+
+It drives the serial console (1 Mbaud; the USB port on C3/S3 ignores the baud rate), which can also be used from any terminal: `set key=value` (saved at once), `get key`, `wifi_scan`, `wifi_forget`, `reboot`, `help`.
+
 ### Web UI
 
 Access at `http://<device-ip>/` or `http://<hostname>.local/`
