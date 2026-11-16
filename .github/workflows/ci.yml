@@ -17,6 +17,13 @@ jobs:
       - name: Host tests (headers + ResourceManager stress)
         run: ./tests/host/run.sh
 
+  config-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Every config key the firmware reads is in the README; tools/config_keys.js is current
+        run: python3 tools/gen_config_keys.py --check
+
   host-scenarios:
     runs-on: ubuntu-latest
     steps:

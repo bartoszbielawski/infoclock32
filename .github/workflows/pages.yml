@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'tools/serial_setup.html'
+      - 'tools/config_keys.js'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site
-          cp tools/serial_setup.html _site/serial_setup.html
+          cp tools/serial_setup.html tools/config_keys.js _site/
           # The site root opens the serial setup page too.
           cp tools/serial_setup.html _site/index.html
           touch _site/.nojekyll

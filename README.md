@@ -176,6 +176,9 @@ Key config keys:
 |-----|---------|-------------|
 | `wifi_ssid` / `wifi_password` | — | WiFi credentials |
 | `wifi_portal_timeout_s` | `180` | seconds the setup portal stays open at boot (30–600) |
+| `wifi_ap_after_s` | `60` | Seconds offline before the fallback `<hostname>-setup` AP starts (web UI at `192.168.4.1/wifi`); `0` disables; the AP closes on reconnect |
+| `wifi_tx_dbm` | unset | Cap Wi-Fi TX power in dBm (e.g. `8.5`); fixes ESP32-C3 boards whose setup AP is visible but refuses phones |
+| `show_ip_on_boot` | `1` | `1` = after connecting (boot and every reconnect), scroll `SSID  IP  hostname.local` once |
 | `hostname` | `infoclock32` | DHCP name, mDNS `.local`, AP portal name |
 | `brightness` | `7` | Display intensity 0–15 |
 | `timezone` | `UTC0` | POSIX TZ string (e.g. `CET-1CEST,M3.5.0,M10.5.0/3`) |
@@ -196,6 +199,7 @@ Key config keys:
 | `weather_lat` / `weather_lon` | `sun_lat` / `sun_lon` | Location for Open-Meteo (free, no API key, plain HTTP so no TLS heap cost); falls back to the sunrise location |
 | `weather_name` | *(empty)* | Optional label in front of the Open-Meteo scroll, e.g. `Geneva` |
 | `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
+| `ow_interval_min` | `30` | Minutes between weather fetches (10–1440); failed fetches retry with 1, 2, 4… min backoff (max 10 min) |
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |
@@ -203,6 +207,9 @@ Key config keys:
 | `tls_verify` | `0` | `1` verifies HTTPS servers (weather, LHC, menu) against the built-in Mozilla root CAs (`certs/`); `0` keeps the old behaviour of not checking certificates |
 | `mqtt_config_writes` | `1` | `0` ignores MQTT `<client>/config` writes entirely |
 | `sensors` | `auto` | Comma-separated list of sensor drivers, each polled every `sensor_interval` (max 4; the light sensor is not counted, see below) |
+| `bmp280_addr` / `bme280_addr` / `sht31_addr` | `0x76` / `0x76` / `0x44` | I2C address of that sensor (see Sensors) |
+| `ds18b20_pin` / `ds18b20_pullup` | `4` / `0` | DS18B20 1-Wire data GPIO; `1` enables the weak internal pull-up (an external 4.7 kΩ is still recommended) |
+| `ds18b20_slope` / `ds18b20_offset` | `1` / `0` | DS18B20 calibration: T = slope × reading + offset |
 | `sensor_interval` | `300` | Poll interval in seconds; every sensor is read once per interval, however many there are (the shipped `data/config.txt` pins `30`) |
 | `temp_offset` | `0` | Temperature correction in °C added to readings |
 | `humidity_offset` | `0` | Humidity correction in %RH added to readings |
@@ -213,6 +220,9 @@ Key config keys:
 | `history_step_min` | `5` | Minutes per sample in the 24 h dashboard chart (1–60; 288 samples kept, ~3.4 KB of RAM, so steps under 5 min cover less than 24 h) |
 | `sensor_hold_s` | `0` | Seconds each reading stays centered on screen (0 = quick ~2 s flash); wider readouts (pressure with trend icon) scroll past first, then park |
 | `msg_interval` | `60` | Custom message cycle interval (seconds) |
+| `message_<name>_text` | — | Custom message text; `<name>` is any slot name (see Custom messages) |
+| `message_<name>_start` / `message_<name>_end` | — | Date window `YYYY-MM-DD` in which the message is shown |
+| `message_<name>_countdown` | — | Target date `YYYY-MM-DD`: `{}` in the text becomes the day count |
 | `sun_lat` / `sun_lon` | — | WGS84 position for the sunrise/sunset widget (blank = task not started) |
 | `sun_interval_min` | `30` | How often the sun line scrolls (minutes, 5–720) |
 | `display_min_hold_s` | `10` | Seconds a long hold (scroll, Life burst) keeps the display before the clock may preempt it (0 = yield at once) |
@@ -224,6 +234,7 @@ Key config keys:
 | `spi_sck` / `spi_mosi` / `spi_cs` | board defaults | Override the matrix SPI pins from `pins.hpp` |
 | `i2c_sda` / `i2c_scl` | board defaults | Override the I2C pins from `pins.hpp` |
 | `resto_restaurants` | `3` | Comma-separated Novae restaurant numbers |
+| `novae_codes` | `CER103` | Novae API group code used for the menu fetches |
 | `resto_start_hour` / `resto_end_hour` | `9` / `14` | Hours between which the menu is fetched and displayed (end exclusive; window wraps midnight) |
 | `resto_scroll_ms` | `20` | Menu scroll speed, ms per step (10–100, higher = slower); each dish gets a display slice sized to finish its scroll (max 30 s), so the clock no longer cuts a long one |
 | `resto_test_date` | — | `YYYY-MM-DD` override for menu fetches; also bypasses the display window (testing) |
