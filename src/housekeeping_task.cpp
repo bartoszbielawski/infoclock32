@@ -7,10 +7,23 @@
 #include <night_mode_task.h>
 #include <serial_console_task.h>
 #include <housekeeping_task.h>
+#include <resource_manager.hpp>
+#include <LMDS.hpp>
+
+// While nobody draws (boot, the blocking setup portal, gaps between tasks)
+// nothing would resend the MAX7219 mode registers, and a chip that lost them
+// stays fully lit with no text visible. A holder refreshes them from
+// LMDS::display() itself.
+static void display_keepalive_tick()
+{
+    auto& rm = ResourceManager<LMDS>::getInstance();
+    if (rm.getResource() && !rm.getCurrentHolder())
+        rm.getResourceRef().refreshIdle();
+}
 
 // One task for the small periodic jobs that used to own a 4 KB stack each:
 //   every 20 ms  serial console input
-//   every 1 s    night mode / auto-brightness
+//   every 1 s    night mode / auto-brightness, MAX7219 register refresh
 //   every 5 s    Wi-Fi reconnect and fallback AP
 // Each tick must return quickly; anything that waits for the display runs
 // in a short-lived task of its own (see net_info_task in hardware_init.cpp).
@@ -28,6 +41,7 @@ void housekeeping_task(void* /*parameter*/)
         {
             lastSecondMs = now;
             night_mode_tick();
+            display_keepalive_tick();
         }
         if (now - lastWifiMs >= 5000)
         {
