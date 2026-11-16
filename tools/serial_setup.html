@@ -69,6 +69,18 @@
   .status.ok { color: var(--ok); } .status.err { color: var(--err); }
   .hint { font-size: .85rem; color: var(--muted); margin: 10px 0 0; }
   .pw { display: flex; gap: 6px; }
+  .netlist { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; }
+  .net { display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px 10px; }
+  .net:hover { border-color: var(--accent); }
+  .net.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .net .ssid { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+  .net .meta { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+  .sig { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .sig i { width: 4px; background: var(--border); border-radius: 1px; }
+  .sig i:nth-child(1) { height: 25%; } .sig i:nth-child(2) { height: 50%; }
+  .sig i:nth-child(3) { height: 75%; } .sig i:nth-child(4) { height: 100%; }
+  .sig i.on { background: var(--ok); }
+  @media (max-width: 560px) { .grid > div:empty { display: none; } }
   .range { display: flex; gap: 10px; align-items: center; }
   .range input { flex: 1; }
   #term {
@@ -131,10 +143,11 @@
     <div class="grid">
       <label for="wifi_ssid">Network (<code>wifi_ssid</code>)</label>
       <div class="row">
-        <input class="flex1" type="text" id="wifi_ssid" list="ssidList" autocomplete="off" spellcheck="false">
-        <datalist id="ssidList"></datalist>
+        <input class="flex1" type="text" id="wifi_ssid" autocomplete="off" spellcheck="false">
         <button id="btnScan" data-needs-port disabled>Scan</button>
       </div>
+      <div></div>
+      <div id="netList" class="netlist" hidden></div>
       <label for="wifi_password">Password (<code>wifi_password</code>)</label>
       <div class="pw">
         <input type="password" id="wifi_password" autocomplete="new-password" spellcheck="false">
@@ -577,23 +590,57 @@ async function saveChanges() {
   }
 }
 
+const SCAN_END_RE = /^(-?\d+) network\(s\)$/;
+
+// Signal strength as 1-4 bars (rough, like a phone's indicator).
+function bars(rssi) { return rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1; }
+
+function showNetworks(nets) {
+  const box = $("netList");
+  box.replaceChildren();
+  box.hidden = nets.length === 0;
+  for (const [ssid, n] of nets) {
+    const b = el("button", { type: "button", class: "net", title: `Use ${ssid}` });
+    const sig = el("span", { class: "sig", title: `${n.rssi} dBm`, "aria-label": `${bars(n.rssi)} of 4 bars` });
+    for (let i = 1; i <= 4; i++) sig.append(el("i", { class: i <= bars(n.rssi) ? "on" : "" }));
+    b.append(sig, el("span", { class: "ssid", text: ssid }),
+             el("span", { class: "meta", text: `${n.rssi} dBm · ch ${n.ch}` + (n.aps > 1 ? ` · ${n.aps} APs` : "") }));
+    b.onclick = () => {
+      $("wifi_ssid").value = ssid;
+      box.querySelectorAll(".net").forEach((x) => x.classList.toggle("picked", x === b));
+      $("wifi_password").focus();
+    };
+    if (ssid === $("wifi_ssid").value) b.classList.add("picked");
+    box.append(b);
+  }
+}
+
 async function scan() {
   status("wifiStatus", "Scanning…");
   $("btnScan").disabled = true;
   try {
-    const lines = await readyCommand("wifi_scan", { timeout: 20000, multi: (l) => /^\d+ network\(s\)$/.test(l) });
+    // The firmware ends with "<n> network(s)"; n < 0 is a failed scan
+    // (WIFI_SCAN_FAILED while the radio is busy connecting).
+    const lines = await readyCommand("wifi_scan", { timeout: 20000, multi: (l) => SCAN_END_RE.test(l) });
+    const reported = Number(SCAN_END_RE.exec(lines[lines.length - 1])[1]);
+    if (reported < 0) throw new Error("the clock's radio was busy, try again in a few seconds");
     const best = new Map();
+    let hidden = 0;
     for (const l of lines) {
-      const m = /^(.*) ch(\d+) (-?\d+)dBm$/.exec(l);
-      if (!m || !m[1]) continue;
+      // A hidden network has an empty SSID; the line arrives trimmed ("ch3 -80dBm").
+      const m = /^(?:(.*) )?ch(\d+) (-?\d+)dBm$/.exec(l);
+      if (!m) continue;
+      if (!m[1]) { hidden++; continue; }   // undefined or ""
       const rssi = Number(m[3]);
-      if (!best.has(m[1]) || best.get(m[1]).rssi < rssi) best.set(m[1], { rssi, ch: m[2] });
+      if (!best.has(m[1]) || best.get(m[1]).rssi < rssi) best.set(m[1], { rssi, ch: m[2], aps: 0 });
+      best.get(m[1]).aps++;
     }
-    const dl = $("ssidList");
-    dl.replaceChildren();
-    [...best.entries()].sort((a, b) => b[1].rssi - a[1].rssi).forEach(([ssid, n]) =>
-      dl.append(el("option", { value: ssid, label: `${n.rssi} dBm, ch ${n.ch}` })));
-    status("wifiStatus", `${best.size} network(s) found: pick one in the Network field`, "ok");
+    showNetworks([...best.entries()].sort((a, b) => b[1].rssi - a[1].rssi));
+    const extra = [];
+    if (reported !== best.size) extra.push(`${reported} seen by the clock`);
+    if (hidden) extra.push(`${hidden} hidden`);
+    status("wifiStatus", `${best.size} network(s)` + (extra.length ? ` (${extra.join(", ")})` : "") +
+           (best.size ? ": click one to use it" : ""), "ok");
   } catch (e) {
     status("wifiStatus", "Scan failed: " + e.message, "err");
   } finally {
@@ -737,7 +784,7 @@ const sendRaw = async () => {
   if (!c) return;
   $("rawCmd").value = "";
   try { await command(c, { reply: c !== "reboot", timeout: c === "wifi_scan" ? 20000 : 2500,
-                           multi: c === "wifi_scan" ? (l) => /^\d+ network\(s\)$/.test(l) : null }); }
+                           multi: c === "wifi_scan" ? (l) => SCAN_END_RE.test(l) : null }); }
   catch (e) { term("! " + e.message, "tx"); }
 };
 $("btnRaw").onclick = sendRaw;
