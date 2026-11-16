@@ -21,6 +21,8 @@
 #include <cstring>
 #include <cctype>
 #include <sensor_history_store.hpp>
+#include <config_backup.hpp>
+#include <time_valid.hpp>
 
 // Handlers defined in other translation units
 void handle_push();
@@ -472,7 +474,7 @@ void handle_file_edit()
         server.sendContent_P(PSTR("<h2>Config editor <small style='font-weight:400;color:#94a3b8'>"
                                    "/config.txt</small></h2>"
                                    "<form method='POST' action='/edit'>"
-                                   "<textarea name='content' rows='22' spellcheck='false'>"));
+                                   "<textarea id='cfg' name='content' rows='22' spellcheck='false'>"));
         File file = LittleFS.open(FILENAME, "r");
         if (file) {
             char buf[256];
@@ -497,8 +499,25 @@ void handle_file_edit()
         server.sendContent_P(PSTR("</textarea>"
                                    "<div class='actions'>"
                                    "<button class='btn btn-primary' type='submit'>&#128190; Save &amp; reload</button>"
-                                   "<span style='color:#64748b;font-size:.85rem'>Changes take effect immediately.</span>"
-                                   "</div></form>"));
+                                   "<a class='btn btn-light' href='/config/download'>&#11015; Download backup</a>"
+                                   "<label class='btn btn-light'>&#11014; Load from file"
+                                   "<input type='file' id='cfgFile' accept='.txt,text/plain' hidden></label>"
+                                   "<span id='cfgMsg' style='color:#64748b;font-size:.85rem'>Changes take effect immediately.</span>"
+                                   "</div></form>"
+                                   "<p style='color:#64748b;font-size:.85rem'>The backup is the whole "
+                                   "<code>/config.txt</code>, passwords and API keys included: keep it private. "
+                                   "Loading a file only fills the editor; review it, then Save.</p>"
+                                   // Restore: read the chosen file into the editor (nothing is sent until Save).
+                                   "<script>"
+                                   "document.getElementById('cfgFile').onchange=function(){"
+                                   "var f=this.files[0];if(!f)return;"
+                                   "var m=document.getElementById('cfgMsg');"
+                                   "if(f.size>24576){m.textContent='File too large (max 24 KB).';this.value='';return;}"
+                                   "var r=new FileReader();"
+                                   "r.onload=function(){document.getElementById('cfg').value=r.result;"
+                                   "m.textContent='Loaded '+f.name+' - review it, then Save & reload.';};"
+                                   "r.readAsText(f);this.value='';};"
+                                   "</script>"));
         sendPageFoot();
         return;
     }
@@ -576,6 +595,35 @@ void handle_file_edit()
     }
 
     server.send(405, "text/plain", "Method Not Allowed");
+}
+
+// ── /config/download ──────────────────────────────────────────────────────────
+// The raw /config.txt as a file download (backup). Same auth as /edit, which
+// shows the same content; secrets are included so a restore is complete.
+
+void handle_config_download()
+{
+    if (!is_authenticated()) return;
+
+    File file = LittleFS.open(FILENAME, "r");
+    if (!file) {
+        server.send(404, "text/plain", "No /config.txt on the device yet (all settings are defaults)");
+        return;
+    }
+    const std::string name = configBackupFilename(
+        DataStore::getInstance().get_value("hostname", "infoclock32"), time(nullptr), wall_time_valid());
+    server.sendHeader("Content-Disposition", String("attachment; filename=\"") + name.c_str() + "\"");
+    server.sendHeader("Cache-Control", "no-store");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "text/plain; charset=utf-8", "");
+    char buf[512];
+    while (file.available()) {
+        const int n = file.readBytes(buf, sizeof(buf));
+        if (n <= 0) break;
+        server.sendContent(buf, n);
+    }
+    file.close();
+    logPrintf("WEB", "config downloaded as %s", name.c_str());
 }
 
 // ── /reboot ───────────────────────────────────────────────────────────────────
@@ -882,6 +930,7 @@ void web_server_task(void* pvParameters)
     server.on("/style.css", HTTP_GET, handle_style_css);
     server.on("/status",    HTTP_GET, handle_status);
     server.on("/edit",               handle_file_edit);
+    server.on("/config/download", HTTP_GET, handle_config_download);
     server.on("/reboot",  HTTP_POST, handle_reboot);
     server.on("/log",         HTTP_GET,  handle_log);
     server.on("/log/entries", HTTP_GET,  handle_log_entries);

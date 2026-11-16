@@ -45,6 +45,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | OTA firmware update (wireless) | `ota_password` (disabled if unset) |
 | HTTP firmware upload | Web UI → `/update` |
 | Web configuration editor | Web UI → `/edit` |
+| Settings backup / restore | Web UI → `/edit` → *Download backup* (`/config/download`) / *Load from file* |
 | Setup over USB (Wi-Fi, settings, key reference) | [serial setup page](https://bartoszbielawski.github.io/infoclock32/) |
 
 ## Building & Flashing
@@ -139,7 +140,8 @@ Access at `http://<device-ip>/` or `http://<hostname>.local/`
 | `GET /status` | — | Full system info (IP, heap, uptime, tasks), auto-refresh |
 | `GET /log` | ✓ | Live log viewer (40 entries, newest first, auto-refresh 5 s) |
 | `GET /log/entries` | ✓ | Log JSON feed (`?since=<seq>` delta polling) |
-| `GET /edit` · `POST /edit` | ✓ | Edit `/config.txt`; reloads DataStore on save |
+| `GET /edit` · `POST /edit` | ✓ | Edit `/config.txt`; reloads DataStore on save. *Download backup* / *Load from file* back up and restore the whole file |
+| `GET /config/download` | ✓ | `/config.txt` as a file (`<hostname>-config-YYYY-MM-DD.txt`), passwords and keys included; restore it with *Load from file* on `/edit` |
 | `GET /actions` · `POST /actions` | ✓ | Push message, brightness, night mode, clock style, sensor display, timezone, hostname, web password, display reset, reboot |
 | `GET /messages` · `POST /messages` | ✓ | Custom message slot editor (text, date window, countdown) |
 | `GET /wifi` · `POST /wifi` | ✓ | Network scan + credentials; writes `wifi_ssid`/`wifi_password`, then suggests reboot |

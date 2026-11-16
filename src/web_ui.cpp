@@ -52,7 +52,9 @@ textarea{width:100%;font-family:monospace;font-size:.85rem;padding:10px;
 .btn-primary:hover{background:#1e40af}
 .btn-danger{background:#dc2626;color:#fff}
 .btn-danger:hover{background:#b91c1c}
-.actions{margin-top:16px;display:flex;gap:10px;align-items:center}
+.btn-light{background:#e2e8f0;color:#1e293b}
+.btn-light:hover{background:#cbd5e1}
+.actions{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .card{background:#fff;border-radius:8px;box-shadow:0 1px 4px #0001;
       padding:20px;margin-bottom:20px}
 .tag{display:inline-block;padding:2px 8px;border-radius:4px;
