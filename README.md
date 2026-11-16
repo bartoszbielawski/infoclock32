@@ -1,8 +1,11 @@
 # infoclock32
 
 [![CI](https://github.com/bartoszbielawski/infoclock32/actions/workflows/ci.yml/badge.svg)](https://github.com/bartoszbielawski/infoclock32/actions/workflows/ci.yml)
+[![Serial setup](https://img.shields.io/badge/setup-over%20USB-orange)](https://bartoszbielawski.github.io/infoclock32/)
 
 An ESP32 LED matrix info display — scrolling clock, weather, LHC beam status, temperature, custom messages, and more.
+
+> **Set up a clock in the browser:** plug it in over USB and open the **[serial setup page](https://bartoszbielawski.github.io/infoclock32/)** (Chrome or Edge on a desktop). Scan for and save the Wi-Fi network, change the common settings, look up any of the config keys in a searchable list, and reboot — no app, no setup access point needed. Details: [Setup over USB](#setup-over-usb).
 
 ## Hardware
 
@@ -42,6 +45,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | OTA firmware update (wireless) | `ota_password` (disabled if unset) |
 | HTTP firmware upload | Web UI → `/update` |
 | Web configuration editor | Web UI → `/edit` |
+| Setup over USB (Wi-Fi, settings, key reference) | [serial setup page](https://bartoszbielawski.github.io/infoclock32/) |
 
 ## Building & Flashing
 
@@ -170,7 +174,7 @@ scrape_configs:
 
 `/config.txt` is a `key=value` file on LittleFS. Lines starting with `#` are comments. A fully-commented example is included in `data/config.txt` and uploaded with `uploadfs`.
 
-Key config keys:
+Key config keys (a searchable version of these tables, where a click on a key reads or sets it on a connected clock, is on the [serial setup page](https://bartoszbielawski.github.io/infoclock32/)):
 
 | Key | Default | Description |
 |-----|---------|-------------|
