@@ -42,34 +42,78 @@ void handle_forget_wifi();
 // ── / (home dashboard) ────────────────────────────────────────────────────────
 
 // Dashboard "Last 24 h" card: the browser fetches /api/history and draws one
-// SVG line per measurement that has data (gaps longer than 3 buckets break
-// the line). All drawing happens client-side; the device only streams numbers.
-static const char HISTORY_CARD[] PROGMEM =
-    "<h2>&#128200; Last 24 h</h2><div class='card' id='hist'>"
-    "<span style='color:#94a3b8'>Loading&hellip;</span></div>"
-    "<script>"
-    "fetch('/api/history').then(r=>r.json()).then(d=>{"
-    "const S=[['temp','Temperature','\\u00b0C','#f97316',1],['rh','Humidity','%','#38bdf8',0],"
-    "['hpa','Pressure','hPa','#a78bfa',1],['co2','CO\\u2082','ppm','#4ade80',0]];"
-    "const W=600,H=90,t1=d.now,t0=t1-86400;let h='';"
-    "for(const[k,n,u,c,dp]of S){const v=d[k];if(!v)continue;"
-    "const p=v.map((x,i)=>[d.t[i],x]).filter(q=>q[1]!==null&&q[0]>=t0);if(!p.length)continue;"
-    "let lo=Math.min(...p.map(q=>q[1])),hi=Math.max(...p.map(q=>q[1]));"
-    "if(hi-lo<1){hi+=.5;lo-=.5}"
-    "const X=s=>((s-t0)/86400*W).toFixed(1),Y=x=>(H-4-(x-lo)/(hi-lo)*(H-8)).toFixed(1);"
-    "let path='',prev=null;"
-    "for(const[s,x]of p){path+=(prev!==null&&s-prev<=d.step*3?'L':'M')+X(s)+' '+Y(x);prev=s}"
-    "const last=p[p.length-1][1];"
-    "h+=`<div style='margin:6px 0 14px'><div class='flex-between'><b>${n}</b>"
-    "<span>${last.toFixed(dp)} ${u} <small style='color:#94a3b8'>(${lo.toFixed(dp)}&ndash;${hi.toFixed(dp)})</small></span></div>"
-    "<svg viewBox='0 0 ${W} ${H}' preserveAspectRatio='none' "
-    "style='width:100%;height:${H}px;background:rgba(148,163,184,.08);border-radius:6px'>"
-    "<path d='${path}' fill='none' stroke='${c}' stroke-width='2' vector-effect='non-scaling-stroke'/></svg>"
-    "<div class='flex-between' style='font-size:11px;color:#94a3b8'><span>-24 h</span><span>-12 h</span><span>now</span></div></div>`}"
-    "document.getElementById('hist').innerHTML=h||"
-    "`<span style='color:#94a3b8'>No sensor history yet (one sample every ${d.step/60} min)</span>`"
-    "}).catch(()=>{document.getElementById('hist').textContent='History unavailable'});"
-    "</script>";
+// SVG chart per measurement that has data: a grid with rounded value ticks,
+// hour lines every 3 h (labelled every 6 h, browser time), a soft fill under
+// the line, and a readout of the nearest sample under the pointer. Gaps
+// longer than 3 buckets break the line. All drawing happens client-side with
+// plain SVG (no library: the page works offline / on the fallback AP); the
+// device only streams numbers. Drawn at the card's pixel width, so the text
+// stays readable on a phone.
+static const char HISTORY_CARD[] PROGMEM = R"html(<h2>&#128200; Last 24 h</h2>
+<style>
+.hc{margin:2px 0 18px}.hc:last-child{margin-bottom:0}
+.hc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:2px}
+.hc-h b{font-size:.9rem;font-weight:600}
+.hc-v{font-family:monospace;font-size:.95rem;white-space:nowrap}
+.hc-v small{color:#94a3b8;margin-left:8px;font-size:.8rem}
+.hc svg{display:block;touch-action:pan-y}
+.hc text{font:10.5px -apple-system,'Segoe UI',sans-serif;fill:#94a3b8}
+.hc .g{stroke:#eef2f6}.hc .g0{stroke:#cbd5e1}
+</style>
+<div class='card' id='hist'><span style='color:#94a3b8'>Loading&hellip;</span></div>
+<script>
+(()=>{
+const S=[['temp','Temperature','°C','#f97316',1],['rh','Humidity','%','#0ea5e9',0],
+ ['hpa','Pressure','hPa','#8b5cf6',1],['co2','CO₂','ppm','#16a34a',0]];
+const box=document.getElementById('hist'),H=150,L=44,R=10,T=10,B=22,PH=H-T-B;
+const p2=n=>String(n).padStart(2,'0'),hm=s=>{const x=new Date(s*1000);return p2(x.getHours())+':'+p2(x.getMinutes())};
+const f=x=>x.toFixed(1);
+function nice(lo,hi){if(hi-lo<1e-9){lo-=.5;hi+=.5}
+ let st=Math.pow(10,Math.floor(Math.log10((hi-lo)/4)));const m=(hi-lo)/4/st;st*=m>5?10:m>2?5:m>1?2:1;
+ lo=Math.floor(lo/st+1e-9)*st;hi=Math.ceil(hi/st-1e-9)*st;if(hi-lo<st)hi=lo+st;return[lo,hi,st]}
+fetch('/api/history').then(r=>r.json()).then(d=>{
+ const W=Math.max(280,box.clientWidth-40),PW=W-L-R,t1=d.now,t0=t1-86400,X=s=>L+(s-t0)/86400*PW,base=T+PH;
+ box.innerHTML='';
+ for(const[k,n,u,c,dp]of S){const v=d[k];if(!v)continue;
+  const p=v.map((x,i)=>[d.t[i],x]).filter(q=>q[1]!==null&&q[0]>=t0);if(!p.length)continue;
+  const vals=p.map(q=>q[1]),mn=Math.min(...vals),mx=Math.max(...vals),[lo,hi,st]=nice(mn,mx);
+  const Y=x=>T+PH-(x-lo)/(hi-lo)*PH,yd=st<1?1:0;
+  let g='';
+  for(let i=0;lo+i*st<=hi+st/1e3;i++){const y=lo+i*st,yy=f(Y(y));
+   g+=`<line class='g' x1='${L}' x2='${W-R}' y1='${yy}' y2='${yy}'/><text x='${L-7}' y='${f(+yy+3.5)}' text-anchor='end'>${y.toFixed(yd)}</text>`}
+  for(let s=Math.ceil(t0/3600)*3600;s<=t1;s+=3600){const h=new Date(s*1000).getHours();if(h%3)continue;const xx=f(X(s));
+   g+=`<line class='g' x1='${xx}' x2='${xx}' y1='${T}' y2='${base}'/>`;
+   if(h%6==0)g+=`<text x='${xx}' y='${H-6}' text-anchor='middle'>${p2(h)}:00</text>`}
+  const segs=[];let cur=[],prev=null;
+  for(const[s,x]of p){if(prev!==null&&s-prev>d.step*3){segs.push(cur);cur=[]}cur.push([f(X(s)),f(Y(x))]);prev=s}
+  segs.push(cur);
+  let line='',area='',dots='';
+  for(const sg of segs){const pts=sg.map(q=>q[0]+' '+q[1]).join('L');line+='M'+pts;
+   area+=`M${sg[0][0]} ${base}L${pts}L${sg[sg.length-1][0]} ${base}Z`;
+   if(sg.length==1)dots+=`<circle cx='${sg[0][0]}' cy='${sg[0][1]}' r='1.8' fill='${c}'/>`}
+  const last=p[p.length-1],head=`${last[1].toFixed(dp)} ${u}<small>${mn.toFixed(dp)}&ndash;${mx.toFixed(dp)}</small>`;
+  const card=document.createElement('div');card.className='hc';
+  card.innerHTML=`<div class='hc-h'><b style='color:${c}'>${n}</b><span class='hc-v'>${head}</span></div>`+
+   `<svg width='${W}' height='${H}' viewBox='0 0 ${W} ${H}'><defs><linearGradient id='hg${k}' x1='0' y1='0' x2='0' y2='1'>`+
+   `<stop offset='0' stop-color='${c}' stop-opacity='.25'/><stop offset='1' stop-color='${c}' stop-opacity='0'/></linearGradient></defs>`+
+   `${g}<line class='g g0' x1='${L}' x2='${W-R}' y1='${base}' y2='${base}'/>`+
+   `<path d='${area}' fill='url(#hg${k})'/><path d='${line}' fill='none' stroke='${c}' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>${dots}`+
+   `<circle cx='${f(X(last[0]))}' cy='${f(Y(last[1]))}' r='3.5' fill='${c}' stroke='#fff' stroke-width='1.5'/>`+
+   `<g class='cur' visibility='hidden'><line y1='${T}' y2='${base}' stroke='#94a3b8' stroke-dasharray='3 3'/><circle r='4' fill='${c}' stroke='#fff' stroke-width='1.5'/></g>`+
+   `<rect x='${L}' y='0' width='${PW}' height='${H}' fill='transparent'/></svg>`;
+  box.append(card);
+  const svg=card.querySelector('svg'),cg=svg.querySelector('.cur'),cl=cg.firstChild,cc=cg.lastChild,hv=card.querySelector('.hc-v');
+  const mv=e=>{const r=svg.getBoundingClientRect(),ts=t0+((e.clientX-r.left)/r.width*W-L)/PW*86400;
+   let b=p[0];for(const q of p)if(Math.abs(q[0]-ts)<Math.abs(b[0]-ts))b=q;
+   const x=f(X(b[0]));cl.setAttribute('x1',x);cl.setAttribute('x2',x);cc.setAttribute('cx',x);cc.setAttribute('cy',f(Y(b[1])));
+   cg.setAttribute('visibility','visible');hv.innerHTML=`${b[1].toFixed(dp)} ${u}<small>${hm(b[0])}</small>`};
+  svg.addEventListener('pointermove',mv);svg.addEventListener('pointerdown',mv);
+  svg.addEventListener('pointerleave',()=>{cg.setAttribute('visibility','hidden');hv.innerHTML=head});
+ }
+ if(!box.childElementCount)box.innerHTML=`<span style='color:#94a3b8'>No sensor history yet (one sample every ${d.step/60} min)</span>`;
+}).catch(()=>{box.textContent='History unavailable'});
+})();
+</script>)html";
 
 void handle_home()
 {
