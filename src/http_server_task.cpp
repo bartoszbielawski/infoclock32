@@ -163,7 +163,7 @@ void handle_home()
 
 static void sendTasksSection()
 {
-    const TaskRegistry& reg = TaskRegistry::getInstance();
+    TaskRegistry& reg = TaskRegistry::getInstance();
     int n = reg.count();
     if (n == 0) return;
 
@@ -204,16 +204,13 @@ static void sendTasksSection()
     for (int i = 0; i < n; ++i) {
         const RegisteredTask& t = reg.get(i);
         // An exited task's stack is freed: there is no watermark to read.
-        TaskHandle_t handle = t.handle;
-        if (t.exited || !handle) {
+        uint32_t freeBytes = 0;
+        if (!reg.stackFreeBytes(i, freeBytes)) {
             snprintf(buf, sizeof(buf),
                 "<tr><td class='label mono'>%s</td><td>exited</td></tr>\n", t.name);
             server.sendContent(buf);
             continue;
         }
-        UBaseType_t watermark = uxTaskGetStackHighWaterMark(handle);
-
-        uint32_t freeBytes = (uint32_t)watermark * sizeof(StackType_t);
         snprintf(buf, sizeof(buf),
             "<tr><td class='label mono'>%s</td>"
             "<td>stack&nbsp;hwm&nbsp;%u&nbsp;/&nbsp;%u&nbsp;B</td></tr>\n",

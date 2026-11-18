@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
@@ -9,6 +10,8 @@
 #include <resource_manager.hpp>
 #include <LMDS.hpp>
 #include <graphic_utils.hpp>
+#include <message_utils.hpp>
+#include <scroll_timing.hpp>
 #include <logger.hpp>
 #include <task_registry.hpp>
 #include <status_task.h>
@@ -58,7 +61,11 @@ void push_task(void*)
         // the status task kicks us again when it ends.
         if (!status_info().active && xQueuePeek(s_queue, &item, 0) == pdTRUE)
         {
-            task_heartbeat_grace(kAcquireMs + 90000);   // wait + scroll
+            // Wait + this message's whole scroll: a long text at a slow
+            // speed (/push allows up to 500 ms/step) runs for minutes, far
+            // past any fixed grace, and the supervisor would reboot.
+            const size_t chars = std::min(strlen(item.text), kMaxDisplayMessage);
+            task_heartbeat_grace(kAcquireMs + scroll_duration_ms(chars, item.speedMs) + 30000);
             if (auto display = rmd.acquire(pdMS_TO_TICKS(kAcquireMs), true))
             {
                 xQueueReceive(s_queue, &item, 0);   // only this task receives

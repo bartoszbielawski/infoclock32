@@ -49,17 +49,28 @@ public:
     static constexpr size_t kCapacity = 288;
 
     // Store `s` if it opens a new bucket of `stepS` seconds; a later reading in
-    // the same bucket, a sample with nothing valid, or a clock that went
-    // backwards is ignored. Returns true when stored.
+    // the same bucket or a sample with nothing valid is ignored. Returns true
+    // when stored.
+    //
+    // The newest sample's bucket is worked out with the current `stepS`, so a
+    // history_step_min change at run time takes effect on the next reading
+    // (a remembered bucket index from the old step would block every sample
+    // after a step increase). A clock stepped back by more than one bucket
+    // (NTP correcting a bad time) starts the history afresh: the stored
+    // samples would otherwise sit in the "future" and block new ones.
     bool offer(const HistorySample& s, uint32_t stepS)
     {
         if (stepS == 0 || s.flags == 0) return false;
-        const uint32_t bucket = s.t / stepS;
-        if (count_ && bucket <= lastBucket_) return false;
+        if (count_) {
+            const uint32_t lastT = at(count_ - 1).t;
+            if (s.t + stepS < lastT)
+                clear();
+            else if (s.t / stepS <= lastT / stepS)
+                return false;
+        }
         buf_[head_] = s;
         head_ = (head_ + 1) % kCapacity;
         if (count_ < kCapacity) count_++;
-        lastBucket_ = bucket;
         return true;
     }
 
@@ -71,12 +82,11 @@ public:
         return buf_[(head_ + kCapacity - count_ + i) % kCapacity];
     }
 
-    void clear() { head_ = count_ = 0; lastBucket_ = 0; }
+    void clear() { head_ = count_ = 0; }
 
 private:
     HistorySample buf_[kCapacity];
     size_t head_ = 0, count_ = 0;
-    uint32_t lastBucket_ = 0;
 };
 
 // Format one series value for JSON (`null` when the sample lacks it).

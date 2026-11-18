@@ -120,6 +120,21 @@ public:
         return verdict;
     }
 
+    // Free stack (bytes, high-water mark) of task `i`; false when it has
+    // exited. Read under the lock: a task clears its handle in markExited()
+    // before deleting itself, so a handle still set here names a live task
+    // (reading it outside the lock could query a task freed in between).
+    bool stackFreeBytes(int i, uint32_t& out) {
+        bool live = false;
+        taskENTER_CRITICAL(&mux_);
+        if (i >= 0 && i < count_ && !tasks_[i].exited && tasks_[i].handle) {
+            out = (uint32_t)uxTaskGetStackHighWaterMark(tasks_[i].handle) * sizeof(StackType_t);
+            live = true;
+        }
+        taskEXIT_CRITICAL(&mux_);
+        return live;
+    }
+
     int count() const { return count_; }
     const RegisteredTask& get(int i) const { return tasks_[i]; }
 

@@ -76,14 +76,16 @@ static void setup_hint_task(void* /*pv*/)
         {
             // Drop the flag before the final check: an enter_ap_mode() racing
             // with this exit either sees the flag down and starts a new task,
-            // or this task sees s_ap_mode back up and keeps going.
+            // or this task sees s_ap_mode back up and keeps going. Taking the
+            // flag back is a CAS, so if enter_ap_mode() already started a
+            // replacement this task still exits (never two hint tasks).
             s_hint_running = false;
-            if (!s_ap_mode)
+            bool expected = false;
+            if (!s_ap_mode || !s_hint_running.compare_exchange_strong(expected, true))
             {
                 task_mark_exited();
                 vTaskDelete(nullptr);
             }
-            s_hint_running = true;
         }
         if (s_ap_mode)
         {

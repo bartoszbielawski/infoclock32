@@ -37,10 +37,25 @@ int main()
     CHECK(h.offer(make_history_sample(600, 20, 50, 1000, 0), 300), "first stored");
     CHECK(!h.offer(make_history_sample(899, 25, 50, 1000, 0), 300), "same bucket ignored");
     CHECK(h.offer(make_history_sample(900, 21, 50, 1000, 0), 300), "next bucket stored");
-    CHECK(!h.offer(make_history_sample(700, 22, 50, 1000, 0), 300), "clock went back: ignored");
+    CHECK(!h.offer(make_history_sample(700, 22, 50, 1000, 0), 300), "clock back within a bucket: ignored");
     CHECK(!h.offer(HistorySample{}, 300), "empty sample ignored");
     CHECK(!h.offer(make_history_sample(5000, 20, 50, 1000, 0), 0), "step 0 ignored");
     CHECK(h.size() == 2 && h.at(0).temp10 == 200 && h.at(1).temp10 == 210, "order oldest first");
+
+    // step change at run time (history_step_min): a longer step must not
+    // block new samples, a shorter one opens buckets sooner
+    h.clear();
+    CHECK(h.offer(make_history_sample(1000000, 20, NAN, NAN, 0), 300), "5 min: first");
+    CHECK(h.offer(make_history_sample(1000300, 21, NAN, NAN, 0), 300), "5 min: next bucket");
+    CHECK(!h.offer(make_history_sample(1000500, 22, NAN, NAN, 0), 600), "10 min: same bucket ignored");
+    CHECK(h.offer(make_history_sample(1000800, 23, NAN, NAN, 0), 600), "10 min: next bucket stored");
+    CHECK(h.offer(make_history_sample(1000860, 24, NAN, NAN, 0), 60), "1 min: next bucket stored");
+    CHECK(h.size() == 4, "step changes kept %zu", h.size());
+
+    // clock stepped back by more than a bucket: start afresh
+    CHECK(h.offer(make_history_sample(500000, 19, NAN, NAN, 0), 300), "clock stepped back: stored");
+    CHECK(h.size() == 1 && h.at(0).t == 500000, "history restarted after a step back");
+    CHECK(h.offer(make_history_sample(500300, 19, NAN, NAN, 0), 300), "and continues");
 
     // wrap-around keeps the newest kCapacity samples, oldest first
     h.clear();
