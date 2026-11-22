@@ -112,6 +112,17 @@ start web  "sensors=sim" "sim_temp=20" "message_hello_text=</textarea><b>x" "ow_
 # weather: the real task streams the canned OpenWeatherMap responses
 start weather "sensors=stub" "enable_weather=1"
 
+# weather2: two named OpenWeatherMap locations, one with the deprecated
+# placeholder in a message; both are fetched and logged with their own tag
+start weather2 "sensors=stub" "enable_weather=1" "weather_city_id=" \
+    "weather_paris_city_id=1" "weather_paris_name=Paris" \
+    "weather_rome_city_id=2" "weather_rome_name=Rome" \
+    "weather_lat=1" "weather_lon=2" "message_hot_text=It is {weather_temp}"
+
+# deprecated: old key names still work (weather runs) and the web UI warns
+start deprecated "sensors=stub" "enable_weather=1" "weather_api_key=" "weather_city_id=" \
+    "ow_api_key=demo" "ow_city_id=2643743"
+
 # lhc: the real task streams the canned LHC Page 1 JSON
 start lhc "sensors=stub" "enable_lhc=1"
 
@@ -226,6 +237,23 @@ if [ "$before" = "$after" ] && [ "$before" -gt 800 ]; then ok "config intact aft
 expect_log weather "\[WTH\] Prototype: 21.4"
 expect_log weather "18.7.*light rain"
 if grep -aq "failed to parse temperature\|missing city name" "$WORK/weather.log"; then fail "weather: parse failed"; else ok "weather: both responses parsed"; fi
+expect_log weather2 "\[WTH\] \[paris\] Paris: 21.4"
+expect_log weather2 "\[WTH\] \[rome\] Rome: 21.4"
+expect_log deprecated "\[WTH\] Prototype: 21.4"   # old ow_* keys still work
+for c in weather2 deprecated; do
+    eval "pd=\$PORT_$c"
+    home=$(curl -s --max-time 15 "http://127.0.0.1:$pd/")
+    if printf '%s' "$home" | grep -qF "Deprecated configuration"; then ok "$c: home page warns about deprecated config"; else fail "$c: no deprecation banner on /"; fi
+done
+eval "pd=\$PORT_weather2"
+home=$(curl -s --max-time 15 "http://127.0.0.1:$pd/")
+if printf '%s' "$home" | grep -qF "weather_lat"; then ok "weather2: ignored legacy key listed"; else fail "weather2: ignored legacy key not listed"; fi
+if printf '%s' "$home" | grep -qF "{weather_temp} in message_hot_text"; then ok "weather2: deprecated placeholder listed"; else fail "weather2: deprecated placeholder not listed"; fi
+eval "pd=\$PORT_deprecated"
+home=$(curl -s --max-time 15 "http://127.0.0.1:$pd/")
+if printf '%s' "$home" | grep -qF "ow_api_key" && ! printf '%s' "$home" | grep -qF "demo"; then ok "deprecated: key named, value not shown"; else fail "deprecated: key not named or value leaked"; fi
+eval "pd=\$PORT_weather"
+if curl -s --max-time 15 "http://127.0.0.1:$pd/" | grep -qF "Deprecated configuration"; then fail "weather: legacy single-location config wrongly flagged"; else ok "weather: no banner for a clean config"; fi
 expect_log lhc "\[LHC\] status: PROTON PHYSICS: STABLE BEAMS @ 6800 GeV"
 expect_log lhc "\[LHC\] comment: Stable beams - fill 10000 .* Let's go!"
 if grep -aq "old comment\|SETUP\|JSON error" "$WORK/lhc.log"; then fail "lhc: stale entry or JSON error"; else ok "lhc: latest entries parsed"; fi

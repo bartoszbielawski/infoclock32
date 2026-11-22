@@ -31,7 +31,7 @@ Pins are board-specific and defined in `include/pins.hpp`.
 | Feature | Config key(s) |
 |---------|--------------|
 | Clock + date display (bottom-right pixel blinks while WiFi is down) | `language` (`en`/`fr`/`pl`/`it`/`es`/`pt`/`de`), `timezone`, `clock_style` |
-| Weather forecast (Open-Meteo, no key; or OpenWeatherMap) | `enable_weather`, `weather_provider`, `sun_lat`/`sun_lon` or `weather_lat`/`weather_lon`, `ow_api_key`, `ow_city_id` (condition icon prepended to the scroll; `weather_id`/`weather_desc`/`weather_temp` placeholders) |
+| Weather forecast (Open-Meteo, no key; or OpenWeatherMap) | `enable_weather`, `weather_provider`, `weather_<id>_lat`/`_lon`/`_city_id`/`_name` (up to 4 locations, shown in turn), `weather_api_key`, `weather_interval_min` (condition icon prepended to the scroll; `weather_<id>_temp`/`_desc`/`_id` placeholders, plus the deprecated unprefixed `weather_temp`/`weather_desc`/`weather_id` for the first location) |
 | LHC beam status (CERN) | `enable_lhc` |
 | Sensors (multiple drivers) | `sensors`, `sensor_interval`, `temp_offset`, `humidity_offset`, `pressure_offset`, `co2_offset`, `sensor_display`, `sensor_readout_interval`, `sensor_hold_s` |
 | Custom scrolling messages | `message_<name>_*`, `msg_interval` |
@@ -201,11 +201,16 @@ Key config keys (a searchable version of these tables, where a click on a key re
 | `web_password` | — | HTTP Basic Auth password (blank = open) |
 | `ota_password` | — | ArduinoOTA password; blank disables OTA entirely |
 | `syslog_server` | — | UDP syslog destination IP (port 514) |
-| `weather_provider` | `auto` | `auto` (OpenWeatherMap when its key and city are set, otherwise Open-Meteo when a location is set), `owm`, or `open-meteo`. The weather task only starts at boot when the chosen provider is configured |
-| `weather_lat` / `weather_lon` | `sun_lat` / `sun_lon` | Location for Open-Meteo (free, no API key, plain HTTP so no TLS heap cost); falls back to the sunrise location |
-| `weather_name` | *(empty)* | Optional label in front of the Open-Meteo scroll, e.g. `Geneva` |
-| `ow_api_key` / `ow_city_id` | — | OpenWeatherMap credentials |
-| `ow_interval_min` | `30` | Minutes between weather fetches (10–1440); failed fetches retry with 1, 2, 4… min backoff (max 10 min) |
+| `weather_provider` | `auto` | Which backend the locations use: `auto` (OpenWeatherMap when the location has a city ID and `weather_api_key` is set, otherwise Open-Meteo when it has coordinates), `owm`, or `open-meteo`. The weather task only starts at boot when at least one location is usable |
+| `weather_<id>_lat` / `weather_<id>_lon` | — | Open-Meteo location (free, no API key, plain HTTP so no TLS heap cost) of one named location. `<id>` is lowercase letters and digits, e.g. `geneva`. Up to 4 locations are shown in turn, in alphabetical order of their ids |
+| `weather_<id>_city_id` | — | OpenWeatherMap city ID of that location (needs `weather_api_key`) |
+| `weather_<id>_name` | *(empty)* | Label in front of the scroll, e.g. `Geneva`. Default: the city name OpenWeatherMap reports, or the id for Open-Meteo |
+| `weather_<id>_provider` | *(empty)* | `owm` or `open-meteo`: overrides `weather_provider` for this location, so one place can use each backend |
+| `weather_api_key` | — | OpenWeatherMap API key, shared by all locations |
+| `weather_interval_min` | `30` | Minutes between weather fetches of every location (10–1440); failed fetches retry with 1, 2, 4… min backoff (max 10 min) |
+| `weather_lat` / `weather_lon` / `weather_city_id` / `weather_name` | `sun_lat` / `sun_lon` | The single-location form, used only while no `weather_<id>_*` location exists (coordinates fall back to the sunrise location). Ignored, and flagged in the web UI, once a named location is configured |
+| `ow_api_key` / `ow_city_id` / `ow_interval_min` | — | **Deprecated**, removed in 0.9.0: still read as a fallback for `weather_api_key`, `weather_city_id` and `weather_interval_min` |
+| `config_warn_interval_min` | `60` | Minutes between "Check your config" scrolls while the config uses deprecated keys (`0` = off). The web UI home and config pages list them too |
 | `mqtt_server` / `mqtt_client_id` | — | MQTT broker and client ID |
 | `mqtt_user` / `mqtt_password` | — | MQTT credentials |
 | `enable_mqtt_discovery` | `1` | Publish Home Assistant discovery configs on connect (requires `enable_mqtt`) |

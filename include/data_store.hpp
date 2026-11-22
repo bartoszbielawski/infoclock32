@@ -12,6 +12,7 @@
 #include <secret_keys.hpp>
 #include <config_utils.hpp>
 #include <config_parse.hpp>
+#include <config_view.hpp>
 #include <Arduino.h>
 
 class DataStore
@@ -223,4 +224,15 @@ private:
     std::mutex save_mutex_;           // serializes save_to_file I/O
     std::map<std::string, std::string> data;
 };
+
+// Read-only view for the pure config helpers (weather_locations.hpp, ...).
+inline ConfigView dataStoreView()
+{
+    ConfigView v;
+    v.get = [](const std::string& key) { return DataStore::getInstance().get_value(key, ""); };
+    v.keysWithPrefix = [](const std::string& prefix) {
+        return DataStore::getInstance().get_keys_with_prefix(prefix);
+    };
+    return v;
+}
 #endif // INFOCLOCK32_INCLUDE_DATA_STORE_HPP

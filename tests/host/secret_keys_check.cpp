@@ -10,9 +10,10 @@ static int failures = 0;
 int main()
 {
     const char* secret[] = { "wifi_password", "ota_password", "web_password", "mqtt_password",
-                             "ow_api_key", "novae_key", "MQTT_PASSWORD", "some_secret", "api_token", "key" };
+                             "ow_api_key", "weather_api_key", "novae_key", "MQTT_PASSWORD", "some_secret", "api_token", "key" };
     const char* open[]   = { "sensors", "sensor_interval", "hostname", "mqtt_server", "mqtt_user",
-                             "ow_city_id", "keyboard_layout", "brightness", "monkey", "wifi_ssid", "sun_lat" };
+                             "ow_city_id", "weather_city_id", "weather_geneva_city_id", "weather_interval_min",
+                             "keyboard_layout", "brightness", "monkey", "wifi_ssid", "sun_lat" };
     for (const char* k : secret) CHECK(isSecretKey(k), "'%s' must be secret", k);
     for (const char* k : open)   CHECK(!isSecretKey(k), "'%s' must not be secret", k);
 

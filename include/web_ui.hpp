@@ -17,6 +17,9 @@ WebServer* getWebServer();
 void sendPageHead(const char* title, const char* extraHead = "");
 void sendPageNav(const char* active);
 void sendPageFoot();
+// Amber box listing deprecated config keys in use (nothing when there are
+// none). Call right after sendPageNav() on pages where the user can act on it.
+void sendDeprecationBanner();
 // sendRow() escapes `value` (it is often device or config data);
 // sendRowHtml() is for trusted markup built from string literals only.
 void sendRow(const char* label, const char* value);

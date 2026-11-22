@@ -52,3 +52,8 @@ tests/host/scroll_timing_check
 tests/host/status_state_check
 tests/host/config_backup_check
 tests/host/lhc_text_check
+
+# Local device config backups (contain secrets)
+config-backups/
+tests/host/weather_locations_check
+tests/host/deprecated_keys_check

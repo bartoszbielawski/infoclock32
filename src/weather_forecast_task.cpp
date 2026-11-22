@@ -22,6 +22,7 @@
 #include <task_registry.hpp>
 #include <display_strings.hpp>
 #include <weather_wmo.hpp>
+#include <weather_locations.hpp>
 #include <cmath>
 
 // OpenWeatherMap API endpoints stored in flash (PROGMEM)
@@ -67,8 +68,8 @@ static const std::set<std::string> forecastKeys = {
 
 // ── Open-Meteo (no API key, plain HTTP) ──────────────────────────────────────
 // Free and keyless, and served over plain HTTP, so a fetch costs a couple of
-// KB of heap instead of a ~55 KB TLS session. Location: weather_lat/lon, or
-// the sun_lat/lon the sunrise task already uses.
+// KB of heap instead of a ~55 KB TLS session. Location: weather_<id>_lat/lon
+// (see weather_locations.hpp), or the legacy weather_lat/lon / sun_lat/lon.
 
 static const char OPEN_METEO_URL[] PROGMEM =
     "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
@@ -84,58 +85,70 @@ static const std::set<std::string> openMeteoKeys = {
     "/root/hourly/weather_code/6",
 };
 
-static bool weather_location(float& lat, float& lon)
+struct WeatherResult {
+    std::string message;   // display text, empty on failure
+    int iconIndex = -1;    // index into kWeatherIcons, -1 = no icon
+};
+
+// Log prefix: "[geneva] " for a named location, nothing for the legacy one.
+static std::string locTag(const WeatherLocation& loc)
 {
-    auto& ds = DataStore::getInstance();
-    lat = ds.get_value<float>("weather_lat", NAN);
-    lon = ds.get_value<float>("weather_lon", NAN);
-    if (std::isnan(lat) || std::isnan(lon)) {
-        lat = ds.get_value<float>("sun_lat", NAN);
-        lon = ds.get_value<float>("sun_lon", NAN);
-    }
-    return !std::isnan(lat) && !std::isnan(lon) &&
-           lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    return loc.id.empty() ? std::string() : "[" + loc.id + "] ";
 }
 
-enum class WeatherProvider { None, Owm, OpenMeteo };
-
-// weather_provider: auto (default: OWM when its key and city are set,
-// otherwise Open-Meteo when a location is set), owm, open-meteo.
-static WeatherProvider weather_provider()
+static std::string globalProvider()
 {
-    auto& ds = DataStore::getInstance();
-    const std::string p = ds.get_value("weather_provider", "auto");
-    const bool owmReady = !ds.get_value("ow_api_key", "").empty() &&
-                          !ds.get_value("ow_city_id", "").empty();
-    float lat, lon;
-    const bool omReady = weather_location(lat, lon);
-    if (p == "owm")        return owmReady ? WeatherProvider::Owm : WeatherProvider::None;
-    if (p == "open-meteo") return omReady ? WeatherProvider::OpenMeteo : WeatherProvider::None;
-    if (owmReady) return WeatherProvider::Owm;
-    if (omReady)  return WeatherProvider::OpenMeteo;
-    return WeatherProvider::None;
+    return DataStore::getInstance().get_value("weather_provider", "auto");
 }
 
-bool weather_configured() { return weather_provider() != WeatherProvider::None; }
-
-static std::string readWeatherFromOpenMeteo(int& iconIndex)
+bool weather_configured()
 {
-    auto& ds = DataStore::getInstance();
-    float lat, lon;
-    if (!weather_location(lat, lon)) {
-        logPrintf("WTH", "no location: set weather_lat/weather_lon (or sun_lat/sun_lon)");
-        return std::string();
+    const WeatherLocationSet set = parse_weather_locations(dataStoreView());
+    const std::string provider = globalProvider();
+    const bool hasKey = !weather_api_key(dataStoreView()).empty();
+    for (const auto& loc : set.locations)
+        if (choose_weather_backend(loc, provider, hasKey) != WeatherBackend::None) return true;
+    return false;
+}
+
+// Publish for {placeholders} in custom messages and MQTT /request:
+// weather_<id>_temp / _desc / _id per named location. `mirror` also fills the
+// unprefixed weather_temp / weather_desc / weather_id (legacy single location,
+// or the first named one).
+// DEPRECATED: the unprefixed mirror is removed in 0.9.0 (see deprecated_keys.hpp).
+static void publishWeather(const WeatherLocation& loc, bool mirror, int conditionId,
+                           const std::string& description, float nowTemp)
+{
+    auto& rs = RuntimeStore::getInstance();
+    char t[16];
+    snprintf(t, sizeof(t), "%.1f", nowTemp);
+    const std::string id = std::to_string(conditionId);
+    if (!loc.id.empty()) {
+        rs.set(weather_key(loc.id, "id"), id);
+        rs.set(weather_key(loc.id, "desc"), description);
+        rs.set(weather_key(loc.id, "temp"), t);
     }
+    if (mirror) {
+        rs.set("weather_id", id);
+        rs.set("weather_desc", description);
+        rs.set("weather_temp", t);
+    }
+}
+
+static WeatherResult readWeatherFromOpenMeteo(const WeatherLocation& loc, bool mirror)
+{
+    WeatherResult res;
+    auto& ds = DataStore::getInstance();
     char url[256];
-    snprintf_P(url, sizeof(url), OPEN_METEO_URL, lat, lon);
+    snprintf_P(url, sizeof(url), OPEN_METEO_URL, loc.lat, loc.lon);
 
     std::map<std::string, std::string> v;
     int response = HttpUtils::httpGetStream(url, [&](Stream& body) {
         v = parseJsonStreamWithPredicate(body, openMeteoKeys);
     });
     if (response != 200) {
-        logPrintf("WTH", "Open-Meteo HTTP GET failed: %d", response);
-        return std::string();
+        logPrintf("WTH", "%sOpen-Meteo HTTP GET failed: %d", locTag(loc).c_str(), response);
+        return res;
     }
 
     const float nowT  = parse_value(v["/root/current/temperature_2m"], NAN);
@@ -143,51 +156,37 @@ static std::string readWeatherFromOpenMeteo(int& iconIndex)
     const int nowCode  = parse_value(v["/root/current/weather_code"], -1);
     const int laterCode = parse_value(v["/root/hourly/weather_code/6"], -1);
     if (std::isnan(nowT) || std::isnan(laterT) || nowCode < 0 || laterCode < 0) {
-        logPrintf("WTH", "Open-Meteo response missing fields");
-        return std::string();
+        logPrintf("WTH", "%sOpen-Meteo response missing fields", locTag(loc).c_str());
+        return res;
     }
     const bool night = parse_value(v["/root/current/is_day"], 1) == 0;
     const Lang lang = parse_lang(ds.get_value("language", "en"));
     const int owmId = wmo_to_owm(nowCode);
     const std::string description = wmo_description(laterCode, lang);
-    iconIndex = weatherIconIndex(owmId, night);
+    res.iconIndex = weatherIconIndex(owmId, night);
+    publishWeather(loc, mirror, owmId, description, nowT);
 
-    RuntimeStore::getInstance().set("weather_id", std::to_string(owmId));
-    RuntimeStore::getInstance().set("weather_desc", description);
-    char t[16];
-    snprintf(t, sizeof(t), "%.1f", nowT);
-    RuntimeStore::getInstance().set("weather_temp", t);
-
-    // Same layout as the OWM message; the label is optional (Open-Meteo has
-    // no place names).
-    const std::string name = ascii_fold(ds.get_value("weather_name", "").c_str());
+    // Same layout as the OWM message. Open-Meteo has no place names, so the
+    // label is weather_<id>_name, else the id (legacy: none).
+    const std::string name = ascii_fold((loc.label.empty() ? loc.id : loc.label).c_str());
     char msg[160];
     snprintf(msg, sizeof(msg), "%s%s%.1f\xF7" "C (%.1f\xF7" "C, %s)",
              name.c_str(), name.empty() ? "" : ": ", nowT, laterT, description.c_str());
-    logPrintf("WTH", "Open-Meteo: %.1f C now (code %d), %.1f C in 6 h, %s",
-              nowT, nowCode, laterT, description.c_str());
-    return msg;
+    logPrintf("WTH", "%sOpen-Meteo: %.1f C now (code %d), %.1f C in 6 h, %s",
+              locTag(loc).c_str(), nowT, nowCode, laterT, description.c_str());
+    res.message = msg;
+    return res;
 }
 
-// Returns the display message, or an empty string on failure.
-// iconIndex (out): index into kWeatherIcons for the current condition,
-// or -1 if the condition could not be parsed.
-static std::string readWeatherFromOWM(int& iconIndex)
+static WeatherResult readWeatherFromOWM(const WeatherLocation& loc, const std::string& apiKey, bool mirror)
 {
-    auto& ds    = DataStore::getInstance();
-    auto apiKey = ds.get_value("ow_api_key", "");
-    auto cityId = ds.get_value("ow_city_id", "");
-
-    if (apiKey.empty() || cityId.empty())
-    {
-        logPrintf("WTH", "ow_api_key or ow_city_id not configured");
-        return std::string();
-    }
+    WeatherResult res;
+    auto& ds = DataStore::getInstance();
 
     // read current weather
     const char* lang = owm_lang(parse_lang(ds.get_value("language", "en")));
     char url[160];
-    snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, cityId.c_str(), apiKey.c_str(), lang);
+    snprintf(url, sizeof(url), OW_WEATHER_API_CURRENT, loc.cityId.c_str(), apiKey.c_str(), lang);
 
     std::map<std::string, std::string> currentWeather;
     auto response = HttpUtils::httpGetStream(url, [&](Stream& body) {
@@ -195,20 +194,20 @@ static std::string readWeatherFromOWM(int& iconIndex)
     });
     if (response != 200)
     {
-        logPrintf("WTH", "current weather HTTP GET failed: %d", response);
-        return std::string();
+        logPrintf("WTH", "%scurrent weather HTTP GET failed: %d", locTag(loc).c_str(), response);
+        return res;
     }
 
     // read forecast
-    snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, cityId.c_str(), apiKey.c_str(), lang);
+    snprintf(url, sizeof(url), OW_WEATHER_API_FORECAST, loc.cityId.c_str(), apiKey.c_str(), lang);
     std::map<std::string, std::string> forecastWeather;
     response = HttpUtils::httpGetStream(url, [&](Stream& body) {
         forecastWeather = parseJsonStreamWithPredicate(body, forecastKeys);
     });
     if (response != 200)
     {
-        logPrintf("WTH", "forecast HTTP GET failed: %d", response);
-        return std::string();
+        logPrintf("WTH", "%sforecast HTTP GET failed: %d", locTag(loc).c_str(), response);
+        return res;
     }
 
     // create result string with the following format:
@@ -223,17 +222,19 @@ static std::string readWeatherFromOWM(int& iconIndex)
     float forecastTemp = parse_value(forecastWeather["/root/list/2/main/temp"], NAN);
     if (std::isnan(currentTemp) || std::isnan(forecastTemp))
     {
-        logPrintf("WTH", "failed to parse temperature values from API response");
-        return std::string();
+        logPrintf("WTH", "%sfailed to parse temperature values from API response", locTag(loc).c_str());
+        return res;
     }
 
     // The matrix font is ASCII only; localized names/descriptions carry diacritics.
-    const std::string cityName = ascii_fold(forecastWeather["/root/city/name"].c_str());
+    // weather_<id>_name overrides the name the API reports.
+    const std::string cityName = ascii_fold(
+        (loc.label.empty() ? forecastWeather["/root/city/name"] : loc.label).c_str());
     const std::string description = ascii_fold(forecastWeather["/root/list/2/weather/0/description"].c_str());
     if (cityName.empty() || description.empty())
     {
-        logPrintf("WTH", "missing city name or description in forecast response");
-        return std::string();
+        logPrintf("WTH", "%smissing city name or description in forecast response", locTag(loc).c_str());
+        return res;
     }
 
     // Current condition drives the display icon; OWM's icon field carries
@@ -241,33 +242,37 @@ static std::string readWeatherFromOWM(int& iconIndex)
     int conditionId = parse_value(currentWeather["/root/weather/0/id"], -1);
     std::string iconField = currentWeather["/root/weather/0/icon"];
     bool night = !iconField.empty() && iconField.back() == 'n';
-    iconIndex = (conditionId > 0) ? weatherIconIndex(conditionId, night) : -1;
+    res.iconIndex = (conditionId > 0) ? weatherIconIndex(conditionId, night) : -1;
 
-    // Publish for {placeholders} in custom messages and MQTT /request
-    RuntimeStore::getInstance().set("weather_id", std::to_string(conditionId));
-    RuntimeStore::getInstance().set("weather_desc", description);
+    publishWeather(loc, mirror, conditionId, description, currentTemp);
 
     char logInfo[256];
     snprintf_P(logInfo, sizeof(logInfo), WEATHER_FMT_LOG,
         cityName.c_str(), currentTemp, forecastTemp, description.c_str());
-    logPrintf("WTH", "%s", logInfo);
+    logPrintf("WTH", "%s%s", locTag(loc).c_str(), logInfo);
 
     char weatherInfo[256];
     snprintf_P(weatherInfo, sizeof(weatherInfo), WEATHER_FMT_DISP,
         cityName.c_str(), currentTemp, forecastTemp, description.c_str());
 
-    return weatherInfo;
+    res.message = weatherInfo;
+    return res;
 }
+
+// Per-location fetch state. Keyed by location id so a config edit that adds,
+// removes or reorders locations keeps the state of the ones that remain.
+struct WeatherEntry {
+    WeatherResult result;
+    uint32_t nextFetchMs = 0;   // 0 = fetch now
+    uint32_t failures = 0;
+};
 
 void open_weather_map_task(void *parameter)
 {
     registerTask("Weather", 7168, 120000);
-    std::string messageToBeDisplayed;
-    int iconIndex = -1;  // -1 = no icon; otherwise index into kWeatherIcons
-    // Fetch scheduling on millis(): the wall clock reads ~uptime until NTP
-    // syncs. nextFetchMs == 0 means "fetch now" (first pass after boot).
-    uint32_t nextFetchMs = 0;
-    uint32_t failures = 0;
+    std::map<std::string, WeatherEntry> entries;
+    size_t cursor = (size_t)-1;     // rotation: last location shown
+    size_t lastCount = (size_t)-1;  // to log the location list when it changes
 
     auto& rmd = ResourceManager<LMDS>::getInstance();
 
@@ -279,38 +284,78 @@ void open_weather_map_task(void *parameter)
             continue;
         }
 
-        if (nextFetchMs == 0 || (int32_t)(millis() - nextFetchMs) >= 0)
-        {
-            // ow_interval_min: minutes between API calls (default 30, min 10)
-            uint32_t intervalMs = (uint32_t)max(10, min(1440,
-                DataStore::getInstance().get_value<int>("ow_interval_min", 30))) * (uint32_t)60000;
+        // Re-read the config every pass: /edit and MQTT /config can add,
+        // remove or change locations without a reboot.
+        const ConfigView cfg = dataStoreView();
+        const WeatherLocationSet set = parse_weather_locations(cfg);
+        const std::string provider = globalProvider();
+        const std::string apiKey = weather_api_key(cfg);
+        const uint32_t intervalMs = (uint32_t)weather_interval_min(cfg) * (uint32_t)60000;
 
-            const WeatherProvider provider = weather_provider();
-            auto newWeather = provider == WeatherProvider::OpenMeteo ? readWeatherFromOpenMeteo(iconIndex)
-                            : provider == WeatherProvider::Owm       ? readWeatherFromOWM(iconIndex)
-                            : std::string();
-            if (not newWeather.empty())
+        if (set.locations.size() != lastCount) {
+            lastCount = set.locations.size();
+            logPrintf("WTH", "%u weather location(s)%s", (unsigned)lastCount, set.named ? "" : " (legacy keys)");
+            if (set.ignored)
+                logPrintf("WTH", "%u location(s) beyond the limit of %u ignored",
+                          (unsigned)set.ignored, (unsigned)kMaxWeatherLocations);
+        }
+
+        // Forget locations that left the config.
+        for (auto it = entries.begin(); it != entries.end(); ) {
+            bool keep = false;
+            for (const auto& loc : set.locations) keep = keep || loc.id == it->first;
+            it = keep ? std::next(it) : entries.erase(it);
+        }
+
+        // Fetch every due location, one request at a time.
+        for (size_t i = 0; i < set.locations.size(); i++)
+        {
+            const WeatherLocation& loc = set.locations[i];
+            WeatherEntry& e = entries[loc.id];
+            if (!(e.nextFetchMs == 0 || (int32_t)(millis() - e.nextFetchMs) >= 0)) continue;
+            task_heartbeat();
+
+            const WeatherBackend backend = choose_weather_backend(loc, provider, !apiKey.empty());
+            WeatherResult r;
+            if (backend == WeatherBackend::None)
+                logPrintf("WTH", "%sno usable backend (needs lat+lon, or city id and weather_api_key)", locTag(loc).c_str());
+            else if (backend == WeatherBackend::OpenMeteo)
+                r = readWeatherFromOpenMeteo(loc, i == 0);
+            else
+                r = readWeatherFromOWM(loc, apiKey, i == 0);
+
+            if (backend == WeatherBackend::None)
             {
-                messageToBeDisplayed = newWeather;
-                failures = 0;
-                nextFetchMs = millis() + intervalMs;
+                e.nextFetchMs = millis() + intervalMs;   // config problem: do not retry every minute
+            }
+            else if (!r.message.empty())
+            {
+                e.result = r;
+                e.failures = 0;
+                e.nextFetchMs = millis() + intervalMs;
             }
             else
             {
                 // back off 1, 2, 4... min (capped at 10 min / the interval) instead of
                 // hitting the API every minute while it is failing
-                uint32_t backoffMs = (uint32_t)60000 << min<uint32_t>(failures, 10);
-                if (failures < 10) failures++;
-                nextFetchMs = millis() + min(min(backoffMs, intervalMs), (uint32_t)600000);
+                uint32_t backoffMs = (uint32_t)60000 << min<uint32_t>(e.failures, 10);
+                if (e.failures < 10) e.failures++;
+                e.nextFetchMs = millis() + min(min(backoffMs, intervalMs), (uint32_t)600000);
             }
-            if (nextFetchMs == 0) nextFetchMs = 1;
+            if (e.nextFetchMs == 0) e.nextFetchMs = 1;
         }
 
-        if (messageToBeDisplayed.empty())
+        // Next location that has something to show.
+        std::vector<bool> ready;
+        for (const auto& loc : set.locations)
+            ready.push_back(!entries[loc.id].result.message.empty());
+        const int pick = next_ready_location(ready, cursor);
+        if (pick < 0)
         {
             vTaskDelay(60000 / portTICK_PERIOD_MS);
             continue;
         }
+        const WeatherResult shown = entries[set.locations[pick].id].result;
 
         // Blocking acquire: cover the worst-case wait + scroll hold, then
         // re-anchor the watchdog window once granted (clock-task pattern).
@@ -319,11 +364,13 @@ void open_weather_map_task(void *parameter)
         {
             task_heartbeat();
             task_heartbeat_grace(30000);
-            const uint8_t* icon = (iconIndex >= 0) ? kWeatherIcons[iconIndex] : nullptr;
-            scrollMessage(icon, kWeatherIconWidth, messageToBeDisplayed, display, 20);
+            const uint8_t* icon = (shown.iconIndex >= 0) ? kWeatherIcons[shown.iconIndex] : nullptr;
+            scrollMessage(icon, kWeatherIconWidth, shown.message, display, 20);
         }
 
-        vTaskDelay(60000 / portTICK_PERIOD_MS);
-
+        // One location per pass: with several, shorten the gap so each still
+        // comes around reasonably often (never below 20 s).
+        const uint32_t gapMs = max<uint32_t>(20000, 60000 / (uint32_t)max<size_t>(set.locations.size(), 1));
+        vTaskDelay(gapMs / portTICK_PERIOD_MS);
     }
 }

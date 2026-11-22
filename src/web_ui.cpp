@@ -8,6 +8,7 @@
 #include <security_utils.hpp>
 #include <html_utils.hpp>
 #include <logger.hpp>
+#include <config_warnings.hpp>
 
 // ── Server instance ───────────────────────────────────────────────────────────
 
@@ -156,6 +157,28 @@ void sendPageNav(const char* active)
         server.sendContent_P(PSTR("</a>"));
     }
     server.sendContent_P(PSTR("</nav><main>"));
+}
+
+void sendDeprecationBanner()
+{
+    const auto warnings = config_warnings();
+    if (warnings.empty()) return;
+
+    // Inline style: the shared stylesheet is cached for a day.
+    server.sendContent_P(PSTR("<div style='background:#fef3c7;border:1px solid #f59e0b;color:#92400e;"
+                              "border-radius:8px;padding:12px 16px;margin-bottom:20px'>"
+                              "<b>&#9888; Deprecated configuration</b>"
+                              "<ul style='margin:8px 0 8px 20px;font-size:.9rem'>"));
+    for (const auto& w : warnings) {
+        // Key names and advice, never values; escaped anyway (config is settable over MQTT).
+        server.sendContent_P(PSTR("<li><code>"));
+        sendEscaped(w.what);
+        server.sendContent_P(PSTR("</code> &mdash; "));
+        sendEscaped(w.advice);
+        server.sendContent_P(PSTR("</li>"));
+    }
+    server.sendContent_P(PSTR("</ul><a href='/edit' style='color:#92400e;font-weight:600'>"
+                              "Edit the config &rarr;</a></div>"));
 }
 
 void sendPageFoot()

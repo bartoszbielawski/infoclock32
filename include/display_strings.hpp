@@ -44,6 +44,7 @@ struct DisplayStrings {
     const char* rebooting;
     const char* ap_connect;   // followed by "<hostname>-setup"
     const char* ap_browse;    // followed by the portal address
+    const char* check_config; // reminder that the config uses deprecated keys
 };
 
 inline const DisplayStrings& display_strings(Lang l)
@@ -51,31 +52,31 @@ inline const DisplayStrings& display_strings(Lang l)
     static const DisplayStrings kEn = {
         {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"},
         "Sunrise", "Sunset", "Sun: polar day!", "Sun: polar night!",
-        "Rebooting", "WiFi setup: connect to ", "then browse"};
+        "Rebooting", "WiFi setup: connect to ", "then browse", "Check your config"};
     static const DisplayStrings kFr = {
         {"Dim","Lun","Mar","Mer","Jeu","Ven","Sam"},
         "Lever", "Coucher", "Soleil: jour polaire!", "Soleil: nuit polaire!",
-        "Redemarrage", "Config WiFi: connectez-vous a ", "puis ouvrez"};
+        "Redemarrage", "Config WiFi: connectez-vous a ", "puis ouvrez", "Verifiez votre config"};
     static const DisplayStrings kPl = {
         {"Ndz","Pon","Wto","Sro","Czw","Pia","Sob"},
         "Wschod", "Zachod", "Slonce: dzien polarny!", "Slonce: noc polarna!",
-        "Restart", "Konfiguracja WiFi: polacz z ", "potem otworz"};
+        "Restart", "Konfiguracja WiFi: polacz z ", "potem otworz", "Sprawdz konfiguracje"};
     static const DisplayStrings kIt = {
         {"Dom","Lun","Mar","Mer","Gio","Ven","Sab"},
         "Alba", "Tramonto", "Sole: giorno polare!", "Sole: notte polare!",
-        "Riavvio", "Config WiFi: connettiti a ", "poi apri"};
+        "Riavvio", "Config WiFi: connettiti a ", "poi apri", "Controlla la config"};
     static const DisplayStrings kEs = {
         {"Dom","Lun","Mar","Mie","Jue","Vie","Sab"},
         "Amanecer", "Ocaso", "Sol: dia polar!", "Sol: noche polar!",
-        "Reiniciando", "Config WiFi: conectate a ", "luego abre"};
+        "Reiniciando", "Config WiFi: conectate a ", "luego abre", "Revisa tu config"};
     static const DisplayStrings kPt = {
         {"Dom","Seg","Ter","Qua","Qui","Sex","Sab"},
         "Nascer", "Poente", "Sol: dia polar!", "Sol: noite polar!",
-        "Reiniciando", "Config WiFi: ligue-se a ", "depois abra"};
+        "Reiniciando", "Config WiFi: ligue-se a ", "depois abra", "Verifique a config"};
     static const DisplayStrings kDe = {
         {"So","Mo","Di","Mi","Do","Fr","Sa"},
         "Sonnenaufgang", "Sonnenuntergang", "Sonne: Polartag!", "Sonne: Polarnacht!",
-        "Neustart", "WLAN-Setup: verbinde mit ", "dann oeffne"};
+        "Neustart", "WLAN-Setup: verbinde mit ", "dann oeffne", "Konfiguration pruefen"};
     switch (l) {
         case Lang::Fr: return kFr;
         case Lang::Pl: return kPl;

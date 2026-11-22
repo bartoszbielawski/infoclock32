@@ -6,8 +6,8 @@ brightness=7
 
 # widgets
 enable_weather=1
-ow_api_key=prototype-demo-key
-ow_city_id=2643743
+weather_api_key=prototype-demo-key
+weather_city_id=2643743
 enable_lhc=1
 enable_sun=1
 sun_lat=52.23

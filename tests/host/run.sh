@@ -45,10 +45,12 @@ c++ $CXXFLAGS time_valid_check.cpp      -o time_valid_check
 c++ $CXXFLAGS scroll_timing_check.cpp   -o scroll_timing_check
 c++ $CXXFLAGS status_state_check.cpp    -o status_state_check
 c++ $CXXFLAGS config_backup_check.cpp   -o config_backup_check
+c++ $CXXFLAGS weather_locations_check.cpp -o weather_locations_check
+c++ $CXXFLAGS deprecated_keys_check.cpp -o deprecated_keys_check
 
 # Guard: the tracked data/config.txt is written back by the device, so make
 # sure no secret ever gets committed in it.
-for key in wifi_password ota_password web_password ow_api_key mqtt_password; do
+for key in wifi_password ota_password web_password ow_api_key weather_api_key mqtt_password; do
     val=$(grep -E "^${key}=" ../../data/config.txt | head -n1 | cut -d= -f2-)
     if [ -n "$val" ]; then
         echo "FAIL: data/config.txt has a non-empty $key - do not commit secrets"
@@ -97,6 +99,8 @@ echo "config secrets guard passed"
 ./scroll_timing_check
 ./status_state_check
 ./config_backup_check
+./weather_locations_check
+./deprecated_keys_check
 
 # ── ResourceManager handshake stress (host prototype shim) ───────────────────
 echo "── resource manager stress ──"

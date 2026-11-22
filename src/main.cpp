@@ -26,6 +26,7 @@
 #include <custom_message_task.h>
 #include <night_mode_task.h>
 #include <serial_console_task.h>
+#include <config_warnings.hpp>
 #include <housekeeping_task.h>
 #include <push_display.h>
 #include <resto_menu_task.h>
@@ -185,6 +186,8 @@ void setup() {
     vTaskDelay(10000 / portTICK_PERIOD_MS);
   }
 
+  config_warnings_log();
+
   // Always-on local display task
   xTaskCreate(displayClock, "ClockTask", 4096, nullptr, 1, nullptr);
 
@@ -197,7 +200,7 @@ void setup() {
   if (!dataStore.get_value<int>("enable_weather", 1))
     logPrintf("SYS", "WeatherTask disabled (enable_weather=0)");
   else if (!weather_configured())
-    logPrintf("SYS", "WeatherTask not started: set sun_lat/sun_lon (Open-Meteo) or ow_api_key + ow_city_id, then reboot");
+    logPrintf("SYS", "WeatherTask not started: set weather_<id>_lat/lon (Open-Meteo) or weather_<id>_city_id + weather_api_key (OpenWeatherMap), then reboot");
   else
     xTaskCreate(open_weather_map_task, "WeatherTask", 7168, nullptr, 1, nullptr);
 

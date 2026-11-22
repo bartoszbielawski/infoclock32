@@ -57,8 +57,11 @@ web_password=
 # - Weather (OpenWeatherMap) -
 # Set enable_weather=0 to disable the weather task entirely
 enable_weather=1
-ow_api_key=
-ow_city_id=
+weather_api_key=
+# One named location per place (up to 4), e.g.:
+# weather_geneva_lat=46.2
+# weather_geneva_lon=6.14
+# weather_geneva_city_id=2660646
 
 # - LHC beam status (CERN) -
 enable_lhc=0

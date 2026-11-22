@@ -137,6 +137,7 @@ void handle_home()
 
     sendPageHead("Home");
     sendPageNav("/");
+    sendDeprecationBanner();
 
     server.sendContent_P(PSTR("<h2>&#9881;&#65039; Device status</h2>"
                                "<table style='margin-bottom:24px'>"
@@ -512,6 +513,7 @@ void handle_file_edit()
     {
         sendPageHead("Config editor");
         sendPageNav("/edit");
+        sendDeprecationBanner();
         server.sendContent_P(PSTR("<h2>Config editor <small style='font-weight:400;color:#94a3b8'>"
                                    "/config.txt</small></h2>"
                                    "<form method='POST' action='/edit'>"
@@ -626,6 +628,7 @@ void handle_file_edit()
 
         sendPageHead("Config editor");
         sendPageNav("/edit");
+        sendDeprecationBanner();
         server.sendContent_P(PSTR("<h2>Config editor</h2><div class='card'>"
                                    "<p style='color:#15803d;font-weight:500'>&#10003; Saved and reloaded.</p>"
                                    "<div class='actions'>"

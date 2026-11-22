@@ -30,7 +30,7 @@ int main()
     for (Lang l : langs) {
         const DisplayStrings& s = display_strings(l);
         const char* all[] = {s.sunrise, s.sunset, s.polar_day, s.polar_night,
-                             s.rebooting, s.ap_connect, s.ap_browse};
+                             s.rebooting, s.ap_connect, s.ap_browse, s.check_config};
         for (const char* t : all) {
             CHECK(t && *t, "%s: empty string", owm_lang(l));
             for (const char* p = t; p && *p; p++)

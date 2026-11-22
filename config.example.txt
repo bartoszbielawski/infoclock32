@@ -81,12 +81,30 @@ enable_lhc=1
 enable_mqtt=1
 enable_resto=1
 
-# -- Weather (OpenWeatherMap) ---------------------------------------------------
-# Requires enable_weather=1.
+# -- Weather ----------------------------------------------------------------------
+# Requires enable_weather=1. Up to 4 named locations are shown in turn, in
+# alphabetical order of their ids (lowercase letters and digits).
+#
+# Open-Meteo: free, no API key. Set coordinates per location:
+weather_geneva_lat=46.2
+weather_geneva_lon=6.14
+weather_geneva_name=Geneva
+#
+# OpenWeatherMap: a key plus a city ID per location.
 # Get a free API key at https://openweathermap.org/api
 # City ID: find yours at https://openweathermap.org/find
-ow_api_key=your_api_key_here
-ow_city_id=2988507
+#weather_api_key=your_api_key_here
+#weather_paris_city_id=2988507
+#
+# Minutes between fetches of every location (10-1440)
+#weather_interval_min=30
+#
+# auto (default: OpenWeatherMap when a location has a city ID and the key is
+# set, otherwise Open-Meteo), owm, or open-meteo. A location can override it:
+#weather_paris_provider=open-meteo
+#
+# Deprecated (removed in 0.9.0): ow_api_key, ow_city_id, ow_interval_min.
+# Use the weather_* keys above.
 
 # -- Restaurant menu (CERN Novae) ---------------------------------------------
 # Requires enable_resto=1. Scrolls lunch (midi) menus of the configured
