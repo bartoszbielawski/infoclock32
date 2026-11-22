@@ -1,7 +1,7 @@
 #pragma once
 
 // Bump APP_VERSION with each release.
-#define APP_VERSION "0.7.1"
+#define APP_VERSION "0.7.2"
 
 // Build stamp, e.g. "Mar  7 2026" and "14:30:00". Defined in
 // src/build_stamp.cpp, the only file that uses __DATE__/__TIME__; the
