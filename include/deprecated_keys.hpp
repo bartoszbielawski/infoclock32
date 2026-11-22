@@ -37,6 +37,13 @@ inline std::vector<DeprecatedUse> find_deprecated(const ConfigView& cfg)
         if (nonEmpty(r.old))
             out.push_back({ r.old, std::string("use ") + r.now + removal });
 
+    // Removed by the multi-sensor rework: no longer read at all, no removal date.
+    static const char* const kObsolete[] = { "temp_sensor", "temp_interval", "temp_display",
+                                             "temp_decimals", "temp_show_interval", "temp_hold_s" };
+    for (const char* k : kObsolete)
+        if (nonEmpty(k))
+            out.push_back({ k, "obsolete and ignored; use sensors / sensor_* (see config.example.txt)" });
+
     // Single-location keys are plain config while they are the only location;
     // once weather_<id>_* exists they are ignored, which is worth saying.
     const WeatherLocationSet locs = parse_weather_locations(cfg);

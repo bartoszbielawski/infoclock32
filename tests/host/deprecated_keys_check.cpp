@@ -71,6 +71,13 @@ int main()
                 CHECK(d.advice.find("{weather_<id>_temp}") != std::string::npos, "placeholder advice: %s", d.advice.c_str());
     }
 
+    // Obsolete sensor keys are flagged regardless of weather setup; blanks are not.
+    {
+        auto u = find_deprecated(view(Map{{"temp_sensor", "bme280"}, {"temp_interval", "30"}, {"temp_hold_s", ""}}));
+        CHECK(u.size() == 2 && has(u, "temp_sensor") && has(u, "temp_interval"), "obsolete keys, got %zu", u.size());
+        CHECK(u[0].advice.find("sensors") != std::string::npos, "obsolete advice names sensors");
+    }
+
     if (failures) { printf("%d deprecated key check(s) FAILED\n", failures); return 1; }
     printf("all deprecated key checks passed\n");
     return 0;

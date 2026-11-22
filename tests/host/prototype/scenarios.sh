@@ -121,7 +121,7 @@ start weather2 "sensors=stub" "enable_weather=1" "weather_city_id=" \
 
 # deprecated: old key names still work (weather runs) and the web UI warns
 start deprecated "sensors=stub" "enable_weather=1" "weather_api_key=" "weather_city_id=" \
-    "ow_api_key=demo" "ow_city_id=2643743"
+    "ow_api_key=demo" "ow_city_id=2643743" "temp_interval=30"
 
 # lhc: the real task streams the canned LHC Page 1 JSON
 start lhc "sensors=stub" "enable_lhc=1"
@@ -252,6 +252,7 @@ if printf '%s' "$home" | grep -qF "{weather_temp} in message_hot_text"; then ok 
 eval "pd=\$PORT_deprecated"
 home=$(curl -s --max-time 15 "http://127.0.0.1:$pd/")
 if printf '%s' "$home" | grep -qF "ow_api_key" && ! printf '%s' "$home" | grep -qF "demo"; then ok "deprecated: key named, value not shown"; else fail "deprecated: key not named or value leaked"; fi
+if printf '%s' "$home" | grep -qF "temp_interval"; then ok "deprecated: obsolete sensor key listed"; else fail "deprecated: obsolete sensor key not listed"; fi
 eval "pd=\$PORT_weather"
 if curl -s --max-time 15 "http://127.0.0.1:$pd/" | grep -qF "Deprecated configuration"; then fail "weather: legacy single-location config wrongly flagged"; else ok "weather: no banner for a clean config"; fi
 expect_log lhc "\[LHC\] status: PROTON PHYSICS: STABLE BEAMS @ 6800 GeV"

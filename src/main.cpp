@@ -225,13 +225,7 @@ void setup() {
   logI2cScan();
   // Sensor list from the `sensors` config key (comma-separated types). The
   // task owns the vector and its Sensor objects.
-  // Config keys removed by the multi-sensor rework: warn instead of silently
-  // falling back to the disabled `stub` sensor.
-  for (const char* legacy : {"temp_sensor", "temp_interval", "temp_display",
-                             "temp_decimals", "temp_show_interval", "temp_hold_s"})
-    if (dataStore.has_key(legacy))
-      logPrintf("SYS", "config key '%s' is obsolete and ignored - see sensors / sensor_* in config.example.txt", legacy);
-
+  // Keys removed by the multi-sensor rework are reported by config_warnings_log().
   auto* sensors = new std::vector<Sensor*>(createSensorList());
   if (xTaskCreate(sensor_task, "SensorTask", 5120, sensors, 1, nullptr) != pdPASS)
   {
